@@ -1,0 +1,16 @@
+引擎,语种形态,体积量级,CPU可行性,速度观感,质量观感,长文上下文,许可证要点,推荐优先级,备注
+Bergamot/Firefox Translations,xx↔en枢轴；含中日韩,引擎~1MB级；模型数十MB/向,优,优（短句）,中高（待测）,句/块级,MPL-2.0,P0,端侧量化；隐私好
+OPUS-MT+CTranslate2,一对一；中英有,~300MB/向可量化,优,优,中（待测）,句级；可工程伪文档级,模型多为CC BY 4.0,P0,许可友好
+Argos Translate,一对一+en枢轴；中英日韩有,zh-en≈71MB；en-zh≈67.5MB（2026-09-20实测）,优,中高,中,句级~150tok,代码MIT；模型许可待清点,P0/P1,许可清点blocker
+LibreTranslate,同Argos,视安装包,优,中高,中,句级,AGPL-3.0,谨慎,不宜无评估嵌闭源分发
+Marian NMT,框架（模型决定）,—,视模型,视模型,视模型,视模型,MIT,基建,训练/兼容层
+NLLB-200 distilled 600M,200语单模型,~0.6GB CT2 int8,中,中,中高潜力,句级,权重CC BY-NC 4.0,不推荐主路径,NC硬blocker
+M2M100-418M,100语多向,~1.8GB（EasyNMT表）,中,中,中,句级,HF卡MIT,P2,偏重
+SeamlessM4T,语音+文本~96语,≥1.2B级,差,差～中,中高,非长文专长,CC BY-NC 4.0,不推荐,随译不做语音则低价值
+Apertium,无实用中英,极小,优,优,不适用中英,弱,GPL,不相关,规则MT
+Softcatalà NMT,加泰↔欧语为主,数十MB级,优,中高,域内好,句级,视仓库,不相关,参考自托管
+MADLAD-400-3B,400+语,GB级可量化,中,中,中高潜力,句级（语料偏文档）,Apache-2.0,P1/P2,许可友好但重
+TowerInstruct,约10语LLM,7B/13B,差～中,中,高潜力,段/上下文任务,CC BY-NC+Llama2,慎,NC
+ALMA/ALMA-R,含中英等,7B/13B,差～中,中,高潜力,prompt窗,Llama2衍生,慎,重
+本地通用小LLM(Qwen/Gemma等),视模型,GB级量化,视尺寸,中～差,不稳可调,强（上下文窗）,逐模型核对,P1长文,短路径不适合默认
+OpenNMT/Fairseq/CTranslate2,框架/推理运行时,—,—,—,—,—,CT2为MIT,基建,CT2建议统一推理后端

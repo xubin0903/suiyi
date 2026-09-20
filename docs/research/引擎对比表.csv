@@ -1,0 +1,26 @@
+候选,类型,一句话定位,许可证,离线,成本快照_2026-09-19,中英质量观感,隐私,集成复杂度,剪贴板OCR匹配,证据等级,主要来源
+DeepL API,云API,商业NMT质量口碑强,专有,需联网,Free不可新购;Growth含字数+超量(单价待登录核),高(中英非绝对第一),出设备,低,高,已知+待验证单价,https://support.deepl.com/hc/en-us/articles/360021200939-DeepL-API-plans
+Google Cloud Translation,云API,覆盖广生态成熟,专有,需联网,50万字/月免费;$20/百万字,高,出设备,中(GCP),高,已知,https://cloud.google.com/products/translate/pricing
+Microsoft Translator,云API,免费额度友好,专有,需联网,F0 200万字/月;S1约$10/百万字(区域待核),高,出设备,中(Azure),高,已知F0+待验证S1,https://azure.microsoft.com/en-us/pricing/details/translator/
+Amazon Translate,云API,AWS生态NMT,专有,需联网,$15/百万字;旧账户12月内200万/月免费,中高待验证,出设备,中,高,已知价+待验证新账户免费层,https://aws.amazon.com/translate/pricing/
+OpenAI兼容LLM,云API,提示词翻译语境强,专有,需联网,按token;如gpt-5.6-luna约$0.20/$1.20每M,高但不稳待验证,出设备,低,中(延迟成本),已知价目迭代快,https://developers.openai.com/api/docs/pricing
+Apple Translation.framework,系统端侧,iOS18+系统翻译API,Apple平台条款,下载后离线,对用户无按量费,中高待验证,端侧不出设备,仅Apple,高(仅苹果),已知,https://developer.apple.com/documentation/translation
+腾讯云机器翻译,云API,国内额度大,专有,需联网,500万字/月免费;超量约58元/百万,高待盲测,出设备,低,高,已知,https://cloud.tencent.com/document/product/551/35017
+阿里云机器翻译,云API,国内通用NMT,专有,需联网,100万字/月免费;通用50元/百万,高待盲测,出设备,低,高,已知,https://help.aliyun.com/zh/machine-translation/product-overview/billing-overview
+百度翻译API,云API,国内老牌,专有,需联网,测试最高约1000万字;超量约49元/百万,高待盲测,出设备,低,高,已知产品页,https://cloud.baidu.com/product/mt/text_trans
+有道智云,云API,教育词典背景,专有,需联网,体验金约50元;常见语种约48元/百万,高待盲测,出设备,低,高,已知,https://ai.youdao.com/DOCSIRMA/html/transapi/trans/price/wbfy/index.html
+火山引擎翻译,云API,字节系,专有,需联网,200万字/月免费;49元/百万,高待盲测,出设备,中(开通),高,已知,https://www.volcengine.com/docs/4640/68515
+讯飞机器翻译,云API,开放平台上的小牛引擎,专有,需联网,套餐价待验证控制台,中高待盲测,出设备,中,高,已知引擎归属+待验证价,https://www.xfyun.cn/doc/nlp/niutrans/API.html
+小牛翻译,云API,语种宣称454,专有,需联网,每日约20万字免费;积分充值,中高待盲测,出设备,低,高,已知,https://niutrans.com/price
+彩云小译API,云API,网页双语中日口碑,专有,需联网,单价二手冲突约20-39元待验证,中日较好社区,出设备,低,高,已知API+待验证价,https://docs.caiyunapp.com/lingocloud-api/index.html
+Papago Naver,云API,韩中日强,专有,需联网,NCloud计价单价待验证,韩相关高社区,出设备,中,中,已知存在+待验证价,https://api.ncloud-docs.com/docs/en/ai-naver-papagonmt
+Yandex Translate,云API,俄欧方向,专有,需联网,二手单价严重冲突待验证,俄相关社区,出设备,中,中,待验证,二手综述冲突
+IBM Watson Language Translator,云API,已下线,—,—,—,—,—,—,不推荐,已知下线,社区迁移信息2024-12撤回
+LibreTranslate,自建开源,Argos上的自托管API,AGPL-3.0,自建可离线,机器成本;官方托管需Key,中等偏弱社区,自建可私有,低(Docker),中,已知许可,https://github.com/LibreTranslate/LibreTranslate
+Argos Translate,本地库,Python开源MT,代码MIT/CC0;模型许可不一,可离线,免费,中等社区,本地,低(Python),中,已知代码+模型风险,https://github.com/argosopentech/argos-translate
+OPUS-MT Helsinki,本地模型,学术双语Marian模型,仓库MIT;模型多CC BY 4.0,可离线,免费,中等方向相关,本地,中,中高,已知,https://github.com/Helsinki-NLP/Opus-MT
+NLLB Meta,本地模型,200语种,权重多CC BY-NC,可离线,免费但NC限制,中高潜力,本地,高(体积),低(许可体积),已知NC,https://huggingface.co/facebook/nllb-200-distilled-600M
+Marian NMT,框架,高效C++ NMT框架,MIT,视模型,免费,取决于模型,本地,高,框架层,已知,https://marian-nmt.github.io/
+Bergamot Firefox Translations,端侧,浏览器级量化端侧翻译,MPL-2.0,下载后完全离线,免费;每向约数十MB,接近商用一定比例Mozilla自述,不出设备,中高,很高,已知,https://github.com/browsermt/bergamot-translator
+CTranslate2,推理运行时,量化加速推理,MIT,视模型,免费,取决于模型,本地,中,高,已知,https://github.com/OpenNMT/CTranslate2
+HF翻译模型部署,自建,任意checkpoint部署,随模型,视部署,GPU/CPU成本,不一,视部署,中高,不一,框架性,—

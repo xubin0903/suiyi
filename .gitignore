@@ -1,0 +1,28 @@
+# Build / IDE
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+.DS_Store
+
+# Models (download on demand)
+models/
+*.bin
+*.onnx
+*.gguf
+*.argosmodel
+
+# Env / secrets
+.env
+.env.*
+*.pem
+
+# Python
+__pycache__/
+.venv/
+venv/
+
+# Node
+node_modules/
