@@ -523,6 +523,9 @@ def test_runtime_dependencies_exclude_torch_and_transformers() -> None:
     for name in ("ctranslate2", "sentencepiece"):
         assert name in runtime_code
         assert name in optional
+    assert "fastapi>=" in runtime_code
+    assert "uvicorn>=" in runtime_code
+    assert "uvicorn[standard]" not in runtime_code
 
 
 @pytest.mark.model

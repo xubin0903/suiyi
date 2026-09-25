@@ -2,7 +2,7 @@
 
 Python 翻译服务（包名 `suiyi-engine`，导入名 `suiyi_engine`）。负责本地 NMT（CTranslate2 / OPUS-MT）、语种路由与后续 HTTP API。一期与 Windows 客户端配合；本目录应能独立安装、lint 和测试。
 
-翻译核心在 `suiyi_engine.translator`：可替换后端、CTranslate2 / OPUS-MT、按语种对路由（直连或英文中转）、分句后批量翻译再拼回。HTTP 服务仍由后续 Issue 实现。后续用 PyInstaller 打包为 Windows 本机 exe。设计说明见 [翻译核心](../docs/engine/翻译核心.md)。
+翻译核心在 `suiyi_engine.translator`：可替换后端、CTranslate2 / OPUS-MT、按语种对路由（直连或英文中转）、分句后批量翻译再拼回。本机 HTTP 服务用 `python -m suiyi_engine serve` 启动，只监听回环地址。后续用 PyInstaller 打包为 Windows 本机 exe。设计说明见 [翻译核心](../docs/engine/翻译核心.md) 与 [HTTP API](../docs/engine/HTTP-API.md)。
 
 ## 布局
 
@@ -25,7 +25,7 @@ engine/
 
 基准版本：**Python 3.11**。安装要求 `requires-python >= 3.10`。
 
-构建后端：**hatchling**（`src/` 布局，版本读自 `suiyi_engine.__version__`）。运行时依赖是语种检测用的 `py3langid`（BSD-3-Clause，会安装 `numpy`），以及翻译推理用的 `ctranslate2` 与 `sentencepiece`。不引入 `torch` / `transformers`。模型转换依赖在可选组 `convert`（另含 `huggingface_hub`、`transformers`、CPU 版 `torch`）。
+构建后端：**hatchling**（`src/` 布局，版本读自 `suiyi_engine.__version__`）。运行时依赖是语种检测用的 `py3langid`（BSD-3-Clause，会安装 `numpy`），翻译推理用的 `ctranslate2` 与 `sentencepiece`，以及本机 HTTP 用的 `fastapi` 与 `uvicorn`（不加 standard extra）。不引入 `torch` / `transformers`。模型转换依赖在可选组 `convert`（另含 `huggingface_hub`、`transformers`、CPU 版 `torch`）。
 
 标准环境流程是 `python -m venv` + `pip`。下面的命令都在**仓库根目录**执行。
 
@@ -82,6 +82,26 @@ python -m suiyi_engine translate --src zh --tgt en "今天天气很好。我们�
 ```
 
 标准输出是译文、`route:`（模型 id，中转时两个）和 `elapsed_ms:`。未下载该语向时退出码为 1，stderr 里带缺失的模型 id。
+
+### 本机 HTTP 服务
+
+只监听回环地址。接口、错误码和示例见 [HTTP API](../docs/engine/HTTP-API.md)。
+
+#### bash
+
+```bash
+python -m suiyi_engine serve
+curl -sS http://127.0.0.1:18780/health
+```
+
+#### Windows PowerShell
+
+```powershell
+python -m suiyi_engine serve
+Invoke-RestMethod http://127.0.0.1:18780/health
+```
+
+`--host` 只接受 `127.0.0.1`、`::1`、`localhost`。端口可用 `--port` 或环境变量 `SUIYI_PORT`（默认 `18780`）。`--dev` 才打开 `/docs`。
 
 ### 需要真实模型的测试
 

@@ -441,7 +441,14 @@ def test_ct2_backend_rejects_bad_files_before_loading(tmp_path: Path) -> None:
 
 
 def test_runtime_modules_do_not_import_torch() -> None:
-    for name in ("translator.py", "registry.py", "backends/ct2_opus.py", "backends/base.py"):
+    for name in (
+        "translator.py",
+        "registry.py",
+        "backends/ct2_opus.py",
+        "backends/base.py",
+        "api.py",
+        "serve.py",
+    ):
         source = (_ENGINE_SRC / name).read_text(encoding="utf-8")
         assert "import torch" not in source
         assert "import transformers" not in source
