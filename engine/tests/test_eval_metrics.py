@@ -9,6 +9,7 @@ from suiyi_engine.eval.metrics import (
     ScoredSample,
     bleu_tokenize,
     corpus_scores,
+    ja_mecab_failure_note,
     latency_stats,
     micro_retention,
     missed_samples,
@@ -65,6 +66,19 @@ def test_percentile_interpolates_between_neighbors() -> None:
     assert stats.max_ms == 40
     assert stats.n == 4
     assert latency_stats(()) is None
+
+
+def test_ja_mecab_failure_note_is_one_short_line() -> None:
+    note = ja_mecab_failure_note(
+        RuntimeError(
+            "Japanese tokenization requires extra dependencies, "
+            "but you do not have them installed.\n"
+            "Please install them like so."
+        )
+    )
+    assert "\n" not in note
+    assert "未安装 sacrebleu 的日文分词依赖" in note
+    assert "回退 tokenize=char" in note
 
 
 def test_bleu_tokenize_falls_back_for_japanese() -> None:

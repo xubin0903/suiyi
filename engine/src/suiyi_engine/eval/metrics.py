@@ -60,9 +60,18 @@ def probe_ja_mecab() -> tuple[bool, str]:
             tokenize="ja-mecab",
         )
     except Exception as exc:
-        detail = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
-        return False, f"ja-mecab 不可用（{detail}），日文 BLEU 回退 tokenize=char"
+        return False, ja_mecab_failure_note(exc)
     return True, "日文 BLEU 使用 tokenize=ja-mecab"
+
+
+def ja_mecab_failure_note(exc: BaseException) -> str:
+    """把 ja-mecab 失败收成报告里的一行说明。"""
+
+    detail = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+    lowered = detail.lower()
+    if "extra dependencies" in lowered or "mecab" in lowered:
+        detail = "未安装 sacrebleu 的日文分词依赖"
+    return f"ja-mecab 不可用（{detail}），日文 BLEU 回退 tokenize=char"
 
 
 @dataclass(frozen=True, slots=True)
