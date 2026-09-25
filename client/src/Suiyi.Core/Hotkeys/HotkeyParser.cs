@@ -1,13 +1,16 @@
 namespace Suiyi.Core.Hotkeys;
 
 /// <summary>
-/// 快捷键字符串的解析与格式化（设置 <c>hotkey.translate</c>）。
+/// 快捷键字符串的解析与格式化（设置 <c>hotkey.translate</c>、<c>hotkey.region</c>）。
 /// 形如 <c>Ctrl+Alt+T</c>、<c>Ctrl+Shift+F1</c>、<c>Win+Alt+Y</c>；大小写与空格不敏感；空字符串表示禁用。
 /// </summary>
 public static class HotkeyParser
 {
     /// <summary>默认的「翻译」快捷键。</summary>
     public const string DefaultTranslate = "Ctrl+Alt+T";
+
+    /// <summary>默认的「框选翻译」快捷键（M3，#55）。</summary>
+    public const string DefaultRegion = "Ctrl+Alt+S";
 
     /// <summary>
     /// 解析快捷键。成功时 <paramref name="gesture"/> 为结果；空白或 <see langword="null"/> 视为「禁用」，

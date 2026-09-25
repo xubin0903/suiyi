@@ -4,9 +4,11 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using Suiyi.App.Capture;
 using Suiyi.App.Interop;
 using Suiyi.App.Popup;
 using Suiyi.App.Tray;
+using Suiyi.Core.Capture;
 using Suiyi.Core.Clipboard;
 using Suiyi.Core.Engine;
 using Suiyi.Core.Flow;
@@ -57,6 +59,11 @@ public partial class App : Application
     private Win32HotkeyRegistrar? _hotkeyRegistrar;
     private HotkeyManager? _hotkeyManager;
     private HotkeyTranslateAction? _hotkeyAction;
+    private Win32HotkeyRegistrar? _regionHotkeyRegistrar;
+    private HotkeyManager? _regionHotkeyManager;
+    private RegionCaptureTrigger? _regionCapture;
+    private CancellationTokenSource? _regionCaptureCts;
+    private bool _regionDemo;
 
     /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)
@@ -113,6 +120,19 @@ public partial class App : Application
 
         WireTray(_tray, _clipboardMonitor);
 
+        // 框选截屏（#55）：快捷键取自 hotkey.region（默认 Ctrl+Alt+S，""禁用）；命令行 --region-hotkey 可临时覆盖。
+        // 截图只在内存中；OCR 与翻译由 #58 串接。--region-demo 时把 PNG 存到临时目录供手测。
+        _regionDemo = e.Args.Contains(RegionCaptureDemo.Switch);
+        _regionCaptureCts = new CancellationTokenSource();
+        _regionCapture = new RegionCaptureTrigger(
+            new Win32RegionCapture(() => _popupWindow!.HideForCapture(), () => _popupWindow?.RestoreAfterCapture(), _logger),
+            _logger);
+        _regionCapture.Captured += (_, args) => OnRegionCaptured(args.Result);
+        _regionHotkeyRegistrar = new Win32HotkeyRegistrar(Win32HotkeyRegistrar.RegionHotkeyId);
+        _regionHotkeyManager = new HotkeyManager(_regionHotkeyRegistrar, _logger, "框选快捷键");
+        _regionHotkeyManager.Pressed += (_, _) => _ = _regionCapture.RunAsync(_regionCaptureCts.Token);
+        _regionHotkeyManager.RegistrationFailed += (_, args) => _tray?.ShowNotification(AppTitle, args.Message);
+
         if (e.Args.Contains("--popup-demo"))
         {
             StartPopupDemo(_popup);
@@ -130,6 +150,7 @@ public partial class App : Application
 
         // Issue #34 组合根顺序：服务启动之后才开始接收快捷键与剪贴板事件。
         _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? settings.Hotkey.Translate);
+        _regionHotkeyManager.Update(GetOptionValue(e.Args, "--region-hotkey") ?? settings.Hotkey.Region);
         _clipboardMonitor.Start();
     }
 
@@ -139,7 +160,11 @@ public partial class App : Application
         _trayDemoTimer?.Stop();
         _popupDemoTimer?.Stop();
 
-        // 1. 注销快捷键 2. 停止监听
+        // 1. 注销快捷键（并关闭可能显示中的框选遮罩） 2. 停止监听
+        _regionCaptureCts?.Cancel();
+        _regionHotkeyManager?.Dispose();
+        _regionHotkeyRegistrar?.Dispose();
+        _regionCaptureCts?.Dispose();
         _hotkeyManager?.Dispose();
         _hotkeyRegistrar?.Dispose();
         _clipboardMonitor?.Dispose();
@@ -234,6 +259,29 @@ public partial class App : Application
         };
 
         // 重试、指定原文语种由 TranslateFlowCoordinator 直接订阅。
+    }
+
+    private void OnRegionCaptured(RegionCaptureResult result)
+    {
+        // 正式流程（#58 之前）：只记日志，图片随结果对象丢弃，不落盘。
+        if (!_regionDemo)
+        {
+            return;
+        }
+
+        var directory = RegionCaptureDemo.ResolveDirectory(Path.GetTempPath());
+        var file = Path.Combine(directory, RegionCaptureDemo.BuildFileName(DateTimeOffset.Now, result.Bounds));
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllBytes(file, result.Png.ToArray());
+            _logger?.Info($"{RegionCaptureDemo.Switch}：已保存 {file}");
+            _tray?.ShowNotification(AppTitle, $"框选截图已保存（{result.Bounds.Width}×{result.Bounds.Height}）：{file}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger?.Error($"{RegionCaptureDemo.Switch}：保存 {file} 失败", ex);
+        }
     }
 
     private void StartFlow(EngineSupervisor engine, EngineClient client)

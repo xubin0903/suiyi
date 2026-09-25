@@ -1,5 +1,6 @@
 using Suiyi.Core.Clipboard;
 using Suiyi.Core.Engine;
+using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Popup;
 
 namespace Suiyi.Core.Settings;
@@ -9,8 +10,8 @@ namespace Suiyi.Core.Settings;
 /// </summary>
 public sealed record AppSettings
 {
-    /// <summary>当前设置文件版本。</summary>
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>当前设置文件版本。2：新增 <c>hotkey.region</c>（#55）。</summary>
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>默认设置。</summary>
     public static AppSettings Default { get; } = new();
@@ -74,7 +75,13 @@ public sealed record ClipboardSettings
 public sealed record HotkeySettings
 {
     /// <summary>翻译快捷键字符串，<c>""</c> 表示禁用。格式由 <c>HotkeyParser</c> 解析，这里不校验。</summary>
-    public string Translate { get; init; } = "Ctrl+Alt+T";
+    public string Translate { get; init; } = HotkeyParser.DefaultTranslate;
+
+    /// <summary>
+    /// 框选翻译快捷键（#55），<c>""</c> 表示禁用。与 <see cref="Translate"/> 不同，读取时即校验：
+    /// 格式非法回落默认值；与翻译快捷键相同时禁用（见 <see cref="SettingsRules.Validate"/>）。
+    /// </summary>
+    public string Region { get; init; } = HotkeyParser.DefaultRegion;
 }
 
 /// <summary><c>popup.*</c>。</summary>

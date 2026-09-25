@@ -50,11 +50,15 @@ public static class SettingsSerializer
         return JsonSerializer.Serialize(settings, WriteOptions).ReplaceLineEndings("\n") + "\n";
     }
 
-    /// <summary>解析 JSON 文本。字段级问题通过 <paramref name="warn"/> 报告。</summary>
-    public static SettingsParseResult Parse(string json, Action<string>? warn = null)
+    /// <summary>
+    /// 解析 JSON 文本。字段级问题通过 <paramref name="warn"/> 报告；旧版本文件的升级说明通过 <paramref name="info"/> 报告
+    /// （缺失的新字段取默认值，文件本身在下一次写回时才更新版本号）。
+    /// </summary>
+    public static SettingsParseResult Parse(string json, Action<string>? warn = null, Action<string>? info = null)
     {
         ArgumentNullException.ThrowIfNull(json);
         warn ??= _ => { };
+        info ??= _ => { };
         JsonDocument document;
         try
         {
@@ -83,6 +87,11 @@ public static class SettingsSerializer
                     $"设置文件版本 {version} 高于当前支持的 {AppSettings.CurrentSchemaVersion}");
             }
 
+            if (version < AppSettings.CurrentSchemaVersion)
+            {
+                info(SettingsRules.DescribeUpgrade(version));
+            }
+
             var d = AppSettings.Default;
             var clipboard = reader.Object(root, "clipboard");
             var hotkey = reader.Object(root, "hotkey");
@@ -105,6 +114,7 @@ public static class SettingsSerializer
                 Hotkey = new HotkeySettings
                 {
                     Translate = reader.String(hotkey, "translate", d.Hotkey.Translate, "hotkey.")!,
+                    Region = reader.String(hotkey, "region", d.Hotkey.Region, "hotkey.")!,
                 },
                 Popup = new PopupSettings
                 {

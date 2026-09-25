@@ -6,7 +6,7 @@ public sealed class SettingsSerializerTests
 {
     private const string DefaultJson = """
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "primaryTarget": "zh",
           "secondaryTarget": "en",
           "clipboard": {
@@ -16,7 +16,8 @@ public sealed class SettingsSerializerTests
             "maxChars": 2000
           },
           "hotkey": {
-            "translate": "Ctrl+Alt+T"
+            "translate": "Ctrl+Alt+T",
+            "region": "Ctrl+Alt+S"
           },
           "popup": {
             "autoHideSeconds": 8,
@@ -63,7 +64,7 @@ public sealed class SettingsSerializerTests
             PrimaryTarget = "ja",
             SecondaryTarget = "en",
             Clipboard = new ClipboardSettings { MonitorEnabled = false, DebounceMs = 300, MinChars = 1, MaxChars = 10000 },
-            Hotkey = new HotkeySettings { Translate = string.Empty },
+            Hotkey = new HotkeySettings { Translate = string.Empty, Region = "Ctrl+Shift+F2" },
             Popup = new PopupSettings { AutoHideSeconds = 0, MaxWidth = 640 },
             Engine = new EngineSettings
             {
@@ -196,11 +197,11 @@ public sealed class SettingsSerializerTests
     [Fact]
     public void HigherSchemaVersion_TooNew()
     {
-        var result = Parse("""{ "schemaVersion": 2, "primaryTarget": "en" }""");
+        var result = Parse("""{ "schemaVersion": 3, "primaryTarget": "en" }""");
 
         Assert.Equal(SettingsParseStatus.TooNew, result.Status);
         Assert.Equal(AppSettings.Default, result.Settings);
-        Assert.Contains("2", result.Error, StringComparison.Ordinal);
+        Assert.Contains("3", result.Error, StringComparison.Ordinal);
     }
 
     [Theory]

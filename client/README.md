@@ -154,7 +154,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "primaryTarget": "zh",
   "secondaryTarget": "en",
   "clipboard": {
@@ -164,7 +164,8 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
     "maxChars": 2000
   },
   "hotkey": {
-    "translate": "Ctrl+Alt+T"
+    "translate": "Ctrl+Alt+T",
+    "region": "Ctrl+Alt+S"
   },
   "popup": {
     "autoHideSeconds": 8,
@@ -184,13 +185,14 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 
 | 字段 | 默认 | 取值 / 说明 |
 |------|------|-------------|
-| `schemaVersion` | `1` | 设置文件版本，以后迁移用 |
+| `schemaVersion` | `2` | 设置文件版本。1 → 2 新增 `hotkey.region`（#55），见下方「版本升级」 |
 | `primaryTarget` | `"zh"` | 目标语言 `zh` / `en` / `ja`；托盘「目标语言」写回这里 |
 | `secondaryTarget` | `"en"` | 检测到的原文语种等于 `primaryTarget` 时改译为它；与 `primaryTarget` 相同时自动取 `primary == "zh" ? "en" : "zh"`（`SettingsRules.ResolveTargets`） |
 | `clipboard.monitorEnabled` | `true` | 是否监听剪贴板；托盘「暂停监听」写回这里 |
 | `clipboard.debounceMs` | `150` | 50–1000 |
 | `clipboard.minChars` / `maxChars` | `2` / `2000` | 1–10000，且 `minChars ≤ maxChars`（否则两者都回落默认值） |
 | `hotkey.translate` | `"Ctrl+Alt+T"` | 快捷键字符串，`""` 表示禁用；格式由 `HotkeyParser` 解析，这里不校验 |
+| `hotkey.region` | `"Ctrl+Alt+S"` | 框选截屏快捷键（#55），`""` 表示禁用。读取时即用 `HotkeyParser` 校验：格式非法或类型不对回落默认值；与 `hotkey.translate` 相同（含回落后）时禁用并写 Warning，避免两个功能抢同一组合 |
 | `popup.autoHideSeconds` | `8` | 0–60，0 表示不自动消失 |
 | `popup.maxWidth` | `480` | 240–1920（设备无关像素） |
 | `engine.port` | `18780` | 1–65535 |
@@ -207,11 +209,13 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 - 单个字段类型不对或越界（如 `"primaryTarget": "fr"`、`"debounceMs": -1`）：只有该字段回落默认值，写一条 Warning 日志，其余字段保留；读取时不改写文件。
 - 不是合法 JSON，或 `schemaVersion` 高于当前版本：原文件改名为 `settings.json.bad-yyyyMMddHHmmss`（重名时加 `-1`、`-2`），使用默认值并写日志，不崩溃。
 
+**版本升级：** 读到低于当前版本的文件（例如 M2 写出的 `schemaVersion: 1`）时，缺失的新字段取默认值，写一条 Info 日志「设置文件版本 1 升级到 2：新增 hotkey.region…」；读取时同样不改写文件，托盘下一次写回时才以版本 2 落盘（其他字段原样保留）。M2 用户若已把 `hotkey.translate` 设成 `Ctrl+Alt+S`，升级后框选快捷键为禁用。
+
 **写入：** 先写同目录临时文件并刷盘，再 `File.Replace` / `File.Move` 替换，写到一半失败不会破坏旧文件。`SettingsStore.Update(Func<AppSettings, AppSettings>)` 线程安全：校验 → 值有变化才写盘并触发 `Changed`（`OldSettings` / `NewSettings`）；写盘失败只记日志，内存中的值照样生效。
 
 **生效时机：** M2 不做热重载，手工编辑后需**重启**生效。托盘改设置写回前，如果发现文件被外部修改过，会先重新读取再应用这次修改，不会覆盖手工编辑的内容（但其他字段仍要重启才生效）。
 
-**当前接线（`App.xaml.cs`）：** 启动时 `Load()`，用 `clipboard.*` 构造监听器（含暂停状态），用 `hotkey.translate` 注册快捷键，用 `popup.*` 构造浮窗，用 `engine.*`（`EngineSettings.ToEngineOptions()`，再叠加 `SUIYI_ENGINE_*` 环境变量）启动翻译服务进程（#32），用 `primaryTarget`、`monitorEnabled` 初始化托盘；托盘「暂停监听」「目标语言」通过 `Update` 写回。
+**当前接线（`App.xaml.cs`）：** 启动时 `Load()`，用 `clipboard.*` 构造监听器（含暂停状态），用 `hotkey.translate`、`hotkey.region` 注册两个快捷键，用 `popup.*` 构造浮窗，用 `engine.*`（`EngineSettings.ToEngineOptions()`，再叠加 `SUIYI_ENGINE_*` 环境变量）启动翻译服务进程（#32），用 `primaryTarget`、`monitorEnabled` 初始化托盘；托盘「暂停监听」「目标语言」通过 `Update` 写回。
 
 ## 译文浮窗
 
@@ -311,11 +315,11 @@ WM_HOTKEY（RegisterHotKey + MOD_NOREPEAT，长按不连发）
 
 | 类型 | 所在 | 作用 |
 |------|------|------|
-| `HotkeyParser` | Core | `TryParse` / `Normalize`；`DefaultTranslate = "Ctrl+Alt+T"` |
+| `HotkeyParser` | Core | `TryParse` / `Normalize`；`DefaultTranslate = "Ctrl+Alt+T"`、`DefaultRegion = "Ctrl+Alt+S"` |
 | `HotkeyGesture` / `HotkeyModifiers` / `HotkeyKeys` | Core | 修饰键（取值同 `MOD_*`）+ 虚拟键码；`ToString()` 为规范写法 |
-| `HotkeyManager` | Core | `Update(string)` 注册 / 重新注册 / 禁用；`Current`；事件 `Pressed`、`RegistrationFailed`（`Message` 为面向用户的提示） |
+| `HotkeyManager` | Core | 管一个快捷键（翻译、框选各一个实例，`label` 分别为「快捷键」「框选快捷键」）：`Update(string)` 注册 / 重新注册 / 禁用；`Current`；事件 `Pressed`、`RegistrationFailed`（`Message` 为面向用户的提示，带 `label`） |
 | `HotkeyTranslateAction` | Core | 取词流程 `ExecuteAsync()`；事件 `TextCaptured`、`Rejected`；上一次未结束时返回 `AlreadyRunning` |
-| `IHotkeyRegistrar` / `Win32HotkeyRegistrar` | Core / App | `RegisterHotKey` 抽象与实现（自建仅消息窗口收 `WM_HOTKEY`） |
+| `IHotkeyRegistrar` / `Win32HotkeyRegistrar` | Core / App | `RegisterHotKey` 抽象与实现（自建仅消息窗口收 `WM_HOTKEY`；每个实例一个 id：翻译 `0x5359`、框选 `0x535A`） |
 | `IKeyboardInput` / `Win32KeyboardInput` | Core / App | `GetAsyncKeyState` 查修饰键、`SendInput` 模拟 Ctrl+C |
 
 **快捷键写法：** 修饰键 `Ctrl`（`Control`）、`Alt`、`Shift`、`Win`（`Windows`）加一个按键，用 `+` 连接，大小写与空格不敏感，例如 `Ctrl+Alt+T`、`Ctrl+Shift+F1`、`Win+Alt+Y`。按键可以是 `A`–`Z`、`0`–`9`、`F1`–`F24`、`NumPad0`–`NumPad9`、`Space`、`Enter`、`Tab`、`Esc`、`Backspace`、`Insert`、`Delete`、`Home`、`End`、`PageUp`、`PageDown`、方向键、`Pause`、`PrintScreen`。除 `F1`–`F24` 外必须带 `Ctrl`、`Alt` 或 `Win`（`Shift+T` 会打出大写字母，不允许）。空字符串表示禁用。
@@ -329,6 +333,44 @@ WM_HOTKEY（RegisterHotKey + MOD_NOREPEAT，长按不连发）
 - **不恢复剪贴板。** 选中文本时，模拟复制会用选中内容替换剪贴板原内容（恢复多格式内容复杂且容易丢数据，M2 不做）。
 - **管理员窗口。** 目标窗口以管理员权限运行而随译没有时，`SendInput` 会被 UIPI 静默拦截，剪贴板不变，此时退化为翻译当前剪贴板，并写日志。
 - 部分终端、远程桌面等程序对模拟 Ctrl+C 的处理不同，同样会退化为翻译当前剪贴板。
+
+## 框选截屏
+
+M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）后出现全屏遮罩，拖拽选区，得到该区域的 PNG。**本 Issue 只到截图为止**，OCR 与翻译由 #58 串接；在那之前正式流程只写日志（尺寸、位置、显示器、缩放、耗时，不含图片），截图随即丢弃，不落盘。纯逻辑在 `Suiyi.Core/Capture`，WPF / Win32 在 `Suiyi.App/Capture`。
+
+```
+快捷键（RegionCaptureTrigger：遮罩显示中再按被忽略）
+  → 隐藏随译浮窗（PopupWindow.HideForCapture）+ DwmFlush
+  → EnumDisplayMonitors / GetDpiForMonitor：每台显示器的物理边界与有效 DPI
+  → GDI BitBlt（SRCCOPY | CAPTUREBLT）逐台抓「冻结帧」（只在内存）
+  → 每台显示器一个遮罩窗口（SetWindowPos 按物理像素铺满；显示冻结帧 + 50% 暗色，选区内还原并标注「宽 × 高」物理像素）
+  → 拖拽（RegionSelection 状态机；坐标取 GetCursorPos 物理像素）
+  → 松开：选区 ≥ 8×8 物理像素则完成，否则视为取消；Esc / 右键 / 切到其他程序 / 退出程序 → 取消
+  → 关闭遮罩 → 从起始显示器的冻结帧裁出选区 → PNG（后台线程编码）→ 恢复浮窗
+```
+
+| 类型 | 所在 | 作用 |
+|------|------|------|
+| `IRegionCapture` | Core | `Task<RegionCaptureResult?> CaptureAsync(CancellationToken)`；取消返回 `null`；UI 线程调用 |
+| `RegionCaptureResult` | Core | `Png`（`ReadOnlyMemory<byte>`，物理像素 1:1）、`Bounds`（`PixelRect`，虚拟桌面物理像素，可为负）、`Monitor`（`DisplayMonitor`）、`Scale`（1.0 / 1.25 / 1.5 / 2.0…） |
+| `RegionCaptureTrigger` | Core | 快捷键入口：`RunAsync(ct)`、`IsCapturing`、事件 `Captured(Result, Elapsed)`；重复触发忽略；异常记日志按取消处理 |
+| `RegionSelection` | Core | 状态机 `Idle → Dragging → Completed / Cancelled`：`Begin` / `Move` / `End` / `Cancel`、`Rect`、`Monitor`、`MinSize`（默认 8）；选区限定在起始显示器 |
+| `ScreenCoordinates` | Core | 纯函数：`VirtualBounds`、`FindMonitor`（空隙取最近）、`PhysicalToLocalDip`、`LocalDipToPhysical`、`MonitorDipSize`、`ToFrameRegion` |
+| `PixelPoint` / `PixelRect` / `DipPoint` / `DipRect` / `DisplayMonitor` | Core | 物理像素与 DIP 几何；`PixelRect.FromCorners` 与拖拽方向无关且包含两端像素 |
+| `RegionCaptureDemo` | Core | `--region-demo` 的保存目录与文件名 |
+| `Win32RegionCapture` / `RegionOverlayWindow` / `GdiScreenGrabber` / `MonitorEnumerator` | App | 上面流程的 Windows 实现；Win32 声明在 `Interop/ScreenCaptureNativeMethods` |
+
+**坐标约定：** 屏幕坐标一律是物理像素的虚拟桌面坐标（主屏左上角为原点，副屏在左 / 上方时为负）。每台显示器一个遮罩窗口，窗口内 DIP 以该显示器左上角为原点：`物理 = 显示器原点 + DIP × 缩放`。混合 DPI 下不让 WPF 在多个显示器之间换算坐标，遮罩也按各自显示器的 DPI 渲染。
+
+**跨显示器：** 选区**裁剪到起始显示器**（按下左键时所在的那台），不拼接。拼接要处理不同 DPI 的像素对齐，OCR 场景下收益很小。
+
+**演示入口：** `dotnet run --project client/src/Suiyi.App -- --region-demo`：框选完成后把 PNG 存到 `%TEMP%\suiyi-region-demo\region-yyyyMMdd-HHmmss-fff-宽x高.png`，托盘气泡显示路径，用于逐像素比对。正式流程不保存。`--region-hotkey "Ctrl+Shift+F2"` 可临时覆盖框选快捷键（不写回设置）。
+
+**已知限制：**
+
+- 用 GDI `BitBlt`，不用 `Windows.Graphics.Capture`：受 DRM 保护的视频、部分硬件加速窗口在截图里可能是黑块。
+- 遮罩拿不到前台（系统前台锁）时收不到键盘焦点；为此框选期间临时把 `Esc` 注册为全局快捷键兜底（注册失败则只能右键取消）。
+- 遮罩显示期间如果显示器热插拔或改缩放，本次框选结果按抓帧时的布局计算；取消后重来即可。
 
 ## 与引擎通信
 

@@ -144,4 +144,51 @@ public sealed class HotkeyManagerTests : IDisposable
         Assert.Null(_registrar.Registered);
         Assert.Throws<ObjectDisposedException>(() => _manager.Update("Ctrl+Alt+T"));
     }
+    [Fact]
+    public void Label_UsedInLogsAndMessage()
+    {
+        var registrar = new FakeHotkeyRegistrar();
+        registrar.Occupied.Add(new HotkeyGesture(HotkeyModifiers.Control | HotkeyModifiers.Alt, 'S'));
+        using var manager = new HotkeyManager(registrar, _logger, "框选快捷键");
+        HotkeyRegistrationFailedEventArgs? failure = null;
+        manager.RegistrationFailed += (_, e) => failure = e;
+
+        Assert.False(manager.Update(HotkeyParser.DefaultRegion));
+
+        Assert.NotNull(failure);
+        Assert.Equal("框选快捷键", failure.Label);
+        Assert.Equal("框选快捷键 Ctrl+Alt+S 已被其他程序占用，请在设置中修改", failure.Message);
+        Assert.Contains(_logger.Messages, m => m.Contains("框选快捷键：Ctrl+Alt+S 已被其他程序占用", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TwoManagers_IndependentRegistrars()
+    {
+        var translateRegistrar = new FakeHotkeyRegistrar();
+        var regionRegistrar = new FakeHotkeyRegistrar();
+        using var translate = new HotkeyManager(translateRegistrar);
+        using var region = new HotkeyManager(regionRegistrar, label: "框选快捷键");
+        var translatePressed = 0;
+        var regionPressed = 0;
+        translate.Pressed += (_, _) => translatePressed++;
+        region.Pressed += (_, _) => regionPressed++;
+
+        Assert.True(translate.Update(HotkeyParser.DefaultTranslate));
+        Assert.True(region.Update(HotkeyParser.DefaultRegion));
+        regionRegistrar.Press();
+
+        Assert.Equal(0, translatePressed);
+        Assert.Equal(1, regionPressed);
+        Assert.Equal(CtrlAltT, translateRegistrar.Registered);
+        Assert.Equal(new HotkeyGesture(HotkeyModifiers.Control | HotkeyModifiers.Alt, 'S'), regionRegistrar.Registered);
+    }
+
+    [Fact]
+    public void RegionDisabled_LogsWithLabel()
+    {
+        using var manager = new HotkeyManager(new FakeHotkeyRegistrar(), _logger, "框选快捷键");
+
+        Assert.True(manager.Update(string.Empty));
+        Assert.Contains(_logger.Messages, m => m.Contains("框选快捷键：已禁用", StringComparison.Ordinal));
+    }
 }
