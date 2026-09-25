@@ -1,0 +1,59 @@
+name: 问题反馈（Bug）
+description: 报告随译客户端或翻译服务的问题。请不要粘贴你复制或翻译过的原文、译文等隐私内容。
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。**请不要粘贴你复制或翻译过的原文、译文、密码等隐私内容**；需要示例时，请换成不含隐私的句子。
+        随译的日志只记录长度、耗时、语种和错误原因，不记录剪贴板正文，可以直接附上。
+  - type: input
+    id: version
+    attributes:
+      label: 版本或 commit
+      description: 从源码运行时，在仓库根执行 `git rev-parse --short HEAD`；也可附托盘「关于」里显示的版本。
+      placeholder: 例如 f372f84
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 系统与环境
+      description: Windows 版本、CPU / 内存、显示缩放与显示器数量、Python 版本（`python --version`）。
+      placeholder: 例如 Windows 11 23H2，i5-8250U / 8 GB，150% 缩放单屏，Python 3.11.9
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 一步一步写清楚怎么操作能出现问题。如果对应《M2 实机测试》清单里的某一条，请写上编号。
+      placeholder: |
+        1. 启动客户端，托盘变为「就绪」
+        2. 在记事本里复制一句英文
+        3. ……
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: 期望与实际
+      description: 期望看到什么，实际看到了什么（浮窗或托盘提示的文字、截图）。截图里请遮住原文和译文。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: |
+        日志目录：`%LOCALAPPDATA%\suiyi\logs`（设置了环境变量 `SUIYI_LOG_DIR` 时为该目录；托盘「打开日志目录」可直接打开）。
+        请附出问题当天的 `client-YYYYMMDD.log`（客户端）和 `engine-YYYYMMDD.log`（翻译服务输出），可以把文件拖进下面的输入框上传，或只贴出问题前后的几十行（用 ``` 包起来）。
+        如果改过设置，也请附 `%APPDATA%\suiyi\settings.json`（设置了 `SUIYI_CONFIG_DIR` 时在该目录）。
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我确认上面没有粘贴原文、译文、密码等隐私内容。
+          required: true
