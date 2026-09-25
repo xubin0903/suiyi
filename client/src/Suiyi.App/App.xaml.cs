@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Suiyi.App.Interop;
 using Suiyi.Core.Clipboard;
+using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Logging;
 
 namespace Suiyi.App;
@@ -17,6 +18,9 @@ public partial class App : Application
     private FileLogger? _logger;
     private Win32ClipboardSource? _clipboardSource;
     private ClipboardMonitor? _clipboardMonitor;
+    private Win32HotkeyRegistrar? _hotkeyRegistrar;
+    private HotkeyManager? _hotkeyManager;
+    private HotkeyTranslateAction? _hotkeyAction;
 
     /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)
@@ -35,8 +39,16 @@ public partial class App : Application
         _clipboardMonitor = new ClipboardMonitor(_clipboardSource, selfWrites, logger: _logger);
         _clipboardMonitor.Start();
 
+        // 全局快捷键（#33）。暂停剪贴板监听不影响快捷键。模拟复制引起的变化由 SuppressNext 让监听忽略。
+        // 设置（#27）接入前，可用命令行 --hotkey "Ctrl+Shift+Y" 指定；空字符串表示禁用。
+        _hotkeyAction = new HotkeyTranslateAction(_clipboardSource, clipboardWriter, new Win32KeyboardInput(), logger: _logger);
+        _hotkeyRegistrar = new Win32HotkeyRegistrar();
+        _hotkeyManager = new HotkeyManager(_hotkeyRegistrar, _logger);
+        _hotkeyManager.Pressed += (_, _) => _ = RunHotkeyActionAsync();
+
         // M2 骨架：显示占位窗口，关闭即退出。托盘 Issue（#29）会替换这里。
-        var window = new PlaceholderWindow(_clipboardMonitor, clipboardWriter);
+        var window = new PlaceholderWindow(_clipboardMonitor, clipboardWriter, _hotkeyManager);
+        window.ApplyHotkey(GetHotkeyArgument(e.Args) ?? HotkeyParser.DefaultTranslate);
         window.Closed += (_, _) => Shutdown();
         window.Show();
     }
@@ -44,11 +56,33 @@ public partial class App : Application
     /// <inheritdoc />
     protected override void OnExit(ExitEventArgs e)
     {
+        _hotkeyManager?.Dispose();
+        _hotkeyRegistrar?.Dispose();
         _clipboardMonitor?.Dispose();
         _clipboardSource?.Dispose();
         _logger?.Info($"客户端退出，代码 {e.ApplicationExitCode}");
         _logger?.Dispose();
         base.OnExit(e);
+    }
+
+    private static string? GetHotkeyArgument(string[] args)
+    {
+        var index = Array.IndexOf(args, "--hotkey");
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
+
+    private async Task RunHotkeyActionAsync()
+    {
+        try
+        {
+            await _hotkeyAction!.ExecuteAsync().ConfigureAwait(true);
+        }
+#pragma warning disable CA1031 // 快捷键回调不能让异常逃逸到消息循环。
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _logger?.Error("快捷键：取词时出现异常", ex);
+        }
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
