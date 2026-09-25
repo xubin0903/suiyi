@@ -61,6 +61,29 @@ internal sealed partial class PopupWindow : Window
         Close();
     }
 
+    /// <summary>框选截屏前临时隐藏（不改变浮窗状态），返回是否确实隐藏了。</summary>
+    public bool HideForCapture()
+    {
+        if (!IsVisible)
+        {
+            return false;
+        }
+
+        SetEscHotkey(false);
+        Hide();
+        return true;
+    }
+
+    /// <summary>框选结束后恢复；期间浮窗已被关闭（如自动消失）则保持隐藏。</summary>
+    public void RestoreAfterCapture()
+    {
+        if (_model.IsVisible && !IsVisible)
+        {
+            SetNoActivate(!_model.IsPinned);
+            Show();
+        }
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!_allowClose)

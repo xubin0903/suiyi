@@ -11,7 +11,7 @@ public sealed class AppSettingsTests
     {
         var s = AppSettings.Default;
 
-        Assert.Equal(1, s.SchemaVersion);
+        Assert.Equal(2, s.SchemaVersion);
         Assert.Equal("zh", s.PrimaryTarget);
         Assert.Equal("en", s.SecondaryTarget);
         Assert.True(s.Clipboard.MonitorEnabled);
@@ -20,6 +20,8 @@ public sealed class AppSettingsTests
         Assert.Equal(2000, s.Clipboard.MaxChars);
         Assert.Equal("Ctrl+Alt+T", s.Hotkey.Translate);
         Assert.Equal(HotkeyParser.DefaultTranslate, s.Hotkey.Translate);
+        Assert.Equal("Ctrl+Alt+S", s.Hotkey.Region);
+        Assert.Equal(HotkeyParser.DefaultRegion, s.Hotkey.Region);
         Assert.Equal(8, s.Popup.AutoHideSeconds);
         Assert.Equal(480, s.Popup.MaxWidth);
         Assert.Equal(18780, s.Engine.Port);

@@ -142,7 +142,7 @@ public sealed class SettingsStore
             return AppSettings.Default;
         }
 
-        var result = SettingsSerializer.Parse(json, Warn);
+        var result = SettingsSerializer.Parse(json, Warn, message => _logger.Info(message));
         if (result.Status == SettingsParseStatus.Ok)
         {
             return result.Settings;

@@ -11,14 +11,20 @@ namespace Suiyi.App.Interop;
 /// </summary>
 internal sealed class Win32HotkeyRegistrar : IHotkeyRegistrar, IDisposable
 {
-    private const int HotkeyId = 0x5359; // "SY"
+    /// <summary>「翻译」快捷键 id。</summary>
+    public const int TranslateHotkeyId = 0x5359; // "SY"
 
+    /// <summary>「框选翻译」快捷键 id。</summary>
+    public const int RegionHotkeyId = 0x535A;
+
+    private readonly int _hotkeyId;
     private readonly HwndSource _window;
     private bool _registered;
     private bool _disposed;
 
-    public Win32HotkeyRegistrar()
+    public Win32HotkeyRegistrar(int hotkeyId = TranslateHotkeyId)
     {
+        _hotkeyId = hotkeyId;
         var parameters = new HwndSourceParameters("SuiyiHotkeyListener")
         {
             ParentWindow = ClipboardNativeMethods.HwndMessage,
@@ -38,7 +44,7 @@ internal sealed class Win32HotkeyRegistrar : IHotkeyRegistrar, IDisposable
         Unregister();
 
         var modifiers = (uint)gesture.Modifiers | ModNoRepeat;
-        if (RegisterHotKey(_window.Handle, HotkeyId, modifiers, (uint)gesture.VirtualKey))
+        if (RegisterHotKey(_window.Handle, _hotkeyId, modifiers, (uint)gesture.VirtualKey))
         {
             _registered = true;
             errorCode = 0;
@@ -57,7 +63,7 @@ internal sealed class Win32HotkeyRegistrar : IHotkeyRegistrar, IDisposable
         }
 
         _registered = false;
-        UnregisterHotKey(_window.Handle, HotkeyId);
+        UnregisterHotKey(_window.Handle, _hotkeyId);
     }
 
     public void Dispose()
@@ -75,7 +81,7 @@ internal sealed class Win32HotkeyRegistrar : IHotkeyRegistrar, IDisposable
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == WmHotkey && wParam.ToInt32() == HotkeyId)
+        if (msg == WmHotkey && wParam.ToInt32() == _hotkeyId)
         {
             handled = true;
             Pressed?.Invoke(this, EventArgs.Empty);

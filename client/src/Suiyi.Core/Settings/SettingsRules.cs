@@ -1,3 +1,4 @@
+using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Tray;
 
 namespace Suiyi.Core.Settings;
@@ -67,6 +68,7 @@ public static class SettingsRules
 
         var hotkey = settings.Hotkey ?? Fallback(d.Hotkey, "hotkey", warn);
         var translate = hotkey.Translate ?? Fallback(d.Hotkey.Translate, "hotkey.translate", warn);
+        var region = RegionHotkey(hotkey.Region, translate, warn);
 
         var popup = settings.Popup ?? Fallback(d.Popup, "popup", warn);
         var autoHide = Range(popup.AutoHideSeconds, 0, MaxAutoHideSeconds, d.Popup.AutoHideSeconds, "popup.autoHideSeconds", warn);
@@ -88,7 +90,7 @@ public static class SettingsRules
             PrimaryTarget = primary,
             SecondaryTarget = secondary,
             Clipboard = clipboard with { DebounceMs = debounce, MinChars = minChars, MaxChars = maxChars },
-            Hotkey = hotkey with { Translate = translate },
+            Hotkey = hotkey with { Translate = translate, Region = region },
             Popup = popup with { AutoHideSeconds = autoHide, MaxWidth = maxWidth },
             Engine = engine with
             {
@@ -100,6 +102,47 @@ public static class SettingsRules
                 ModelsDir = Blank(engine.ModelsDir),
             },
         };
+    }
+
+    /// <summary>旧版本设置文件升级说明（读取时记一条日志；文件在下一次写回时才更新为新版本）。</summary>
+    public static string DescribeUpgrade(int fromVersion) => fromVersion switch
+    {
+        < 2 => $"设置文件版本 {fromVersion} 升级到 {AppSettings.CurrentSchemaVersion}：新增 hotkey.region（框选翻译快捷键，默认 {HotkeyParser.DefaultRegion}）",
+        _ => $"设置文件版本 {fromVersion} 升级到 {AppSettings.CurrentSchemaVersion}",
+    };
+
+    /// <summary>
+    /// <c>hotkey.region</c>：null 或格式非法回落默认值；与 <c>hotkey.translate</c> 解析后相同（含回落后的默认值）时禁用，
+    /// 避免两个功能抢同一个快捷键。<c>translate</c> 本身格式非法时不比较（由快捷键注册时提示）。
+    /// </summary>
+    private static string RegionHotkey(string? value, string translate, Action<string> warn)
+    {
+        var fallback = AppSettings.Default.Hotkey.Region;
+        string region;
+        if (value is null)
+        {
+            region = Fallback(fallback, "hotkey.region", warn);
+        }
+        else if (!HotkeyParser.TryParse(value, out _, out var error))
+        {
+            warn($"设置 hotkey.region 取值「{value}」无效（{error}），回落默认值 {fallback}");
+            region = fallback;
+        }
+        else
+        {
+            region = value;
+        }
+
+        if (HotkeyParser.TryParse(region, out var regionGesture, out _)
+            && regionGesture is not null
+            && HotkeyParser.TryParse(translate, out var translateGesture, out _)
+            && translateGesture == regionGesture)
+        {
+            warn($"设置 hotkey.region（{region}）与 hotkey.translate 相同，框选快捷键已禁用，请改为其他组合");
+            return string.Empty;
+        }
+
+        return region;
     }
 
     private static string Language(string? value, string fallback, string name, Action<string> warn)
