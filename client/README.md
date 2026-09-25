@@ -2,7 +2,7 @@
 
 C# **.NET 8** WPF 客户端。一期只做 **Windows**：托盘常驻、全局热键、剪贴板翻译，以及快捷键裁剪后的 OCR 翻译（M3）。翻译本身调用 `engine/` 的本机 HTTP 服务（见 [HTTP API](../docs/engine/HTTP-API.md)），不在客户端内嵌模型。
 
-在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)。
+在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)；升级到 M3 框选翻译并验收见 [M3 实机测试](../docs/client/M3-实机测试.md)。
 
 ## 目录
 
@@ -285,7 +285,7 @@ TranslateRegionAsync(trigger)
 | `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
 | `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
 | `PopupText` | Core | 语种标签（`中文 → English`、`English（自动） → 中文`）、耗时、原文摘要、按语种的字体回退链 |
-| `PopupDemo` | Core | `--popup-demo` 步骤（后半段为框选翻译：草案 JSON 经映射后显示，含展开原文、长文本、空结果、OCR 错误，选区锚点为固定坐标） |
+| `PopupDemo` | Core | `--popup-demo` 步骤（后半段为框选翻译：草案 JSON 经映射后显示，含展开原文、长文本、部分段落未翻译、空结果、OCR 错误，选区锚点为固定坐标；演示里没有可重发的请求，错误步骤不显示「重试」） |
 | `PopupWindow` / `PopupTheme` | App | 无边框圆角阴影、置顶、不进任务栏；`WS_EX_NOACTIVATE \| WS_EX_TOOLWINDOW`；`MonitorFromPoint` + `GetMonitorInfo` 取工作区；跟随 `AppsUseLightTheme` |
 
 **行为：**
