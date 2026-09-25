@@ -8,4 +8,7 @@ public enum ClipboardTrigger
 
     /// <summary>用户按全局快捷键手动触发（#33）。</summary>
     Hotkey,
+
+    /// <summary>托盘菜单「翻译剪贴板」（#34）。</summary>
+    Tray,
 }

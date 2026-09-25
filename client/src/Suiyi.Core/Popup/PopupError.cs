@@ -37,13 +37,13 @@ public sealed record PopupError(PopupErrorKind Kind)
     /// <summary>实际字符数（<see cref="PopupErrorKind.TextTooLong"/>）。</summary>
     public int? Length { get; init; }
 
-    /// <summary>补充说明（<see cref="PopupErrorKind.Other"/> 时代替默认文案）。</summary>
+    /// <summary>补充说明（<see cref="PopupErrorKind.Other"/>、<see cref="PopupErrorKind.ServiceUnavailable"/> 时代替默认文案）。</summary>
     public string? Detail { get; init; }
 
     /// <summary>面向用户的中文短提示。</summary>
     public string Message => Kind switch
     {
-        PopupErrorKind.ServiceUnavailable => "翻译服务未运行或已退出",
+        PopupErrorKind.ServiceUnavailable => string.IsNullOrWhiteSpace(Detail) ? "翻译服务未运行或已退出" : Detail.Trim(),
         PopupErrorKind.Timeout => "翻译超时，请重试",
         PopupErrorKind.MissingModels => MissingModels.Count > 0
             ? "未安装语向模型：" + string.Join("、", MissingModels)

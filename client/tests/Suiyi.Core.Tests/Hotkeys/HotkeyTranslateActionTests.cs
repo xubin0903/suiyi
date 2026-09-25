@@ -323,4 +323,15 @@ public sealed class HotkeyTranslateActionTests : IDisposable
         Assert.Equal(10000, HotkeyTranslateOptions.Default.Filter.MaxChars);
         Assert.Equal(TimeSpan.Zero, HotkeyTranslateOptions.Default.Filter.DuplicateWindow);
     }
+
+    [Fact]
+    public void Captured_CarriesTimestampOfHotkeyPress()
+    {
+        var pressedAt = _clock.GetTimestamp();
+        _keyboard.OnCopy = () => _clipboard.CopyText("选中的一句中文");
+
+        Run(out _);
+
+        Assert.Equal(pressedAt, Assert.Single(_captured).Timestamp);
+    }
 }

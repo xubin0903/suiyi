@@ -9,6 +9,7 @@ using Suiyi.App.Popup;
 using Suiyi.App.Tray;
 using Suiyi.Core.Clipboard;
 using Suiyi.Core.Engine;
+using Suiyi.Core.Flow;
 using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Lifecycle;
 using Suiyi.Core.Logging;
@@ -19,8 +20,9 @@ using Suiyi.Core.Tray;
 namespace Suiyi.App;
 
 /// <summary>
-/// 组合根。后续 Issue 在 <see cref="OnStartup"/> 里创建并注册自己的组件
-/// （设置、引擎进程、浮窗），在 <see cref="OnExit"/> 里按相反顺序清理。
+/// 组合根（#34 串接）：加载设置 → 托盘（正在准备）→ 启动翻译服务 → 剪贴板监听与快捷键 → 等待事件；
+/// 捕获到的文本交给 <see cref="TranslateFlowCoordinator"/>（翻译 → 浮窗）。退出时按
+/// 「注销快捷键 → 停止监听 → 关闭浮窗 → 停止服务 → 隐藏托盘」顺序清理。
 /// 没有主窗口：常驻托盘，托盘菜单「退出」才结束进程（ShutdownMode=OnExplicitShutdown）。
 /// </summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Application 与进程同寿命，字段在 OnExit 中释放。")]
@@ -30,6 +32,9 @@ public partial class App : Application
     public const string RepositoryUrl = "https://github.com/xubin0903/suiyi";
 
     private const string AppTitle = "随译";
+
+    /// <summary>复制译文时让监听忽略下一次变化的窗口。</summary>
+    private static readonly TimeSpan CopySuppressWindow = TimeSpan.FromSeconds(1);
 
     private SingleInstanceGuard? _instanceGuard;
     private InstanceActivation? _activation;
@@ -42,6 +47,8 @@ public partial class App : Application
     private JobObject? _engineJob;
     private EngineClient? _engineClient;
     private EngineSupervisor? _engine;
+    private TranslationService? _translation;
+    private TranslateFlowCoordinator? _flow;
     private DispatcherTimer? _popupDemoTimer;
     private PopupViewModel? _popup;
     private PopupWindow? _popupWindow;
@@ -83,7 +90,6 @@ public partial class App : Application
             () => Dispatcher.BeginInvoke(() => _tray?.ShowNotification(AppTitle, "随译已在运行")));
 
         // 剪贴板监听（#30）。writer 与 monitor 共用同一个 SelfWriteTracker，自身写入不会自触发。
-        // 暂时只写日志；翻译与浮窗由集成 Issue（#34）接到 TextCaptured 上。
         var selfWrites = new SelfWriteTracker();
         _clipboardSource = new Win32ClipboardSource(_logger);
         var clipboardWriter = new ClipboardWriter(_clipboardSource, selfWrites, _logger);
@@ -91,7 +97,6 @@ public partial class App : Application
         {
             Paused = !settings.Clipboard.MonitorEnabled,
         };
-        _clipboardMonitor.Start();
 
         // 全局快捷键（#33）。暂停剪贴板监听不影响快捷键。模拟复制引起的变化由 SuppressNext 让监听忽略。
         // 快捷键取自设置 hotkey.translate；命令行 --hotkey "Ctrl+Shift+Y" 可临时覆盖（不写回设置）；空字符串表示禁用。
@@ -101,13 +106,12 @@ public partial class App : Application
         _hotkeyManager.Pressed += (_, _) => _ = RunHotkeyActionAsync();
         _hotkeyManager.RegistrationFailed += (_, args) => _tray?.ShowNotification(AppTitle, args.Message);
 
-        // 译文浮窗（#31）。翻译流程由集成 Issue（#34）调用 ShowLoading / ShowResult / ShowError。
+        // 译文浮窗（#31），内容由主流程（#34）驱动。
         _popup = new PopupViewModel(settings.Popup.ToPopupOptions(), dispatch: action => Dispatcher.BeginInvoke(action));
         _popupWindow = new PopupWindow(_popup);
         WirePopup(_popup, clipboardWriter);
 
         WireTray(_tray, _clipboardMonitor);
-        _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? settings.Hotkey.Translate);
 
         if (e.Args.Contains("--popup-demo"))
         {
@@ -121,30 +125,43 @@ public partial class App : Application
         else
         {
             StartEngine(_tray);
+            StartFlow(_engine!, _engineClient!);
         }
+
+        // Issue #34 组合根顺序：服务启动之后才开始接收快捷键与剪贴板事件。
+        _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? settings.Hotkey.Translate);
+        _clipboardMonitor.Start();
     }
 
     /// <inheritdoc />
     protected override void OnExit(ExitEventArgs e)
     {
         _trayDemoTimer?.Stop();
+        _popupDemoTimer?.Stop();
 
-        // 先结束托管的翻译服务（外部服务不动），再关闭 Job 句柄兜底。
+        // 1. 注销快捷键 2. 停止监听
+        _hotkeyManager?.Dispose();
+        _hotkeyRegistrar?.Dispose();
+        _clipboardMonitor?.Dispose();
+
+        // 3. 取消进行中的翻译并关闭浮窗
+        _flow?.Dispose();
+        _translation?.Dispose();
+        _popupWindow?.CloseForExit();
+        _popup?.Dispose();
+
+        // 4. 停止托管的翻译服务（外部服务不动），再关闭 Job 句柄兜底
         if (_engine is { } engine && !Task.Run(engine.StopAsync).Wait(TimeSpan.FromSeconds(3)))
         {
             _logger?.Warn("停止翻译服务超时");
         }
 
         _engineJob?.Dispose();
-        _popupDemoTimer?.Stop();
-        _popupWindow?.CloseForExit();
-        _popup?.Dispose();
-        _hotkeyManager?.Dispose();
-        _hotkeyRegistrar?.Dispose();
-        _clipboardMonitor?.Dispose();
-        _clipboardSource?.Dispose();
         _engineClient?.Dispose();
         _engineLog?.Dispose();
+        _clipboardSource?.Dispose();
+
+        // 5. 隐藏托盘
         _activation?.Dispose();
         _trayView?.Dispose();
         _instanceGuard?.Dispose();
@@ -162,15 +179,23 @@ public partial class App : Application
             _settings?.Update(s => s with { Clipboard = s.Clipboard with { MonitorEnabled = !args.Paused } });
         };
 
-        // 目标语言写回 primaryTarget（secondaryTarget 按 ResolveTargets 保持不同）；#34 翻译时读取设置。
+        // 目标语言写回 primaryTarget（secondaryTarget 按 ResolveTargets 保持不同）；下一次翻译即读取新设置。
         tray.TargetChanged += (_, args) =>
         {
             _logger?.Info($"托盘：目标语言切换为 {args.Language}");
             _settings?.Update(s => s.WithPrimaryTarget(args.Language));
         };
 
-        // 由集成 Issue（#34）接到翻译流程。
-        tray.TranslateClipboardRequested += (_, _) => _logger?.Info("托盘：翻译剪贴板（待 #34 接线）");
+        tray.TranslateClipboardRequested += (_, _) =>
+        {
+            if (_flow is null || _clipboardSource is null)
+            {
+                _logger?.Info("托盘：翻译剪贴板（翻译服务未启用）");
+                return;
+            }
+
+            _flow.TranslateClipboard(_clipboardSource.TryReadText());
+        };
         tray.ShowLastPopupRequested += (_, _) =>
         {
             if (_popup?.ShowLast() != true)
@@ -188,7 +213,7 @@ public partial class App : Application
         tray.OpenSettingsRequested += (_, _) => OpenSettings();
         tray.OpenLogsRequested += (_, _) => OpenFolder(LogPaths.ResolveDirectory());
         tray.AboutRequested += (_, _) => MessageBox.Show(
-            $"随译 {GetVersion()}\n开源免费的本地翻译工具\n\n{RepositoryUrl}",
+            $"随译 {GetVersion()}\n开源免费的本地翻译工具\n\n{RepositoryUrl}\n\n端到端延迟：{_flow?.Latency.Summary() ?? "未启用"}",
             "关于随译",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -197,18 +222,39 @@ public partial class App : Application
 
     private void WirePopup(PopupViewModel popup, ClipboardWriter clipboardWriter)
     {
-        // 复制译文走 ClipboardWriter（登记自身写入），不会触发剪贴板监听。
+        // 复制译文：先 SuppressNext 再写入（写入同时登记自身序号，二者任一命中即忽略），不会再次触发翻译。
         popup.CopyTranslationRequested += (_, args) =>
         {
+            clipboardWriter.SuppressNext(CopySuppressWindow);
             if (!clipboardWriter.SetText(args.Text))
             {
+                clipboardWriter.CancelSuppress();
                 _tray?.ShowNotification(AppTitle, "复制失败：剪贴板被其他程序占用");
             }
         };
 
-        // 以下两项由集成 Issue（#34）接到翻译流程。
-        popup.RetryRequested += (_, _) => _logger?.Info("浮窗：重试（待 #34 接线）");
-        popup.SourceLanguageOverride += (_, args) => _logger?.Info($"浮窗：指定原文语种 {args.Language}（待 #34 接线）");
+        // 重试、指定原文语种由 TranslateFlowCoordinator 直接订阅。
+    }
+
+    private void StartFlow(EngineSupervisor engine, EngineClient client)
+    {
+        // 主流程（#34）：目标语言每次翻译时从设置读取，托盘切换后下一次请求即生效。
+        _translation = new TranslationService(client, () => (_settings!.Current.PrimaryTarget, _settings.Current.SecondaryTarget));
+        _flow = new TranslateFlowCoordinator(
+            _translation,
+            engine,
+            _popup!,
+            _tray!,
+            _logger,
+            dispatch: action => Dispatcher.BeginInvoke(action),
+
+            // Loaded 优先级低于 Render：回调执行时浮窗这一帧已经渲染。
+            afterRender: action => Dispatcher.BeginInvoke(action, DispatcherPriority.Loaded));
+
+        _clipboardMonitor!.TextCaptured += (_, args) => _flow.OnTextCaptured(args.Text, args.Trigger, args.Timestamp);
+        _clipboardMonitor.TextRejected += (_, args) => _flow.OnTextRejected(args.Reason, args.Length, args.Trigger);
+        _hotkeyAction!.TextCaptured += (_, args) => _flow.OnTextCaptured(args.Text, args.Trigger, args.Timestamp);
+        _hotkeyAction.Rejected += (_, args) => _flow.OnTextRejected(args.Reason, args.Length, args.Trigger);
     }
 
     private void StartPopupDemo(PopupViewModel popup)
@@ -256,6 +302,12 @@ public partial class App : Application
         // 状态事件在线程池线程上触发，切回 UI 线程更新托盘。
         _engine.StateChanged += (_, change) => Dispatcher.BeginInvoke(() =>
         {
+            if (change.State == EngineState.Ready)
+            {
+                // 服务（重新）就绪后刷新 /languages 缓存。
+                _engineClient?.Invalidate();
+            }
+
             var (status, detail) = EngineTrayStatus.Map(change);
             tray.SetStatus(status, detail);
             if (EngineTrayStatus.ShouldNotify(change))

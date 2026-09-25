@@ -13,7 +13,7 @@ namespace Suiyi.Core.Engine;
 /// <item>不重试；失败抛 <see cref="EngineException"/>，由界面决定是否重试。</item>
 /// </list>
 /// </remarks>
-public sealed class TranslationService : IDisposable
+public sealed class TranslationService : ITranslationService, IDisposable
 {
     private readonly EngineClient _client;
     private readonly Func<(string Primary, string Secondary)> _targets;

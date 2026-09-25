@@ -83,7 +83,7 @@ client/
 
 **菜单：** 状态行（灰）、翻译剪贴板、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。
 
-**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused` 并写回 `clipboard.monitorEnabled`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言写回 `primaryTarget`（启动时从设置恢复，#34 翻译时读取设置）；翻译剪贴板暂时只写日志（#34 接线）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：用记事本打开 `SettingsStore.FilePath`，文件不存在时先写出默认设置。
+**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused` 并写回 `clipboard.monitorEnabled`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言写回 `primaryTarget`（启动时从设置恢复，每次翻译时读取设置）；「翻译剪贴板」→ `TranslateFlowCoordinator.TranslateClipboard`（见[主流程](#主流程)）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：用记事本打开 `SettingsStore.FilePath`，文件不存在时先写出默认设置。
 
 **手测：**
 
@@ -95,6 +95,51 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 再启动一次会看到「随译已在运行」气泡，第二个进程立即退出。
 
 **DPI：** `Suiyi.App/app.manifest` 声明 PerMonitorV2（回退 `true/pm`）。WinForms 分析器的 WFAC010 建议改用 `Application.SetHighDpiMode`，但这是 WPF 应用，只能用 manifest，已在 csproj 中忽略。
+
+## 主流程
+
+`Flow/TranslateFlowCoordinator`（Core，不依赖 WPF，#34）把「捕获文本 → 翻译 → 浮窗」串起来，只在 UI 线程调用，后台回调经构造参数 `dispatch` 切回 UI 线程。
+
+**组合根顺序（`App.OnStartup`）：** 加载设置 → 托盘（正在准备）→ `EngineSupervisor.Start()` → 编排器（订阅监听 / 快捷键 / 托盘 / 浮窗事件）→ 注册快捷键、开始剪贴板监听。**退出（`OnExit`）：** 注销快捷键 → 停止监听 → 释放编排器、关闭浮窗 → 停止服务（最多等 3 s）→ 隐藏托盘。
+
+**公开接口：**
+
+| 成员 | 说明 |
+|---|---|
+| `OnTextCaptured(text, trigger, timestamp)` | 监听 / 快捷键捕获到文本；`timestamp` 为触发时刻（`TimeProvider.GetTimestamp()`），用于端到端计时 |
+| `OnTextRejected(reason, length, trigger)` | 只处理 `TooLong`：监听来源每次运行只在托盘提示一次；快捷键 / 托盘来源浮窗显示「文本过长：N 字，上限 10000 字」 |
+| `TranslateClipboard(ClipboardReadResult)` | 托盘「翻译剪贴板」：按 `ManualFilter`（1–10000 字，不去重）过滤，读不到 / 隐私 / 无文字时托盘提示 |
+| `Retry()` / `TranslateWithSource(lang)` | 浮窗「重试」/ 语种标签；已自动订阅 `PopupViewModel.RetryRequested`、`SourceLanguageOverride` |
+| `Latency`（`LatencyStats`） | 最近 20 次热路径端到端耗时，`Percentile(p)`、`Summary()`（「关于」里显示） |
+| `IsWaitingForEngine` / `Completed` | 是否在等服务就绪；一次翻译显示完成（含 `EndToEnd`、`WaitedForEngine`） |
+
+**行为：**
+
+- **目标语言：** `TranslationService` 每次请求读取 `settings.primaryTarget` / `secondaryTarget`，检测到原文等于主目标时改译为次目标；托盘切换目标后下一次翻译即生效。
+- **服务未就绪**（`IEngineStatus.State` 为 Starting / Restarting / Stopped）：浮窗「正在准备翻译服务…」，5 s 内就绪自动继续；超时则丢弃请求、保留提示。服务 **Failed**：浮窗「翻译服务启动失败，可在托盘菜单「重启翻译服务」重试」。
+- **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，并按未就绪处理，恢复后自动重译；5 s 后服务仍自称就绪则报「翻译服务未运行或已退出」（可重试）。
+- **最新优先：** 新请求取消旧请求（`CancellationToken`），并用代次号丢弃旧请求晚到的结果或错误。用户关闭浮窗也会取消进行中的请求。
+- **暂停监听：** 忽略 `ClipboardTrigger.Monitor`，快捷键和托盘照常翻译。
+
+**错误映射（`PopupErrorMapper`）：**
+
+| `EngineErrorKind` | 浮窗 |
+|---|---|
+| `Unavailable` | 先按未就绪处理（见上）；映射表本身为 `ServiceUnavailable` |
+| `Timeout` | `Timeout`「翻译超时，请重试」 |
+| `UnsupportedPair` | `MissingModels`（带缺失模型 id） |
+| `TextTooLong` | `TextTooLong`（带 `Limit` / `Length`，不可重试） |
+| `DetectFailed` | `DetectFailed`「无法识别原文语种，请点击语种标签手动指定」 |
+| `InvalidRequest` / `Internal` / `Unknown` / 其他异常 | `Other`，文案为 `EngineException.UserMessage` |
+| 服务 Failed | `ServiceUnavailable`，文案 `PopupErrorMapper.EngineFailedMessage` |
+
+**端到端计时：** 从 `WM_CLIPBOARDUPDATE`（监听）或快捷键按下，到浮窗显示译文后 WPF 完成布局（`Dispatcher` 的 `Loaded` 优先级回调）。每次写一行日志，不含正文：
+
+```
+翻译完成：trigger=Monitor chars=12 en→zh route=opus-mt-en-zh requests=1 e2e_ms=380 http_ms=210 server_ms=180；最近 10 次：P50 350 ms，P95 420 ms
+```
+
+等待过服务就绪的请求会标注「含等待服务就绪，不计入统计」。验收（P95 ≤ 2000 ms）：服务就绪后连续翻译 10 次，看最后一行日志或托盘「关于」里的 P95。
 
 ## 设置文件
 
@@ -172,7 +217,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `PopupViewModel` | Core | 集成方调用 `ShowPreparing()`、`ShowLoading(sourceText)`、`ShowResult(PopupResult)`、`ShowError(PopupError)`、`ShowLast()`、`Close(reason)`；事件 `CopyTranslationRequested(Text)`、`RetryRequested`、`SourceLanguageOverride(Language)`、`Closed(Reason)`；窗口用 `Shown(Reposition)`、`PropertyChanged`、`TogglePin()`、`SetHovered()`、`RequestCopy()`、`RequestRetry()`、`RequestSourceOverride()` |
 | `PopupKind` | Core | `None` / `Preparing` / `Loading` / `Result` / `Error` |
 | `PopupResult` | Core | `Translation`、`Source`、`Target`、`SourceDetected`、`Elapsed` |
-| `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 #34 映射 |
+| `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 `Flow/PopupErrorMapper` 映射 |
 | `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
 | `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
 | `PopupText` | Core | 语种标签（`中文 → English`、`English（自动） → 中文`）、耗时、原文摘要、按语种的字体回退链 |
@@ -190,7 +235,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 - **语种标签：** 点击后可选 中文 / English / 日本語，发 `SourceLanguageOverride`（`DetectFailed` 错误时显示为「指定原文语种 ▾」）。
 - **字体：** 中文 `Microsoft YaHei UI` 优先，日文 `Yu Gothic UI` 优先，英文 `Segoe UI` 优先，彼此互为回退。
 
-**当前接线：** 复制已接 `ClipboardWriter`；托盘左键 → `ShowLast()`；重试和指定语种暂时只写日志，由 #34 接到翻译流程（#34 还需把 `EngineException` 映射为 `PopupError`）。
+**当前接线：** 复制 → `ClipboardWriter.SuppressNext(1 s)` + `SetText`（不会被监听再次翻译，失败时撤销抑制并弹托盘提示）；托盘左键 → `ShowLast()`；重试、指定语种由 `TranslateFlowCoordinator` 订阅（见[主流程](#主流程)）。
 
 **手测：**
 
@@ -243,7 +288,7 @@ WM_CLIPBOARDUPDATE → 去抖（默认 150 ms，只处理最后一次）→ 序�
 
 读取阶段的原因：`NoText`（图片、文件列表等）、`PrivateContent`、`ClipboardBusy`。
 
-**手测：** 目前 `Suiyi.App` 启动即开始监听，结果写日志（`剪贴板：接受 N 字` / `剪贴板：跳过（原因，N 字）` / `剪贴板：忽略自身写入`）。暂停 / 恢复用托盘菜单「暂停监听」（设置 `ClipboardMonitor.Paused`）。翻译与浮窗由 #34 接到 `TextCaptured` 上。
+**手测：** 目前 `Suiyi.App` 启动即开始监听，结果写日志（`剪贴板：接受 N 字` / `剪贴板：跳过（原因，N 字）` / `剪贴板：忽略自身写入`）。暂停 / 恢复用托盘菜单「暂停监听」（设置 `ClipboardMonitor.Paused`）。`TextCaptured` / `TextRejected` 接到 `TranslateFlowCoordinator`（见[主流程](#主流程)）；`ClipboardTextCapturedEventArgs.Timestamp` 是 `WM_CLIPBOARDUPDATE` 到达时刻，用于端到端计时。
 
 ## 全局快捷键
 

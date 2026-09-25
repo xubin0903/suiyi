@@ -96,6 +96,44 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
         return e;
     }
 
+    // ---- 请求健康检查（#34） ----
+
+    [Fact]
+    public async Task RequestHealthCheck_ProbesImmediatelyWithoutWaitingForInterval()
+    {
+        await StartReadyAsync();
+        var probes = _endpoint.Probes;
+
+        var parked = _time.NextTimer();
+        _supervisor.RequestHealthCheck();
+        await parked;
+
+        Assert.Equal(probes + 1, _endpoint.Probes);
+        Assert.Equal(EngineState.Ready, _supervisor.State);
+    }
+
+    [Fact]
+    public async Task RequestHealthCheck_ExternalService_CountsTowardFailureThreshold()
+    {
+        _endpoint.Healthy = true;
+        var parked = _time.NextTimer();
+        _supervisor.Start();
+        await parked;
+
+        _endpoint.Healthy = false;
+        for (var i = 0; i < 3; i++)
+        {
+            parked = _time.NextTimer();
+            _supervisor.RequestHealthCheck();
+            await parked;
+        }
+
+        Assert.Single(_launcher.Started); // 连续三次失败后自己拉起服务
+    }
+
+    [Fact]
+    public void RequestHealthCheck_BeforeStart_IsHarmless() => _supervisor.RequestHealthCheck();
+
     // ---- 外部服务 ----
 
     [Fact]

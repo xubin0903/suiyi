@@ -147,7 +147,7 @@ public sealed class HotkeyTranslateAction
         }
 
         _logger.Info($"快捷键：捕获{source} {result.Length} 字，耗时 {Elapsed(started)} ms");
-        TextCaptured?.Invoke(this, new ClipboardTextCapturedEventArgs(result.Text!, ClipboardTrigger.Hotkey));
+        TextCaptured?.Invoke(this, new ClipboardTextCapturedEventArgs(result.Text!, ClipboardTrigger.Hotkey, started));
         return new HotkeyTranslateResult(HotkeyTranslateStatus.Captured, result.Text, null, copied);
     }
 

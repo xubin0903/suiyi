@@ -73,4 +73,17 @@ public class SelfWriteTrackerTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => tracker.SuppressNext(TimeSpan.Zero));
     }
+
+    [Fact]
+    public void OwnWrite_AlsoConsumesPendingSuppression()
+    {
+        // 复制译文时同时 SuppressNext + RecordOwnWrite：命中自身序号后不应再吞掉用户下一次真实复制。
+        var clock = new FakeTimeProvider();
+        var tracker = new SelfWriteTracker(clock);
+        tracker.SuppressNext(TimeSpan.FromSeconds(1));
+        tracker.RecordOwnWrite(10);
+
+        Assert.True(tracker.ShouldIgnore(10));
+        Assert.False(tracker.ShouldIgnore(11));
+    }
 }

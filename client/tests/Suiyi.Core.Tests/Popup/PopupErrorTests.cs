@@ -49,4 +49,11 @@ public sealed class PopupErrorTests
     {
         Assert.Equal(expected, new PopupError(kind).CanRetry);
     }
+
+    [Fact]
+    public void ServiceUnavailable_UsesDetailWhenPresent()
+    {
+        Assert.Equal("正在重启", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " 正在重启 " }.Message);
+        Assert.Equal("翻译服务未运行或已退出", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " " }.Message);
+    }
 }

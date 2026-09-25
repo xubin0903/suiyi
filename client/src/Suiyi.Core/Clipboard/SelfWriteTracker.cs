@@ -69,6 +69,8 @@ public sealed class SelfWriteTracker
         {
             if (_ownSequences.Contains(sequenceNumber))
             {
+                // 自身写入同时消耗未用的 SuppressNext（复制译文时两者同时设置），避免它吞掉用户下一次复制。
+                _suppressUntil = null;
                 return true;
             }
 
