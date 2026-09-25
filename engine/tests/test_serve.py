@@ -173,9 +173,8 @@ def test_startup_log_and_loopback_binding(
 ) -> None:
     seen: dict[str, object] = {}
 
-    def fake(app: object, host: str, port: int) -> None:
-        seen["host"] = host
-        seen["port"] = port
+    def fake(app: object, listen_socket: socket.socket) -> None:
+        seen["host"], seen["port"] = listen_socket.getsockname()[:2]
         seen["docs"] = app.docs_url  # type: ignore[attr-defined]
 
     monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fake)
@@ -205,9 +204,8 @@ def test_cli_port_env_and_dev_flag(
 ) -> None:
     seen: dict[str, object] = {}
 
-    def fake(app: object, host: str, port: int) -> None:
-        seen["host"] = host
-        seen["port"] = port
+    def fake(app: object, listen_socket: socket.socket) -> None:
+        seen["host"], seen["port"] = listen_socket.getsockname()[:2]
         seen["docs"] = app.docs_url  # type: ignore[attr-defined]
         seen["max"] = app.state.settings.max_text_chars  # type: ignore[attr-defined]
 

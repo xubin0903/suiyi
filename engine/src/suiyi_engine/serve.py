@@ -172,26 +172,30 @@ def run_server(
         print(str(exc), file=sys.stderr)
         return 1
 
+    # 先占住端口再预热：端口被占用时尽快退出，也不会在预热期间被别的进程抢走（#46）。
     try:
-        _ensure_port_free(host, port)
+        listen_socket = bind_listen_socket(host, port)
     except ServeError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
 
-    detector_ms = warmup_detector()
-
-    app = create_app(
-        translator,
-        None,
-        ApiSettings(max_text_chars=max_text_chars, dev=dev),
-    )
-    _print_startup(host, port, translator, decode, detector_ms)
     try:
-        _serve_uvicorn(app, host, port)
-    except OSError as exc:
-        print(f"无法在 {host}:{port} 启动服务：{exc}", file=sys.stderr)
-        return 1
-    return 0
+        detector_ms = warmup_detector()
+
+        app = create_app(
+            translator,
+            None,
+            ApiSettings(max_text_chars=max_text_chars, dev=dev),
+        )
+        _print_startup(host, port, translator, decode, detector_ms)
+        try:
+            _serve_uvicorn(app, listen_socket)
+        except OSError as exc:
+            print(f"无法在 {host}:{port} 启动服务：{exc}", file=sys.stderr)
+            return 1
+        return 0
+    finally:
+        listen_socket.close()
 
 
 def warmup_detector() -> float | None:
@@ -208,10 +212,13 @@ def warmup_detector() -> float | None:
         return None
 
 
-def _serve_uvicorn(app: object, host: str, port: int) -> None:
+def _serve_uvicorn(app: object, listen_socket: socket.socket) -> None:
+    """在 :func:`bind_listen_socket` 绑好的套接字上开始监听并服务，直到进程收到退出信号。"""
+
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="info", access_log=True)
+    config = uvicorn.Config(app, log_level="info", access_log=True)  # type: ignore[arg-type]
+    uvicorn.Server(config).run(sockets=[listen_socket])
 
 
 def resolve_decode_options(
@@ -263,7 +270,25 @@ def _listen_url(host: str, port: int) -> str:
     return f"http://{shown}:{port}"
 
 
-def _ensure_port_free(host: str, port: int) -> None:
+def bind_listen_socket(host: str, port: int) -> socket.socket:
+    """绑定服务的监听套接字（还不 ``listen``）交给 uvicorn；端口被占用时抛 :class:`ServeError`。
+
+    套接字选项按平台区分（#46）：
+
+    - Linux / macOS：设 ``SO_REUSEADDR``。服务被强杀后，客户端连接池里的 keep-alive 连接会让
+      服务端一侧停在 FIN-WAIT / TIME_WAIT（Linux 上最长约 60 秒）；不设这个选项时 ``bind``
+      报 ``EADDRINUSE``，服务无法立即重启。这些平台上 ``SO_REUSEADDR`` 不允许与正在监听的
+      套接字共用同一地址，真实占用仍然报错。uvicorn 自己建监听套接字时也设这个选项。
+    - Windows：不设 ``SO_REUSEADDR``，它在 Windows 上允许抢占别人正在使用的端口。
+      监听套接字也不设 ``SO_EXCLUSIVEADDRUSE``：按微软文档，设了之后它接受过的连接在完全
+      结束前会挡住下一次独占绑定，崩溃后同样无法立即重启。Windows 默认绑定会放过「别人监听
+      通配地址、我们绑回环地址」的情况，所以先用一个 ``SO_EXCLUSIVEADDRUSE`` 的探测套接字
+      试绑一次再关掉：已有监听者（包括通配地址上的）时报占用。
+    """
+
+    if os.name == "nt":
+        _probe_exclusive(host, port)
+
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
@@ -273,6 +298,8 @@ def _ensure_port_free(host: str, port: int) -> None:
     family, socktype, proto, _canon, sockaddr = infos[0]
     sock = socket.socket(family, socktype, proto)
     try:
+        if os.name != "nt":
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if family == socket.AF_INET6:
             try:
                 sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
@@ -280,12 +307,33 @@ def _ensure_port_free(host: str, port: int) -> None:
                 pass
         sock.bind(sockaddr)
     except OSError as exc:
+        sock.close()
         raise ServeError(
             f"端口 {port} 已被占用或无法在 {host} 上监听：{exc}",
             code=1,
         ) from exc
-    finally:
-        sock.close()
+    return sock
+
+
+def _probe_exclusive(host: str, port: int) -> None:
+    """Windows：用 ``SO_EXCLUSIVEADDRUSE`` 试绑一次，端口上已有任何绑定（含通配地址）时报占用。"""
+
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ServeError(f"无法解析监听地址 {host}：{exc}") from exc
+    if not infos:
+        raise ServeError(f"无法解析监听地址 {host}")
+    family, socktype, proto, _canon, sockaddr = infos[0]
+    with socket.socket(family, socktype, proto) as probe:
+        try:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # type: ignore[attr-defined]
+            probe.bind(sockaddr)
+        except OSError as exc:
+            raise ServeError(
+                f"端口 {port} 已被占用或无法在 {host} 上监听：{exc}",
+                code=1,
+            ) from exc
 
 
 def _require_port(value: object, label: str) -> int:
