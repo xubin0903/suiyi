@@ -102,6 +102,9 @@ jobs:
         # 确认 OCR 可选组不带进 torch / paddlepaddle / transformers，并在 Windows / Linux 上各识别一次。
         # 不从网络下载模型：用 rapidocr wheel 自带的三个 ONNX（与 engine/ocr_model_manifest.json 的
         # 推荐组合同一字节，check 会校验 sha256）。smoke 在进程内禁止任何网络连接。
+        # Windows runner 的管道默认 cp1252，中文输出会 UnicodeEncodeError，所以开 UTF-8 模式。
+        env:
+          PYTHONUTF8: "1"
         run: |
           python -m venv "$RUNNER_TEMP/ocr-venv"
           if [ "$RUNNER_OS" = "Windows" ]; then
