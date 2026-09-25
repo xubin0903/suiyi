@@ -15,6 +15,8 @@
 
 ## 文档
 
+- [贡献指南](CONTRIBUTING.md)（目录约定与开发流程）
+- [文档索引](docs/README.md)
 - [MVP 范围冻结](docs/research/MVP范围冻结-v0.1.md)
 - [引擎验收标准](docs/research/引擎验收标准-v0.1.md)
 - [剪贴板与截屏可行性](docs/research/剪贴板与截屏可行性一页纸.md)
