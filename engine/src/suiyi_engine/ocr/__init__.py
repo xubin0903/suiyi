@@ -10,6 +10,7 @@ from suiyi_engine.ocr.engine import (
     InvalidImageError,
     OcrEngine,
     OcrError,
+    OcrModelError,
     OcrModelsMissingError,
 )
 from suiyi_engine.ocr.layout import LayoutOptions, is_vertical, join_lines, merge_paragraphs
@@ -24,6 +25,7 @@ __all__ = [
     "OcrEngine",
     "OcrError",
     "OcrLine",
+    "OcrModelError",
     "OcrModelsMissingError",
     "OcrParagraph",
     "OcrResult",

@@ -54,6 +54,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="单条文本字符上限，默认环境变量 SUIYI_MAX_TEXT_CHARS 或 10000",
     )
+    serve.add_argument(
+        "--max-image-bytes",
+        type=int,
+        default=None,
+        help="OCR 请求体字节上限，默认环境变量 SUIYI_MAX_IMAGE_BYTES 或 8388608（8 MiB）",
+    )
+    serve.add_argument(
+        "--preload-ocr",
+        action="store_true",
+        help="开始监听前加载并预热 OCR 模型；OCR 依赖或模型缺失时非零退出（同 --preload）",
+    )
     serve.add_argument("--dev", action="store_true", help="开启 /docs 与 /openapi.json")
     serve.add_argument(
         "--intra-threads",
