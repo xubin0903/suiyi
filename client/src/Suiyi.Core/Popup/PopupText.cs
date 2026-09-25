@@ -25,6 +25,35 @@ public static class PopupText
     /// <summary>原文摘要的最大字符数。</summary>
     public const int SourcePreviewLength = 80;
 
+    /// <summary>全部段落都没有译文时的提示。</summary>
+    public const string AllUntranslatedHint = "未能翻译，以上为识别出的原文";
+
+    /// <summary>
+    /// 框选翻译中译文缺失、用原文代替的段落的小字提示（例如「第 2、3 段未能翻译，显示为原文」）；没有这种段落时为空。
+    /// 段落序号从 1 起，按浮窗里显示的段落计。
+    /// </summary>
+    /// <param name="result">框选翻译结果。</param>
+    public static string UntranslatedHint(PopupOcrResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var indices = result.UntranslatedParagraphs
+            .Where(i => i >= 0 && i < result.TranslationParagraphs.Count)
+            .Distinct()
+            .Order()
+            .ToList();
+        if (indices.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        if (indices.Count == result.TranslationParagraphs.Count)
+        {
+            return AllUntranslatedHint;
+        }
+
+        return "第 " + string.Join("、", indices.Select(i => (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture))) + " 段未能翻译，显示为原文";
+    }
+
     /// <summary>可手动指定的原文语种（中文 / English / 日本語）。</summary>
     public static IReadOnlyList<TrayLanguage> SourceChoices => TrayLanguages.All;
 
