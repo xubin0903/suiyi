@@ -125,9 +125,11 @@ jobs:
           "$PY" scripts/download_ocr_models.py "${OCR_ARGS[@]}" check
           "$PY" -c "import sys; from PIL import Image, ImageDraw, ImageFont; im = Image.new('RGB', (720, 120), 'white'); ImageDraw.Draw(im).text((20, 30), 'Suiyi offline OCR 2026', font=ImageFont.load_default(size=44), fill='black'); im.save(sys.argv[1])" "$RUNNER_TEMP/ocr.png"
           "$PY" scripts/download_ocr_models.py "${OCR_ARGS[@]}" smoke "$RUNNER_TEMP/ocr.png"
-          # #52 OCR 核心：真实模型上的中英日识别、段落合并、竖排顺序、并发（模型测试不允许跳过）
+          # #52 OCR 核心 + #53 OCR 接口：真实模型上的中英日识别、段落合并、竖排顺序、并发，
+          # 以及需要 PIL 解码的接口用例（OCR 模型测试不允许跳过）
           SUIYI_MODELS_DIR="$MODELS" SUIYI_OCR_TESTS_REQUIRED=1 "$PY" -m pytest -rs \
-            engine/tests/test_ocr_layout.py engine/tests/test_ocr_engine.py engine/tests/test_ocr_model.py
+            engine/tests/test_ocr_layout.py engine/tests/test_ocr_engine.py engine/tests/test_ocr_model.py \
+            engine/tests/test_ocr_http.py
 
   # 稳定的汇总检查，供将来分支保护使用。
   # engine 矩阵被跳过时本 job 仍成功；矩阵失败或被取消时本 job 失败。

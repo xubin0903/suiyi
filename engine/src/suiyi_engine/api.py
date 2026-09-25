@@ -12,7 +12,7 @@ import time
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -24,9 +24,15 @@ from suiyi_engine.errors import UnsupportedPairError
 from suiyi_engine.registry import normalize_lang
 from suiyi_engine.translator import TranslationResult
 
+if TYPE_CHECKING:
+    from suiyi_engine.api_ocr import OcrProvider
+
 logger = logging.getLogger(__name__)
 
 Detector = Callable[[str], object]
+
+DEFAULT_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+DEFAULT_MAX_IMAGE_PIXELS = 4096 * 4096
 
 
 class SupportsTranslation(Protocol):
@@ -50,17 +56,22 @@ class ApiSettings:
     """与监听地址无关的接口设置。
 
     ``max_text_chars`` 是单条 ``text``（以及 ``texts`` 里每一条）的字符上限。
+    ``max_image_bytes`` / ``max_image_pixels`` 是 OCR 请求体的字节上限与总像素上限。
     ``dev`` 为真时才挂载 ``/docs`` 和 ``/openapi.json``。
     """
 
     max_text_chars: int = 10_000
     dev: bool = False
+    max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES
+    max_image_pixels: int = DEFAULT_MAX_IMAGE_PIXELS
 
     def __post_init__(self) -> None:
-        if isinstance(self.max_text_chars, bool) or not isinstance(self.max_text_chars, int):
-            raise ValueError("max_text_chars 必须是整数")
-        if self.max_text_chars < 1:
-            raise ValueError("max_text_chars 必须 >= 1")
+        for name in ("max_text_chars", "max_image_bytes", "max_image_pixels"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{name} 必须是整数")
+            if value < 1:
+                raise ValueError(f"{name} 必须 >= 1")
 
 
 class TranslateRequest(BaseModel):
@@ -109,8 +120,15 @@ def create_app(
     translator: SupportsTranslation,
     detector: Detector | None = None,
     settings: ApiSettings | None = None,
+    ocr: OcrProvider | None = None,
 ) -> FastAPI:
-    """组装应用。``detector`` 为空时使用 :func:`suiyi_engine.langdetect.detect`。"""
+    """组装应用。``detector`` 为空时使用 :func:`suiyi_engine.langdetect.detect`。
+
+    ``ocr`` 为空时按翻译模型目录懒建一个 :class:`OcrProvider`：OCR 依赖或模型缺失不影响启动，
+    只让 OCR 接口返回 503。
+    """
+
+    from suiyi_engine.api_ocr import OcrProvider, register_ocr_routes
 
     if detector is None:
         from suiyi_engine.langdetect import detect
@@ -136,6 +154,7 @@ def create_app(
     app.state.translator = translator
     app.state.detector = detector
     app.state.settings = settings
+    app.state.ocr = ocr if ocr is not None else OcrProvider(translator.registry.models_dir)
     app.state.started_at = time.perf_counter()
     # 翻译在线程池里串行，避免并行解码抢 CPU。健康检查不拿这把锁。
     app.state.translate_lock = threading.Lock()
@@ -168,6 +187,8 @@ def create_app(
                 "models_dir": str(current.registry.models_dir),
                 "loaded_models": list(current.loaded_model_ids()),
                 "uptime_s": round(float(uptime), 1),
+                "ocr_loaded": bool(app.state.ocr.loaded),
+                "ocr_error": app.state.ocr.health(),
             }
         except Exception:
             logger.exception("读取健康状态失败")
@@ -203,6 +224,7 @@ def create_app(
                 return _internal_error()
         return JSONResponse(status_code=200, content=payload)
 
+    register_ocr_routes(app)
     return app
 
 
