@@ -1,4 +1,4 @@
-# 第三方翻译模型署名（草稿）
+# 第三方模型署名（草稿）
 
 随安装包或「关于」页分发。权重不打进本仓库，按 [engine/model_manifest.json](../../engine/model_manifest.json) 按需下载。转成 CTranslate2 int8 的文件是对原权重的改编，改编方为随译项目，不表示 Helsinki-NLP 认可量化结果。
 
@@ -54,3 +54,30 @@ https://creativecommons.org/licenses/by/4.0/
 ```
 
 按需下载的 `optional` 模型使用同一许可和同一段署名，上架时把具体仓库名和修订补进清单即可。NLLB、SeamlessM4T 等 CC BY-NC 权重不在此列，默认不下载。
+
+## OCR 模型（框选翻译，#51）
+
+框选翻译用 [RapidOCR](https://github.com/RapidAI/RapidOCR)（Apache-2.0）加载百度飞桨 PaddleOCR 的 PP-OCR 系列 ONNX 模型。模型与代码都是 Apache License 2.0，可以随安装包分发，须附许可证全文，并保留下面的来源说明。选型、体积与实测见 [OCR 选型与许可证](OCR选型与许可证.md)；下载地址与 sha256 见 [engine/ocr_model_manifest.json](../../engine/ocr_model_manifest.json)。
+
+核对日：2026-09-25。许可证原文：<https://www.apache.org/licenses/LICENSE-2.0>。
+
+### 默认组合（manifest `recommended`）
+
+| 文件 | 上游模型 | 许可证依据 | sha256 |
+|------|----------|-----------|--------|
+| `PP-OCRv6_det_small.onnx` | PaddlePaddle `PP-OCRv6_small_det` | 模型卡 `license: apache-2.0`：<https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det> | `090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f` |
+| `PP-OCRv6_rec_small.onnx` | PaddlePaddle `PP-OCRv6_small_rec` | 模型卡 `license: apache-2.0`：<https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec> | `6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884` |
+| `ch_ppocr_mobile_v2.0_cls_mobile.onnx` | PaddleOCR `ch_ppocr_mobile_v2.0_cls` | 无独立模型卡，随 PaddleOCR 仓库 LICENSE（Apache-2.0）：<https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE> | `e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c` |
+
+ONNX 文件由 RapidOCR 项目从 PaddleOCR 推理模型转换（写入了字符字典元数据），取自 ModelScope `RapidAI/RapidOCR` 仓库 `v3.9.2` 标签（仓库许可证 Apache License 2.0）。它们与 PaddlePaddle 在 Hugging Face 发布的 `*_onnx` 文件不是同一字节，属于对原模型的格式转换；随译未再修改。
+
+### 可直接粘贴的一段
+
+```
+文字识别（OCR）：RapidOCR（Apache-2.0，https://github.com/RapidAI/RapidOCR），
+模型为百度飞桨 PaddleOCR 的 PP-OCRv6 small 检测/识别与 PP-OCR v2.0 方向分类（Apache-2.0，
+https://github.com/PaddlePaddle/PaddleOCR），ONNX 格式由 RapidOCR 项目转换。
+Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+```
+
+清单里 `tier: "candidate"` 的其余 OCR 模型同为 Apache-2.0，只用于对比，默认不下载。

@@ -98,6 +98,29 @@ jobs:
         # @pytest.mark.model 由 engine/tests/conftest.py 跳过。
         run: pytest engine
 
+      - name: OCR 依赖审计（干净 venv 安装 engine[ocr]，#51）
+        # 确认 OCR 可选组不带进 torch / paddlepaddle / transformers，并在 Windows / Linux 上各识别一次。
+        # 不从网络下载模型：用 rapidocr wheel 自带的三个 ONNX（与 engine/ocr_model_manifest.json 的
+        # 推荐组合同一字节，check 会校验 sha256）。smoke 在进程内禁止任何网络连接。
+        run: |
+          python -m venv "$RUNNER_TEMP/ocr-venv"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            PY="$RUNNER_TEMP/ocr-venv/Scripts/python.exe"
+          else
+            PY="$RUNNER_TEMP/ocr-venv/bin/python"
+          fi
+          "$PY" -m pip install --quiet --upgrade pip
+          "$PY" -m pip install --quiet "./engine[ocr]"
+          "$PY" -m pip list
+          "$PY" scripts/download_ocr_models.py audit
+          MODELS="$RUNNER_TEMP/ocr-models"
+          mkdir -p "$MODELS/ocr"
+          "$PY" -c "import pathlib, rapidocr, shutil, sys; [shutil.copy2(p, sys.argv[1]) for p in (pathlib.Path(rapidocr.__file__).parent / 'models').glob('*.onnx')]" "$MODELS/ocr"
+          OCR_ARGS=(--manifest engine/ocr_model_manifest.json --models-dir "$MODELS")
+          "$PY" scripts/download_ocr_models.py "${OCR_ARGS[@]}" check
+          "$PY" -c "import sys; from PIL import Image, ImageDraw, ImageFont; im = Image.new('RGB', (720, 120), 'white'); ImageDraw.Draw(im).text((20, 30), 'Suiyi offline OCR 2026', font=ImageFont.load_default(size=44), fill='black'); im.save(sys.argv[1])" "$RUNNER_TEMP/ocr.png"
+          "$PY" scripts/download_ocr_models.py "${OCR_ARGS[@]}" smoke "$RUNNER_TEMP/ocr.png"
+
   # 稳定的汇总检查，供将来分支保护使用。
   # engine 矩阵被跳过时本 job 仍成功；矩阵失败或被取消时本 job 失败。
   engine-check:
