@@ -15,6 +15,9 @@ public static class LogPaths
     /// <summary>客户端日志文件名前缀。</summary>
     public const string ClientPrefix = "client";
 
+    /// <summary>翻译服务输出（stdout / stderr）日志文件名前缀。</summary>
+    public const string EnginePrefix = "engine";
+
     private const string DateFormat = "yyyyMMdd";
     private const string Extension = ".log";
 

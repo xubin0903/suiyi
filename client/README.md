@@ -186,6 +186,56 @@ python -m suiyi_engine serve --preload zh-en,en-zh
 SUIYI_ENGINE_PORT=18780 dotnet test client/Suiyi.sln -c Release --filter Category=Engine
 ```
 
+## 开发模式下的翻译服务
+
+客户端启动时由 `EngineSupervisor`（`Suiyi.Core/Engine`，#32）拉起并常驻翻译服务，退出时结束它。M2 仍从源码运行，需要能找到装了 `suiyi_engine` 的 Python。
+
+**查找顺序**（`EngineCommandResolver`，命中即用）：
+
+1. 设置 `engine.command` + `engine.args`（为 M4 打包 exe 预留）：`<command> <args…> serve --port … --preload …`
+2. 设置 `engine.pythonPath`
+3. 从客户端 exe 所在目录向上找仓库根（含 `engine/pyproject.toml`），用 `<仓库根>\.venv\Scripts\python.exe`
+4. `py -3.11`（Windows Python Launcher），再退到 PATH 上的 `python`
+
+Python 参数：`-m suiyi_engine serve --port <engine.port，默认 18780> --preload <engine.preload，默认 zh-en,en-zh> [--models-dir <engine.modelsDir>]`；工作目录为仓库根（找不到时为 exe 所在目录）。进程以 `CreateNoWindow` 启动，不弹控制台，并加入 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object（`Suiyi.App/Interop/JobObject.cs`），客户端被任务管理器强杀时服务随之退出。
+
+设置（#27）接入前，可用环境变量代替：`SUIYI_ENGINE_PORT`、`SUIYI_ENGINE_PRELOAD`、`SUIYI_ENGINE_PYTHON`、`SUIYI_ENGINE_MODELS_DIR`、`SUIYI_ENGINE_COMMAND`。
+
+**状态**（`StateChanged` 事件，在线程池线程上触发，界面自行切回 UI 线程）：
+
+```
+Stopped → Starting ─┬→ Ready(External)   端口上已有随译服务（/health 为 ok）：直接复用，退出时不结束它
+                    ├→ Ready(Managed)    自己拉起：每 200 ms 探测 /health，ok 即就绪（预加载在监听前完成）
+                    └→ Failed(原因)      30 s 未就绪 / 就绪前退出 / 找不到 Python：不自动重试
+Ready(Managed) → Restarting → Ready      进程意外退出或看门狗连续 3 次失败：退避 1 s / 2 s / 4 s 后重启
+             → Failed(服务反复崩溃)       5 分钟内崩溃超过 3 次
+```
+
+- 就绪后在后台发一条 zh→en 短句预热并丢弃结果，失败不影响状态。
+- 看门狗：`Ready` 期间每 10 s 探测 `/health`，连续 3 次失败且进程仍在 → 结束进程并按崩溃处理。外部服务连续 3 次失败 → 改为自己拉起。
+- `RestartAsync()`（托盘「重启翻译服务」）结束托管进程并清零崩溃计数；`StopAsync()` 用 `Kill(entireProcessTree: true)` 结束托管进程，最多等 2 s；外部服务不动。
+- 所有探测都用 #28 的 `EngineClient.GetHealthAsync`。
+
+**日志**：服务的 stdout / stderr 写入 `%LOCALAPPDATA%\suiyi\logs\engine-YYYYMMDD.log`（stderr 行带 `[stderr]` 前缀），状态变化写客户端日志 `client-YYYYMMDD.log`。内存里保留最后 50 行，用于失败提示。
+
+**手动起服务让客户端复用**（调试服务端时常用）：
+
+```powershell
+.venv\Scripts\python -m suiyi_engine serve --preload zh-en,en-zh
+dotnet run --project client/src/Suiyi.App    # 状态为 Ready(External)，退出客户端后服务仍在
+```
+
+**常见失败提示**：
+
+| 提示 | 原因与处理 |
+|------|-----------|
+| 未找到 suiyi_engine：请在仓库根目录创建 .venv 并执行 pip install -e engine | 解释器里没装引擎 |
+| 缺少模型：opus-mt-xx-yy，请按 docs/engine/模型目录约定.md 转换 | `engine.preload` 的语向没有模型 |
+| 端口 18780 被其他程序占用，请在设置中修改 engine.port | 端口上不是随译服务 |
+| 未找到 Python：… / 无法启动 Python：… | 查找顺序都没命中，或 `engine.pythonPath` 写错 |
+| 启动超时：翻译服务 30 秒内未就绪，已结束进程 | 冷盘或模型过大；看 engine 日志 |
+| 服务反复崩溃（5 分钟内 4 次），已停止自动重启 | 看 engine 日志；修复后用「重启翻译服务」 |
+
 ## 环境
 
 - .NET 8 SDK（`global.json` 允许 8.0 下更高的特性带）

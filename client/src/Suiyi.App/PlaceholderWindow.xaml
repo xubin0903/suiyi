@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="随译"
         Width="360"
-        Height="300"
+        Height="400"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen">
   <StackPanel HorizontalAlignment="Center"
@@ -36,5 +36,15 @@
               Content="应用快捷键"
               Click="OnApplyHotkey" />
     </StackPanel>
+    <!-- 翻译服务状态手测用（#32），托盘（#29）接管后删除。 -->
+    <TextBlock x:Name="EngineStateText"
+               MaxWidth="320"
+               Margin="0,16,0,0"
+               TextWrapping="Wrap"
+               Text="翻译服务：Stopped" />
+    <Button Margin="0,8,0,0"
+            Padding="8,2"
+            Content="重启翻译服务"
+            Click="OnRestartEngine" />
   </StackPanel>
 </Window>

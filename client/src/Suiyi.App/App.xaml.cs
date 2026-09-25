@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Suiyi.App.Interop;
 using Suiyi.Core.Clipboard;
+using Suiyi.Core.Engine;
 using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Logging;
 
@@ -21,6 +22,10 @@ public partial class App : Application
     private Win32HotkeyRegistrar? _hotkeyRegistrar;
     private HotkeyManager? _hotkeyManager;
     private HotkeyTranslateAction? _hotkeyAction;
+    private FileLogger? _engineLog;
+    private JobObject? _engineJob;
+    private EngineClient? _engineClient;
+    private EngineSupervisor? _engine;
 
     /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)
@@ -46,16 +51,47 @@ public partial class App : Application
         _hotkeyManager = new HotkeyManager(_hotkeyRegistrar, _logger);
         _hotkeyManager.Pressed += (_, _) => _ = RunHotkeyActionAsync();
 
+        // 翻译服务进程（#32）。配置暂取默认值 + SUIYI_ENGINE_* 环境变量，设置（#27）接入后改为从设置映射。
+        var engineOptions = EngineOptionsOverrides.Apply(new EngineOptions(), Environment.GetEnvironmentVariable);
+        _engineLog = new FileLogger(LogPaths.ResolveDirectory(), LogPaths.EnginePrefix);
+        try
+        {
+            _engineJob = JobObject.CreateKillOnClose();
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            _logger.Warn("无法创建 Job Object，客户端被强杀时翻译服务可能残留", ex);
+        }
+
+        _engineClient = new EngineClient(engineOptions.Port);
+        var launcher = new ProcessEngineLauncher(process => _engineJob?.Assign(process));
+        _engine = new EngineSupervisor(
+            engineOptions,
+            launcher,
+            new EngineClientEndpoint(_engineClient),
+            logger: _logger,
+            outputLogger: _engineLog);
+
         // M2 骨架：显示占位窗口，关闭即退出。托盘 Issue（#29）会替换这里。
-        var window = new PlaceholderWindow(_clipboardMonitor, clipboardWriter, _hotkeyManager);
+        var window = new PlaceholderWindow(_clipboardMonitor, clipboardWriter, _hotkeyManager, _engine);
         window.ApplyHotkey(GetHotkeyArgument(e.Args) ?? HotkeyParser.DefaultTranslate);
         window.Closed += (_, _) => Shutdown();
         window.Show();
+        _engine.Start();
     }
 
     /// <inheritdoc />
     protected override void OnExit(ExitEventArgs e)
     {
+        // 先结束托管的翻译服务（外部服务不动），再关闭 Job 句柄兜底。
+        if (_engine is { } engine && !Task.Run(engine.StopAsync).Wait(TimeSpan.FromSeconds(3)))
+        {
+            _logger?.Warn("停止翻译服务超时");
+        }
+
+        _engineJob?.Dispose();
+        _engineClient?.Dispose();
+        _engineLog?.Dispose();
         _hotkeyManager?.Dispose();
         _hotkeyRegistrar?.Dispose();
         _clipboardMonitor?.Dispose();

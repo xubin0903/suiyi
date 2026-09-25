@@ -1,5 +1,6 @@
 using System.Windows;
 using Suiyi.Core.Clipboard;
+using Suiyi.Core.Engine;
 using Suiyi.Core.Hotkeys;
 
 namespace Suiyi.App;
@@ -10,15 +11,19 @@ public partial class PlaceholderWindow : Window
     private readonly ClipboardMonitor _monitor;
     private readonly ClipboardWriter _writer;
     private readonly HotkeyManager _hotkeys;
+    private readonly EngineSupervisor _engine;
 
     /// <summary>创建占位窗口。</summary>
-    public PlaceholderWindow(ClipboardMonitor monitor, ClipboardWriter writer, HotkeyManager hotkeys)
+    public PlaceholderWindow(ClipboardMonitor monitor, ClipboardWriter writer, HotkeyManager hotkeys, EngineSupervisor engine)
     {
         _monitor = monitor;
         _writer = writer;
         _hotkeys = hotkeys;
+        _engine = engine;
         InitializeComponent();
         _hotkeys.RegistrationFailed += (_, e) => HotkeyStatusText.Text = e.Message;
+        _engine.StateChanged += OnEngineStateChanged;
+        Closed += (_, _) => _engine.StateChanged -= OnEngineStateChanged;
     }
 
     /// <summary>应用快捷键设置并刷新状态文字。</summary>
@@ -30,6 +35,12 @@ public partial class PlaceholderWindow : Window
             HotkeyStatusText.Text = _hotkeys.Current is { } current ? $"快捷键 {current} 已启用" : "快捷键已禁用";
         }
     }
+
+    // 事件在线程池线程上触发，切回 UI 线程更新。
+    private void OnEngineStateChanged(object? sender, EngineStateChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(() => EngineStateText.Text = "翻译服务：" + e);
+
+    private async void OnRestartEngine(object sender, RoutedEventArgs e) => await _engine.RestartAsync();
 
     private void OnPauseChanged(object sender, RoutedEventArgs e) =>
         _monitor.Paused = PauseCheckBox.IsChecked == true;
