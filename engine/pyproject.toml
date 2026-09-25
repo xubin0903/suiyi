@@ -9,8 +9,11 @@ description = "随译本地翻译引擎骨架。翻译、HTTP 与模型加载由
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-# 运行时依赖故意留空。ctranslate2、sentencepiece、fastapi 等由后续 Issue 按需添加。
-dependencies = []
+# 语种检测使用 py3langid（BSD-3-Clause，传递依赖 numpy）。
+# ctranslate2、sentencepiece、fastapi 等仍由后续 Issue 按需添加。
+dependencies = [
+  "py3langid>=0.4.0,<0.5",
+]
 
 [project.optional-dependencies]
 dev = [
