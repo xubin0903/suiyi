@@ -31,7 +31,7 @@ client/
   |------|------|
   | `Engine/` | HTTP 客户端与服务进程管理逻辑 |
   | `Settings/` | 设置模型与读写 |
-  | `Clipboard/` | 剪贴板文本过滤规则 |
+  | `Clipboard/` | 剪贴板监听、过滤规则、自身写入抑制（已有） |
   | `Popup/` | 浮窗 ViewModel 与状态机 |
   | `Logging/` | 文件日志（已有） |
 
@@ -52,6 +52,53 @@ client/
 - 路径：`%LOCALAPPDATA%\suiyi\logs\client-YYYYMMDD.log`
 - 环境变量 `SUIYI_LOG_DIR` 可覆盖目录（测试、便携模式）
 - **不记录剪贴板正文等用户内容**，只记录长度、原因、耗时
+
+## 剪贴板监听
+
+复制即翻译的触发源（#30）。纯逻辑在 `Suiyi.Core/Clipboard`，Win32 部分在 `Suiyi.App/Interop`。
+
+```
+WM_CLIPBOARDUPDATE → 去抖（默认 150 ms，只处理最后一次）→ 序号未变则跳过
+  → 自身写入 / SuppressNext 窗口内 → 忽略（不发事件）
+  → 已暂停 → 忽略（不读剪贴板、不发事件）
+  → 读取：带隐私标记 → 跳过，不读正文；无文本格式 → 跳过；被占用 → 每 30 ms 重试，最多 3 次
+  → ClipboardTextFilter → TextCaptured(text, Monitor) 或 TextRejected(reason)
+```
+
+| 类型 | 所在 | 作用 |
+|------|------|------|
+| `IClipboardSource` | Core | 平台抽象：`Changed`、`StartListening/StopListening`、`GetSequenceNumber`、`TryReadText`、`TrySetText` |
+| `Win32ClipboardSource` | App/Interop | 仅消息窗口（`HWND_MESSAGE`）+ `AddClipboardFormatListener`；直接用 Win32 读写 `CF_UNICODETEXT`，不用 WPF `Clipboard`（占用时会抛 `COMException`，也读不到隐私格式） |
+| `ClipboardMonitor` | Core | 监听编排：`Start()`、`Stop()`、`Paused`、`Options`，事件 `TextCaptured`、`TextRejected` |
+| `ClipboardWriter` | Core | 本程序写剪贴板的唯一入口：`SetText(text)` 写入后记录序号；`SuppressNext(TimeSpan)` 供快捷键模拟复制 |
+| `SelfWriteTracker` | Core | 自身写入序号与一次性忽略窗口。`ClipboardWriter` 与 `ClipboardMonitor` 必须共用同一实例 |
+| `ClipboardTextFilter` | Core | `Classify`（纯函数）与 `Evaluate`（含 2 s 去重） |
+| `ClipboardFilterOptions` / `ClipboardMonitorOptions` | Core | 阈值与去抖，由集成层从设置映射 |
+| `ClipboardTextCapturedEventArgs` | Core | `Text` + `Trigger`（`Monitor` / `Hotkey`），快捷键（#33）发同一形状的事件 |
+
+`ClipboardMonitor.Start()` 要在 UI 线程调用：它捕获当前 `SynchronizationContext`，读取剪贴板和事件都回到 UI 线程。
+
+**隐私：** 剪贴板含 `ExcludeClipboardContentFromMonitorProcessing`，或 `CanIncludeInClipboardHistory` / `CanUploadToCloudClipboard` 的值为 0 时（密码管理器常用）一律跳过，不读正文。日志只记录长度、拒绝原因和耗时，**不记录剪贴板正文**。
+
+**过滤规则**（规范化：去首尾空白，换行统一为 `\n`；长度按 Unicode 码位计）：
+
+| 顺序 | 规则 | `RejectReason` |
+|------|------|----------------|
+| 1 | 空白 | `Empty` |
+| 2 | 少于 `MinChars`（默认 2） | `TooShort` |
+| 3 | 多于 `MaxChars`（默认 2000；快捷键可放宽到 10000） | `TooLong` |
+| 4 | 只有数字、空白与 `+-.,:/()%¥$` 等（金额、日期、电话） | `NumericLike` |
+| 5 | 没有任何文字（纯标点、符号、emoji） | `SymbolsOnly` |
+| 6 | 单行且整体是网址（`http(s)://`、`ftp://`、`www.`） | `Url` |
+| 7 | 单行且整体是邮箱 | `Email` |
+| 8 | 单行 Windows 路径（`C:\`、`C:/`、`\\server\`）或无空白的 Unix 路径（`/`、`~/`、`./`、`../`） | `FilePath` |
+| 9 | 单行 GUID / 十六进制哈希（`^\{?[0-9a-fA-F-]{16,}\}?$`） | `HexOrGuid` |
+| 10 | 至少 3 个非空行，且超过一半以 `;`、`{`、`}` 结尾 | `CodeLike` |
+| 11 | 与上一次被接受的文本相同，且间隔 < 2 s | `Duplicate` |
+
+读取阶段的原因：`NoText`（图片、文件列表等）、`PrivateContent`、`ClipboardBusy`。
+
+**手测：** 目前 `Suiyi.App` 启动即开始监听，结果写日志（`剪贴板：接受 N 字` / `剪贴板：跳过（原因，N 字）` / `剪贴板：忽略自身写入`）。占位窗口上有「暂停剪贴板监听」勾选框和「写入测试文本（不应触发）」按钮，托盘（#29）替换占位窗口时一并移除。翻译与浮窗由 #34 接到 `TextCaptured` 上。
 
 ## 环境
 
