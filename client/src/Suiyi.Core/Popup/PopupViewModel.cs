@@ -16,6 +16,7 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     private readonly OneShotTimer _autoHideTimer;
     private readonly OneShotTimer _copiedTimer;
     private bool _positioned;
+    private bool _suppressPresent;
 
     private PopupKind _kind;
     private bool _isVisible;
@@ -360,6 +361,51 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
         Present();
     }
 
+    /// <summary>
+    /// 请求已被取消而浮窗仍停在忙碌态（Loading / Preparing）时调用（#71）：改为可重试的「已取消」错误，保留 <see cref="Mode"/> 与选区。
+    /// 浮窗隐藏时不弹出，托盘左键 <see cref="ShowLast"/> 时显示；不在忙碌态时什么都不做。
+    /// </summary>
+    /// <returns>是否改成了「已取消」。</returns>
+    public bool ShowCancelled()
+    {
+        if (Kind is not (PopupKind.Loading or PopupKind.Preparing))
+        {
+            return false;
+        }
+
+        _loadingTimer.Stop();
+        ShowLoadingIndicator = false;
+        Error = new PopupError(PopupErrorKind.Cancelled);
+        SetKind(PopupKind.Error);
+        if (IsVisible)
+        {
+            Present();
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 更新内容但不弹出（#71）：浮窗隐藏时，<paramref name="update"/> 里的 <see cref="ShowResult"/> / <see cref="ShowOcrResult"/> /
+    /// <see cref="ShowError"/> 只改内容、不显示窗口，托盘左键 <see cref="ShowLast"/> 时再显示；浮窗可见时与直接调用相同。
+    /// 用于用户关掉浮窗之后才到的结果或错误。
+    /// </summary>
+    /// <param name="update">要执行的更新。</param>
+    public void UpdateWithoutShowing(Action update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        var previous = _suppressPresent;
+        _suppressPresent = !IsVisible;
+        try
+        {
+            update();
+        }
+        finally
+        {
+            _suppressPresent = previous;
+        }
+    }
+
     /// <summary>重新显示上一次的内容（托盘左键）。从未显示过时返回 <see langword="false"/>。</summary>
     public bool ShowLast()
     {
@@ -530,6 +576,12 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
 
     private void Present()
     {
+        if (_suppressPresent)
+        {
+            _positioned = false; // 之后 ShowLast 时重新定位。
+            return;
+        }
+
         var reposition = !_positioned && !IsPinned;
         var becameVisible = !IsVisible;
         _positioned = true;

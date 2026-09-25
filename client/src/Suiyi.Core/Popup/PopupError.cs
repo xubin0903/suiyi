@@ -34,6 +34,12 @@ public enum PopupErrorKind
 
     /// <summary>OCR 模型未安装（#53 草案 <c>ocr_unavailable</c>）。</summary>
     OcrUnavailable,
+
+    /// <summary>
+    /// 请求在完成前被取消（#71）：忙碌态时关闭浮窗或开始新的框选。浮窗隐藏时写入，托盘左键重新显示时看到它和「重试」，
+    /// 而不是停在「正在翻译 / 正在识别」。
+    /// </summary>
+    Cancelled,
 }
 
 /// <summary>浮窗错误内容。</summary>
@@ -73,6 +79,7 @@ public sealed record PopupError(PopupErrorKind Kind)
         PopupErrorKind.EngineStartTimeout => "翻译服务启动超时，点「重试」会重启翻译服务",
         PopupErrorKind.ImageTooLarge => "选区过大，请缩小选区后重新框选",
         PopupErrorKind.InvalidImage => "截图无法识别，请重新框选",
+        PopupErrorKind.Cancelled => "已取消：浮窗在完成前被关闭，点「重试」重新翻译",
         PopupErrorKind.OcrUnavailable => OcrReason switch
         {
             OcrUnavailableReasons.DependencyMissing => "OCR 组件未安装",

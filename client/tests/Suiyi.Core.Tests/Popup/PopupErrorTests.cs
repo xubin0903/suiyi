@@ -50,9 +50,18 @@ public sealed class PopupErrorTests
     [InlineData(PopupErrorKind.TextTooLong, false)]
     [InlineData(PopupErrorKind.Other, true)]
     [InlineData(PopupErrorKind.EngineStartTimeout, true)]
+    [InlineData(PopupErrorKind.Cancelled, true)]
     public void CanRetry(PopupErrorKind kind, bool expected)
     {
         Assert.Equal(expected, new PopupError(kind).CanRetry);
+    }
+
+    [Fact]
+    public void Cancelled_TellsUserToRetry_NoHint()
+    {
+        var error = new PopupError(PopupErrorKind.Cancelled);
+        Assert.Equal("已取消：浮窗在完成前被关闭，点「重试」重新翻译", error.Message);
+        Assert.Null(error.Hint);
     }
 
     [Fact]
