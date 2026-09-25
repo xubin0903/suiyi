@@ -46,6 +46,22 @@ public class EngineOptionsOverridesTests
         Assert.Equal(EngineClient.DefaultPort, options.Port);
     }
 
+    [Theory]
+    [InlineData("1", false, true)]
+    [InlineData(" TRUE ", false, true)]
+    [InlineData("0", true, false)]
+    [InlineData("false", true, false)]
+    [InlineData("yes", true, true)]
+    [InlineData("", false, false)]
+    public void PreloadOcr_Override(string value, bool initial, bool expected)
+    {
+        var options = EngineOptionsOverrides.Apply(
+            new EngineOptions { PreloadOcr = initial },
+            name => name == EngineOptionsOverrides.PreloadOcrVariable ? value : null);
+
+        Assert.Equal(expected, options.PreloadOcr);
+    }
+
     [Fact]
     public void EmptyPreload_DisablesPreload()
     {

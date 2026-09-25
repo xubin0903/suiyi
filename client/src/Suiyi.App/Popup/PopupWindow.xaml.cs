@@ -172,6 +172,8 @@ internal sealed partial class PopupWindow : Window
         LoadingIndicator.Visibility = _model.ShowLoadingIndicator ? Visibility.Visible : Visibility.Hidden;
 
         TranslationText.Text = _model.Translation;
+        UntranslatedHintText.Text = _model.UntranslatedHint;
+        UntranslatedHintText.Visibility = Vis(kind == PopupKind.Result && _model.HasUntranslatedHint);
         TranslationText.FontFamily = new FontFamily(_model.TranslationFontFamily);
 
         ErrorText.Text = _model.ErrorMessage;
@@ -208,6 +210,7 @@ internal sealed partial class PopupWindow : Window
         TranslationText.SelectionBrush = theme.Accent;
         SourcePreviewText.Foreground = theme.Secondary;
         EmptyPanel.Foreground = theme.Secondary;
+        UntranslatedHintText.Foreground = theme.Secondary;
         OriginalText.Foreground = theme.Secondary;
         OriginalText.SelectionBrush = theme.Accent;
         OriginalToggle.Foreground = theme.Secondary;

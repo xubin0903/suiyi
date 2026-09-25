@@ -22,6 +22,9 @@ public sealed class TrayController : ITrayService
     public event EventHandler<TrayPauseToggledEventArgs>? PauseToggled;
 
     /// <inheritdoc />
+    public event EventHandler? TranslateRegionRequested;
+
+    /// <inheritdoc />
     public event EventHandler<TrayTargetChangedEventArgs>? TargetChanged;
 
     /// <inheritdoc />
@@ -62,6 +65,10 @@ public sealed class TrayController : ITrayService
     public void SetPaused(bool paused) => Update(_state with { Paused = paused });
 
     /// <inheritdoc />
+    public void SetRegionHotkey(string? hotkey) =>
+        Update(_state with { RegionHotkey = string.IsNullOrWhiteSpace(hotkey) ? null : hotkey.Trim() });
+
+    /// <inheritdoc />
     public void SetTarget(string language)
     {
         if (!TrayLanguages.IsSupported(language))
@@ -93,6 +100,9 @@ public sealed class TrayController : ITrayService
         {
             case TrayCommand.TranslateClipboard:
                 TranslateClipboardRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case TrayCommand.TranslateRegion:
+                TranslateRegionRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case TrayCommand.TogglePause:
                 var paused = !_state.Paused;

@@ -10,7 +10,7 @@ public sealed class TrayMenuBuilderTests
         var menu = TrayMenuBuilder.Build(new TrayState { Status = TrayStatus.Ready });
 
         Assert.Equal(
-            ["就绪（中文）", "-", "翻译剪贴板", "暂停监听", "目标语言", "-", "重启翻译服务", "打开设置文件", "打开日志目录", "-", "关于", "退出"],
+            ["就绪（中文）", "-", "翻译剪贴板", "框选翻译", "暂停监听", "目标语言", "-", "重启翻译服务", "打开设置文件", "打开日志目录", "-", "关于", "退出"],
             menu.Select(i => i.IsSeparator ? "-" : i.Text));
     }
 
@@ -54,8 +54,21 @@ public sealed class TrayMenuBuilderTests
 
         Assert.All(menu.Where(i => i.Command != TrayCommand.None), i => Assert.True(i.IsEnabled));
         Assert.Equal(
-            [TrayCommand.TranslateClipboard, TrayCommand.TogglePause, TrayCommand.RestartEngine, TrayCommand.OpenSettings, TrayCommand.OpenLogs, TrayCommand.About, TrayCommand.Exit],
+            [TrayCommand.TranslateClipboard, TrayCommand.TranslateRegion, TrayCommand.TogglePause, TrayCommand.RestartEngine, TrayCommand.OpenSettings, TrayCommand.OpenLogs, TrayCommand.About, TrayCommand.Exit],
             menu.Where(i => i.Command != TrayCommand.None).Select(i => i.Command));
+    }
+
+    [Theory]
+    [InlineData(null, "框选翻译")]
+    [InlineData("", "框选翻译")]
+    [InlineData("Ctrl+Alt+S", "框选翻译（Ctrl+Alt+S）")]
+    [InlineData(" Ctrl+Shift+R ", "框选翻译（Ctrl+Shift+R）")]
+    public void RegionItem_ShowsActualHotkey(string? hotkey, string expected)
+    {
+        var item = Find(TrayMenuBuilder.Build(new TrayState { RegionHotkey = hotkey }), TrayCommand.TranslateRegion);
+
+        Assert.Equal(expected, item.Text);
+        Assert.True(item.IsEnabled);
     }
 
     [Fact]

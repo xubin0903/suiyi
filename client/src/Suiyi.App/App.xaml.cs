@@ -62,6 +62,7 @@ public partial class App : Application
     private Win32HotkeyRegistrar? _regionHotkeyRegistrar;
     private HotkeyManager? _regionHotkeyManager;
     private RegionCaptureTrigger? _regionCapture;
+    private OcrTranslationService? _ocrTranslation;
     private CancellationTokenSource? _regionCaptureCts;
     private bool _regionDemo;
 
@@ -121,7 +122,7 @@ public partial class App : Application
         WireTray(_tray, _clipboardMonitor);
 
         // 框选截屏（#55）：快捷键取自 hotkey.region（默认 Ctrl+Alt+S，""禁用）；命令行 --region-hotkey 可临时覆盖。
-        // 截图只在内存中；OCR 与翻译由 #58 串接。--region-demo 时把 PNG 存到临时目录供手测。
+        // 截图只在内存中，由主流程（#58）交给 OCR 翻译，用完即丢弃；--region-demo 时额外把 PNG 存到临时目录供手测。
         _regionDemo = e.Args.Contains(RegionCaptureDemo.Switch);
         _regionCaptureCts = new CancellationTokenSource();
         _regionCapture = new RegionCaptureTrigger(
@@ -130,7 +131,7 @@ public partial class App : Application
         _regionCapture.Captured += (_, args) => OnRegionCaptured(args.Result);
         _regionHotkeyRegistrar = new Win32HotkeyRegistrar(Win32HotkeyRegistrar.RegionHotkeyId);
         _regionHotkeyManager = new HotkeyManager(_regionHotkeyRegistrar, _logger, "框选快捷键");
-        _regionHotkeyManager.Pressed += (_, _) => _ = _regionCapture.RunAsync(_regionCaptureCts.Token);
+        _regionHotkeyManager.Pressed += (_, _) => StartRegionTranslate(RegionTranslateTrigger.Hotkey);
         _regionHotkeyManager.RegistrationFailed += (_, args) => _tray?.ShowNotification(AppTitle, args.Message);
 
         if (e.Args.Contains("--popup-demo"))
@@ -151,6 +152,9 @@ public partial class App : Application
         // Issue #34 组合根顺序：服务启动之后才开始接收快捷键与剪贴板事件。
         _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? settings.Hotkey.Translate);
         _regionHotkeyManager.Update(GetOptionValue(e.Args, "--region-hotkey") ?? settings.Hotkey.Region);
+
+        // 托盘「框选翻译」菜单项显示实际生效的快捷键（注册失败或禁用时不显示）。
+        _tray.SetRegionHotkey(_regionHotkeyManager.Current?.ToString());
 
         // 设置里需要明确告知的问题（如框选快捷键与翻译快捷键相同被禁用），每次运行只提示一次。
         foreach (var notice in _settings.TakeLoadNotices())
@@ -178,6 +182,7 @@ public partial class App : Application
         // 3. 取消进行中的翻译并关闭浮窗
         _flow?.Dispose();
         _translation?.Dispose();
+        _ocrTranslation?.Dispose();
         _popupWindow?.CloseForExit();
         _popup?.Dispose();
 
@@ -235,6 +240,8 @@ public partial class App : Application
             }
         };
 
+        tray.TranslateRegionRequested += (_, _) => StartRegionTranslate(RegionTranslateTrigger.Tray);
+
         tray.RestartEngineRequested += (_, _) =>
         {
             _logger?.Info("托盘：重启翻译服务");
@@ -244,7 +251,7 @@ public partial class App : Application
         tray.OpenSettingsRequested += (_, _) => OpenSettings();
         tray.OpenLogsRequested += (_, _) => OpenFolder(LogPaths.ResolveDirectory());
         tray.AboutRequested += (_, _) => MessageBox.Show(
-            $"随译 {GetVersion()}\n开源免费的本地翻译工具\n\n{RepositoryUrl}\n\n端到端延迟：{_flow?.Latency.Summary() ?? "未启用"}",
+            $"随译 {GetVersion()}\n开源免费的本地翻译工具\n\n{RepositoryUrl}\n\n端到端延迟：{_flow?.Latency.Summary() ?? "未启用"}\n框选翻译延迟：{_flow?.OcrLatency.Summary() ?? "未启用"}",
             "关于随译",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -272,7 +279,7 @@ public partial class App : Application
 
     private void OnRegionCaptured(RegionCaptureResult result)
     {
-        // 正式流程（#58 之前）：只记日志，图片随结果对象丢弃，不落盘。
+        // 正式流程（#58）：PNG 由 TranslateFlowCoordinator 交给 OCR 翻译后丢弃，不落盘；只有 --region-demo 在这里另存一份。
         if (!_regionDemo)
         {
             return;
@@ -297,6 +304,7 @@ public partial class App : Application
     {
         // 主流程（#34）：目标语言每次翻译时从设置读取，托盘切换后下一次请求即生效。
         _translation = new TranslationService(client, () => (_settings!.Current.PrimaryTarget, _settings.Current.SecondaryTarget));
+        _ocrTranslation = new OcrTranslationService(client, () => (_settings!.Current.PrimaryTarget, _settings.Current.SecondaryTarget), _logger);
         _flow = new TranslateFlowCoordinator(
             _translation,
             engine,
@@ -306,12 +314,27 @@ public partial class App : Application
             dispatch: action => Dispatcher.BeginInvoke(action),
 
             // Loaded 优先级低于 Render：回调执行时浮窗这一帧已经渲染。
-            afterRender: action => Dispatcher.BeginInvoke(action, DispatcherPriority.Loaded));
+            afterRender: action => Dispatcher.BeginInvoke(action, DispatcherPriority.Loaded),
+            ocr: _ocrTranslation,
+            region: _regionCapture);
 
         _clipboardMonitor!.TextCaptured += (_, args) => _flow.OnTextCaptured(args.Text, args.Trigger, args.Timestamp);
         _clipboardMonitor.TextRejected += (_, args) => _flow.OnTextRejected(args.Reason, args.Length, args.Trigger);
         _hotkeyAction!.TextCaptured += (_, args) => _flow.OnTextCaptured(args.Text, args.Trigger, args.Timestamp);
         _hotkeyAction.Rejected += (_, args) => _flow.OnTextRejected(args.Reason, args.Length, args.Trigger);
+    }
+
+    private void StartRegionTranslate(RegionTranslateTrigger trigger)
+    {
+        if (_regionCapture is null || _regionCaptureCts is null)
+        {
+            return;
+        }
+
+        // --tray-demo 等未启动翻译服务时只做框选（保留 #55 的手测路径）。
+        _ = _flow is null
+            ? _regionCapture.RunAsync(_regionCaptureCts.Token)
+            : _flow.TranslateRegionAsync(trigger, _regionCaptureCts.Token);
     }
 
     private void StartPopupDemo(PopupViewModel popup)

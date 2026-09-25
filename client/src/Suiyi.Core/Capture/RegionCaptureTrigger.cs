@@ -15,6 +15,14 @@ public sealed class RegionCapturedEventArgs(RegionCaptureResult result, TimeSpan
     public TimeSpan Elapsed { get; } = elapsed;
 }
 
+/// <summary><see cref="RegionCaptureTrigger.Failed"/> 参数。</summary>
+/// <param name="exception">截屏时抛出的异常（已记日志）。</param>
+public sealed class RegionCaptureFailedEventArgs(Exception exception) : EventArgs
+{
+    /// <summary>截屏时抛出的异常。</summary>
+    public Exception Exception { get; } = exception;
+}
+
 /// <summary>
 /// 框选入口（快捷键 <c>hotkey.region</c> 调用）：同一时刻只允许一次框选，遮罩显示期间重复触发被忽略；
 /// 完成时发 <see cref="Captured"/>。日志只记尺寸、显示器、缩放和耗时，不记图片内容。异常记日志后按取消处理。
@@ -36,6 +44,9 @@ public sealed class RegionCaptureTrigger
     /// <summary>框选完成（未取消）。在调用 <see cref="RunAsync"/> 的线程上触发。</summary>
     public event EventHandler<RegionCapturedEventArgs>? Captured;
 
+    /// <summary>截屏失败（GDI 资源不足等）。<see cref="RunAsync"/> 仍按取消返回 <see langword="null"/>；订阅方可据此提示用户。</summary>
+    public event EventHandler<RegionCaptureFailedEventArgs>? Failed;
+
     /// <summary>是否正在框选（遮罩显示中）。</summary>
     public bool IsCapturing { get; private set; }
 
@@ -51,6 +62,7 @@ public sealed class RegionCaptureTrigger
         IsCapturing = true;
         var started = _time.GetTimestamp();
         RegionCaptureResult? result;
+        Exception? failure = null;
         try
         {
             result = await _capture.CaptureAsync(cancellationToken).ConfigureAwait(true);
@@ -65,6 +77,7 @@ public sealed class RegionCaptureTrigger
         {
             _logger.Error("框选：截屏失败", ex);
             result = null;
+            failure = ex;
         }
         finally
         {
@@ -72,6 +85,12 @@ public sealed class RegionCaptureTrigger
         }
 
         var elapsed = _time.GetElapsedTime(started);
+        if (failure is not null)
+        {
+            Failed?.Invoke(this, new RegionCaptureFailedEventArgs(failure));
+            return null;
+        }
+
         if (result is null)
         {
             _logger.Info("框选：已取消");

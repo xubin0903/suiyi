@@ -15,7 +15,8 @@ public static class OcrResultMapper
     /// 映射成功响应。
     /// <list type="bullet">
     /// <item>原文段落取 <c>paragraphs[].text</c>；<c>paragraphs</c> 为空但 <c>text</c> 非空时按 <c>\n</c> 拆段兜底。</item>
-    /// <item>译文取 <c>translation.results[i].text</c>，按下标与段落对应；缺失的段落用原文代替（不丢内容）。</item>
+    /// <item>译文取 <c>translation.results[i].text</c>，按下标与段落对应；缺失的段落用原文代替（不丢内容），
+    /// 并记入 <see cref="PopupOcrResult.UntranslatedParagraphs"/>，浮窗轻微区分样式。</item>
     /// <item>语种标签取各段 <c>source</c> / <c>target</c> 中出现最多的（并列取靠前的）；有一段自动检测即视为自动。</item>
     /// <item>耗时取 <c>elapsed_ms.total</c>（没有时为 <see langword="null"/>）。</item>
     /// <item>空白段落丢弃；全部为空 → <see cref="PopupOcrResult.IsEmpty"/>（「未识别到文字」）。</item>
@@ -36,6 +37,7 @@ public static class OcrResultMapper
         var sources = new List<string>();
         var translations = new List<string>();
         var used = new List<TranslateResponse>();
+        var untranslated = new List<int>();
         for (var i = 0; i < paragraphs.Count; i++)
         {
             var source = paragraphs[i].Trim();
@@ -47,7 +49,16 @@ public static class OcrResultMapper
             var result = i < results.Count ? results[i] : null;
             var translation = result?.Text?.Trim();
             sources.Add(source);
-            translations.Add(string.IsNullOrEmpty(translation) ? source : translation);
+            if (string.IsNullOrEmpty(translation))
+            {
+                untranslated.Add(translations.Count);
+                translations.Add(source);
+            }
+            else
+            {
+                translations.Add(translation);
+            }
+
             if (result is not null)
             {
                 used.Add(result);
@@ -68,6 +79,7 @@ public static class OcrResultMapper
         {
             SourceDetected = used.Any(r => r.Detected),
             Elapsed = elapsed,
+            UntranslatedParagraphs = untranslated,
         };
     }
 

@@ -15,6 +15,9 @@ public static class EngineOptionsOverrides
     /// <summary>预热语向；设为空字符串表示不预热。</summary>
     public const string PreloadVariable = "SUIYI_ENGINE_PRELOAD";
 
+    /// <summary>覆盖 <see cref="EngineOptions.PreloadOcr"/>：<c>1</c>/<c>true</c> 开启，<c>0</c>/<c>false</c> 关闭，其他值忽略。</summary>
+    public const string PreloadOcrVariable = "SUIYI_ENGINE_PRELOAD_OCR";
+
     /// <summary>Python 解释器路径。</summary>
     public const string PythonVariable = "SUIYI_ENGINE_PYTHON";
 
@@ -42,6 +45,16 @@ public static class EngineOptionsOverrides
         if (getVariable(PreloadVariable) is { } preload)
         {
             result = result with { Preload = preload.Trim() };
+        }
+
+        switch (getVariable(PreloadOcrVariable)?.Trim().ToLowerInvariant())
+        {
+            case "1" or "true":
+                result = result with { PreloadOcr = true };
+                break;
+            case "0" or "false":
+                result = result with { PreloadOcr = false };
+                break;
         }
 
         if (NonEmpty(getVariable(PythonVariable)) is { } python)

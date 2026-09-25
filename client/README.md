@@ -83,9 +83,9 @@ client/
 | 已暂停监听 | 灰 | `随译 · 已暂停监听` |
 | 服务异常 | 红 | `随译 · 翻译服务异常：<原因>` |
 
-**菜单：** 状态行（灰）、翻译剪贴板、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。
+**菜单：** 状态行（灰）、翻译剪贴板、框选翻译（Ctrl+Alt+S）、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。「框选翻译」发 `TranslateRegionRequested`，括号内是 `SetRegionHotkey` 设入的实际生效快捷键（禁用或注册失败时只显示「框选翻译」）。
 
-**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused` 并写回 `clipboard.monitorEnabled`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言写回 `primaryTarget`（启动时从设置恢复，每次翻译时读取设置）；「翻译剪贴板」→ `TranslateFlowCoordinator.TranslateClipboard`（见[主流程](#主流程)）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：用记事本打开 `SettingsStore.FilePath`，文件不存在时先写出默认设置。
+**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused` 并写回 `clipboard.monitorEnabled`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言写回 `primaryTarget`（启动时从设置恢复，每次翻译时读取设置）；「翻译剪贴板」→ `TranslateFlowCoordinator.TranslateClipboard`（见[主流程](#主流程)）；「框选翻译」→ `TranslateFlowCoordinator.TranslateRegionAsync(Tray)`，与框选快捷键同一路径（见[框选翻译](#框选翻译)）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：用记事本打开 `SettingsStore.FilePath`，文件不存在时先写出默认设置。
 
 **手测：**
 
@@ -146,6 +146,53 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 
 等待过服务就绪的请求会标注「含等待服务就绪，不计入统计」。验收（P95 ≤ 2000 ms）：服务就绪后连续翻译 10 次，看最后一行日志或托盘「关于」里的 P95。
 
+## 框选翻译
+
+M3 主流程（#58）：框选快捷键 `hotkey.region` 或托盘「框选翻译」→ [框选截屏](#框选截屏)（#55）→ `IOcrTranslationService`（#56，`/ocr_translate`）→ `OcrResultMapper` → 浮窗围绕选区显示（#57）。编排仍在 `TranslateFlowCoordinator`（`TranslateFlowCoordinator.Region.cs`），与复制翻译共用服务等待、超时、重试重启、最新优先等全部逻辑。构造参数新增可选的 `ocr`、`region`；不传则框选翻译不可用（`IsRegionTranslateEnabled == false`，快捷键只截图）。
+
+```
+TranslateRegionAsync(trigger)
+  → 遮罩已显示？忽略（RegionCaptureTrigger 同样忽略）
+  → 取消进行中的请求（复制翻译或上一次框选），隐藏浮窗
+  → IRegionCapture：Esc / 右键取消 → 结束，不弹浮窗；截屏异常 → 托盘提示「框选截屏失败，请重试（详情见日志）」
+  → 服务未就绪？浮窗「正在准备翻译服务…」（围绕选区），就绪后自动继续
+  → ShowOcrLoading(选区)「正在识别并翻译…」→ TranslateImageAsync(PNG)
+  → ShowOcrResult（空结果为「未识别到文字」）| ShowError（Mode = Ocr，锚点仍为选区）
+```
+
+**新增公开接口：**
+
+| 成员 | 说明 |
+|---|---|
+| `TranslateRegionAsync(RegionTranslateTrigger trigger, CancellationToken)` | `Hotkey` / `Tray`；只在 UI 线程调用 |
+| `IsRegionTranslateEnabled` / `HasRetainedScreenshot` | 是否接了 OCR 与框选；当前是否还持有可重试的截图 |
+| `OcrLatency`（`LatencyStats`） | 最近 20 次框选 `ocr_e2e_ms`，「关于」里显示 |
+| `RegionCompleted`（`RegionTranslateCompletedEventArgs`） | 一次框选翻译显示完成（`Trigger`、`Outcome`、`Result`、`EndToEnd`、`WaitedForEngine`） |
+| `RegionCaptureTrigger.Failed`（`RegionCaptureFailedEventArgs`） | 截屏异常（与用户取消区分） |
+| `ITrayService.TranslateRegionRequested` / `SetRegionHotkey(string?)`、`TrayCommand.TranslateRegion`、`TrayState.RegionHotkey` / `RegionMenuText` | 托盘菜单项 |
+| `PopupViewModel.ShowError(error, mode, anchor)` | 可选参数：编排器按请求类型指定 `Mode` 与选区锚点 |
+| `PopupOcrResult.UntranslatedParagraphs` / `HasUntranslated` / `IsUntranslated(i)`；`PopupViewModel.UntranslatedHint` / `HasUntranslatedHint` | 译文缺失、以原文代替的段落 |
+
+**行为：**
+
+- **最新优先、互相取消：** 文本请求和框选请求共用一个代次号与 `CancellationTokenSource`，谁后来谁生效，旧请求晚到的结果被丢弃，不会互相覆盖。开始框选即取消进行中的请求并隐藏浮窗（截图里不会有随译浮窗）；遮罩显示期间忽略剪贴板监听、翻译快捷键、托盘「翻译剪贴板」。
+- **重试按 `PopupViewModel.Mode` 分流：** `Ocr` 用原来那张 PNG 重发（不重新框选）；`Text` 走原来的文本重试。服务 Failed / 未运行 / 启动超时后的重试同样会先 `RestartAsync()`。
+- **截图生命周期：** PNG 只在内存，保留到本次识别成功、或浮窗被关闭且没有进行中的请求为止（失败时留着给重试用）；只丢引用，不主动清零。`--region-demo` 另存一份到临时目录，正式流程不落盘。
+- **关闭浮窗即取消**进行中或等待服务的框选请求。
+- **暂停监听不影响框选**（Issue 要求）。
+- **目标语言：** 与复制翻译一样读 `primaryTarget` / `secondaryTarget`，识别出的主要语种等于主目标时由 `OcrTranslationService` 改译为次目标。
+- **错误：** OCR 错误码经 `PopupErrorMapper` → `OcrResultMapper.MapError`：`image_too_large`「选区过大…」（不可重试）、`invalid_image` / `unsupported_media_type`「截图无法识别，请重新框选」、`ocr_unavailable`「OCR 模型未安装：…」（可重试，不触发重启）；`Unavailable` / 超时 / 服务 Failed 与复制翻译一致（催健康检查、30 s 就绪等待、重试重启）。
+- **未翻译段落：** 服务某段 `translation` 为空时用原文代替，`PopupOcrResult.UntranslatedParagraphs` 记下标，浮窗译文下方显示灰色小字「第 2、3 段未能翻译，显示为原文」（全部未翻译时「未能翻译，以上为识别出的原文」），复制内容不含提示。
+- **隐私：** 日志不记识别出的原文和译文，也不记服务端错误说明；只记尺寸、字节数、段落数、语种、耗时、错误类别。
+
+**计时：** `ocr_e2e_ms` 从拿到 PNG（遮罩松开鼠标、截图编码完成）开始，到浮窗显示结果后 WPF 完成布局；用户拖拽选区的时间不计入。每次一行日志：
+
+```
+框选翻译完成：trigger=Hotkey size=640x240 bytes=48213 paragraphs=2 empty=False untranslated=0 en→zh ocr_e2e_ms=820 http_ms=760 server_ocr_ms=410 server_translate_ms=300 server_total_ms=720；框选最近 10 次：P50 800 ms，P95 900 ms
+```
+
+验收（P95 ≤ 2500 ms，热路径，OCR 已预热）：服务就绪后对 ≤ 1280×720 的段落区域连续框选 10 次，看最后一行日志或托盘「关于」里的「框选翻译延迟」。
+
 ## 设置文件
 
 `Suiyi.Core/Settings`（#27）。路径 `%APPDATA%\suiyi\settings.json`（漫游配置），环境变量 `SUIYI_CONFIG_DIR` 可覆盖目录（测试、便携模式）；路径规则只在 `SettingsPaths` 一处。
@@ -177,7 +224,8 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
     "command": null,
     "args": null,
     "modelsDir": null,
-    "preload": "zh-en,en-zh"
+    "preload": "zh-en,en-zh",
+    "preloadOcr": false
   },
   "startWithWindows": false
 }
@@ -200,6 +248,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `engine.command` / `engine.args` | `null` | 高级：直接指定服务可执行文件与参数数组（为 M4 打包 exe 预留） |
 | `engine.modelsDir` | `null` | 不填则不传 `--models-dir` |
 | `engine.preload` | `"zh-en,en-zh"` | `""` 表示不预加载 |
+| `engine.preloadOcr` | `false` | 启动时预热 OCR 模型（#58），`true` 时追加 `--preload-ocr`（#53 草案）；环境变量 `SUIYI_ENGINE_PRELOAD_OCR=1/0` 可覆盖。**暂时默认关闭**：当前服务还不认这个参数，打开会导致启动失败；#53 定稿、服务支持后改为默认开启。关闭时首次框选多一次 OCR 冷加载（超时按 `TimeoutPolicy` 放宽到 30 s） |
 | `startWithWindows` | `false` | 预留，M2 不实现 |
 
 **读取规则：**
@@ -349,7 +398,7 @@ WM_HOTKEY（RegisterHotKey + MOD_NOREPEAT，长按不连发）
 
 ## 框选截屏
 
-M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）后出现全屏遮罩，拖拽选区，得到该区域的 PNG。**本 Issue 只到截图为止**，OCR 与翻译由 #58 串接；在那之前正式流程只写日志（尺寸、位置、显示器、缩放、耗时，不含图片），截图随即丢弃，不落盘。纯逻辑在 `Suiyi.Core/Capture`，WPF / Win32 在 `Suiyi.App/Capture`。
+M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）后出现全屏遮罩，拖拽选区，得到该区域的 PNG。截图交给[框选翻译](#框选翻译)（#58）识别并翻译，只在内存中，用完即丢弃，不落盘；日志只记尺寸、位置、显示器、缩放、耗时，不含图片。纯逻辑在 `Suiyi.Core/Capture`，WPF / Win32 在 `Suiyi.App/Capture`。
 
 ```
 快捷键（RegionCaptureTrigger：遮罩显示中再按被忽略）

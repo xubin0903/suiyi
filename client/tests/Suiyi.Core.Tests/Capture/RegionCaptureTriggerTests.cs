@@ -108,6 +108,34 @@ public sealed class RegionCaptureTriggerTests
     }
 
     [Fact]
+    public async Task CaptureThrows_RaisesFailedOnce_NotCaptured()
+    {
+        var failures = new List<Exception>();
+        _trigger.Failed += (_, e) => failures.Add(e.Exception);
+        var boom = new InvalidOperationException("GDI 资源不足");
+
+        var run = _trigger.RunAsync();
+        _capture.Fail(boom);
+
+        Assert.Null(await run);
+        Assert.Same(boom, Assert.Single(failures));
+        Assert.Empty(_captured);
+    }
+
+    [Fact]
+    public async Task UserCancel_DoesNotRaiseFailed()
+    {
+        var failures = 0;
+        _trigger.Failed += (_, _) => failures++;
+
+        var run = _trigger.RunAsync();
+        _capture.Complete(null);
+
+        Assert.Null(await run);
+        Assert.Equal(0, failures);
+    }
+
+    [Fact]
     public async Task ExternalCancellation_ReturnsNull()
     {
         using var cts = new CancellationTokenSource();

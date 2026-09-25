@@ -35,6 +35,7 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     private bool _isOriginalExpanded;
     private bool _showOriginalCopiedFeedback;
     private string _originalFontFamily = PopupText.FontFamilyFor(null);
+    private string _untranslatedHint = string.Empty;
 
     /// <summary>创建浮窗 ViewModel。</summary>
     /// <param name="options">参数；默认 <see cref="PopupOptions"/>。</param>
@@ -169,6 +170,24 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>是否显示「已复制」反馈（复制原文按钮）。</summary>
     public bool ShowOriginalCopiedFeedback { get => _showOriginalCopiedFeedback; private set => Set(ref _showOriginalCopiedFeedback, value); }
 
+    /// <summary>
+    /// 框选翻译中译文缺失、用原文代替的段落的小字提示（灰字，显示在译文下方）；没有这种段落或不是框选结果时为空。
+    /// </summary>
+    public string UntranslatedHint
+    {
+        get => _untranslatedHint;
+        private set
+        {
+            if (Set(ref _untranslatedHint, value))
+            {
+                OnPropertyChanged(nameof(HasUntranslatedHint));
+            }
+        }
+    }
+
+    /// <summary>是否显示 <see cref="UntranslatedHint"/>。</summary>
+    public bool HasUntranslatedHint => _untranslatedHint.Length > 0;
+
     /// <summary>原文字体回退链（按原文语种）。</summary>
     public string OriginalFontFamily { get => _originalFontFamily; private set => Set(ref _originalFontFamily, value); }
 
@@ -241,6 +260,7 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
         Translation = result.TranslationText;
         OriginalText = result.SourceText;
         SetKind(PopupKind.Result);
+        UntranslatedHint = PopupText.UntranslatedHint(result);
         Present();
     }
 
@@ -302,10 +322,28 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>显示错误。</summary>
-    public void ShowError(PopupError error)
+    /// <param name="error">错误。</param>
+    /// <param name="mode">
+    /// 错误属于哪条流程；<see langword="null"/> 时沿用当前 <see cref="Mode"/>（#57 行为）。
+    /// 主流程（#58）总是传入，保证「重试」按 <see cref="Mode"/> 分流到正确的流程。
+    /// </param>
+    /// <param name="anchor">框选翻译时的选区；<see langword="null"/> 时沿用当前选区。复制翻译忽略。</param>
+    public void ShowError(PopupError error, PopupContentMode? mode = null, PopupRect? anchor = null)
     {
         ArgumentNullException.ThrowIfNull(error);
         ContinueOrBeginSession();
+        if (mode is { } m)
+        {
+            var nextAnchor = m == PopupContentMode.Ocr ? anchor ?? AnchorRect : null;
+            if (m != Mode || nextAnchor != AnchorRect)
+            {
+                _positioned = false; // 换了流程或选区：重新定位。
+            }
+
+            Mode = m;
+            AnchorRect = nextAnchor;
+        }
+
         Error = error;
         SetKind(PopupKind.Error);
         Present();
@@ -448,6 +486,8 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
             OriginalText = string.Empty;
             IsOriginalExpanded = false;
         }
+
+        UntranslatedHint = string.Empty;
 
         if (kind != PopupKind.Error)
         {

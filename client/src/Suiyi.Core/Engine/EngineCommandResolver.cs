@@ -98,6 +98,9 @@ public static class EngineCommandResolver
         };
     }
 
+    /// <summary>启动时预热 OCR 模型的服务参数（#53 草案）。</summary>
+    public const string PreloadOcrArgument = "--preload-ocr";
+
     /// <summary><c>serve</c> 子命令及其参数。</summary>
     /// <param name="options">服务配置。</param>
     public static IReadOnlyList<string> ServeArguments(EngineOptions options)
@@ -108,6 +111,11 @@ public static class EngineCommandResolver
         {
             args.Add("--preload");
             args.Add(options.Preload.Trim());
+        }
+
+        if (options.PreloadOcr)
+        {
+            args.Add(PreloadOcrArgument);
         }
 
         if (!string.IsNullOrWhiteSpace(options.ModelsDir))

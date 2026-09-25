@@ -12,6 +12,7 @@ public sealed class TrayControllerTests
     {
         _tray.StateChanged += (_, _) => _stateChanges++;
         _tray.TranslateClipboardRequested += (_, _) => _events.Add("translate");
+        _tray.TranslateRegionRequested += (_, _) => _events.Add("region");
         _tray.PauseToggled += (_, e) => _events.Add($"pause:{e.Paused}:{_tray.State.Paused}");
         _tray.TargetChanged += (_, e) => _events.Add($"target:{e.Language}:{_tray.State.Target}");
         _tray.RestartEngineRequested += (_, _) => _events.Add("restart");
@@ -25,6 +26,7 @@ public sealed class TrayControllerTests
 
     [Theory]
     [InlineData(TrayCommand.TranslateClipboard, "translate")]
+    [InlineData(TrayCommand.TranslateRegion, "region")]
     [InlineData(TrayCommand.RestartEngine, "restart")]
     [InlineData(TrayCommand.OpenSettings, "settings")]
     [InlineData(TrayCommand.OpenLogs, "logs")]
@@ -36,6 +38,20 @@ public sealed class TrayControllerTests
 
         Assert.Equal([expected], _events);
         Assert.Equal(0, _stateChanges);
+    }
+
+    [Fact]
+    public void SetRegionHotkey_UpdatesMenuTextOnce()
+    {
+        _tray.SetRegionHotkey("Ctrl+Alt+S");
+        _tray.SetRegionHotkey("Ctrl+Alt+S");
+
+        Assert.Equal("框选翻译（Ctrl+Alt+S）", TrayMenuBuilderTests.Find(_tray.Menu, TrayCommand.TranslateRegion).Text);
+        Assert.Equal(1, _stateChanges);
+
+        _tray.SetRegionHotkey(null);
+        Assert.Equal("框选翻译", TrayMenuBuilderTests.Find(_tray.Menu, TrayCommand.TranslateRegion).Text);
+        Assert.Null(_tray.State.RegionHotkey);
     }
 
     [Fact]
