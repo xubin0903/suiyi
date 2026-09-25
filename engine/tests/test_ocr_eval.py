@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -109,7 +110,18 @@ def test_resolve_and_split_variants() -> None:
     assert split_variant("PP-OCRv6_det_small") == ("PP-OCRv6_det_small", {})
     assert ocr_bench._short("PP-OCRv6_det_small+rb1") == "det small+rb1"
     assert ocr_bench._short("PP-OCRv6_det_tiny@960+nomp") == "det tiny@960+nomp"
-    for bad in ("PP-OCRv6_rec_small", "huge", "small@100", "small@x", "small+rb0", "small+fast"):
+    assert resolve_det("small@0+legacy+nodil", models) == "PP-OCRv6_det_small@0+legacy+nodil"
+    assert split_variant("PP-OCRv6_det_small@0+legacy+mp+dil") == (
+        "PP-OCRv6_det_small",
+        {"det_max_side": None, "legacy": True, "mem_pattern": True, "det_dilation": True},
+    )
+    assert split_variant("PP-OCRv6_det_small+sh0+sh1.5+pad2") == (
+        "PP-OCRv6_det_small",
+        {"box_shrink": 1.5, "crop_pad": 2.0},
+    )
+    assert resolve_det("small+sh3+pad0", models) == "PP-OCRv6_det_small+sh3+pad0"
+    bads = ("PP-OCRv6_rec_small", "huge", "small@100", "small@x", "small+rb0", "small+fast")
+    for bad in (*bads, "small+sh-1", "small+shx", "small+padx"):
         with pytest.raises(OcrEvalError):
             resolve_det(bad, models)
 
@@ -143,13 +155,16 @@ def _raw() -> dict[str, object]:
         "threads": 4,
         "load_ms": 400.0,
         "first_ms": 5.0,
+        "runtime": {"det_max_side": 960, "rec_batch": 1, "mem_pattern": True},
+        "peak_method": "linux-vmhwm",
         "rss": {
-            "baseline": 40 * 2**20,
+            "process_base": 40 * 2**20,
             "after_load": 160 * 2**20,
+            "idle": 165 * 2**20,
             "final": 200 * 2**20,
-            "peak": 240 * 2**20,
-            "load_delta": 120 * 2**20,
-            "peak_delta": 200 * 2**20,
+            "lifetime_peak": 500 * 2**20,
+            "model_delta": 125 * 2**20,
+            "resident_delta": 35 * 2**20,
         },
         "samples": [
             {
@@ -158,6 +173,7 @@ def _raw() -> dict[str, object]:
                 "width": 400,
                 "height": 150,
                 "times_ms": [100.0, 110.0, 120.0],
+                "request_peak_delta": [150 * 2**20, 180 * 2**20, 200 * 2**20],
                 "stages_mean_ms": {"ocr_ms": 100.0},
                 "lines": lines,
             }
@@ -241,3 +257,87 @@ def test_main_missing_models_writes_report(tmp_path: Path) -> None:
     report = json.loads((out / "report.json").read_text(encoding="utf-8"))
     assert report["variants"][0]["ok"] is False
     assert "未运行" in (out / "report.md").read_text(encoding="utf-8")
+
+
+def test_runtime_for_defaults_and_legacy() -> None:
+    from suiyi_engine.ocr.engine import DEFAULT_RUNTIME, LEGACY_RUNTIME
+
+    assert ocr_bench.runtime_for({}) == DEFAULT_RUNTIME
+    legacy = ocr_bench.runtime_for({"legacy": True})
+    assert legacy == LEGACY_RUNTIME
+    assert legacy.det_max_side is None and legacy.rec_batch == 6
+    tuned = ocr_bench.runtime_for({"legacy": True, "det_max_side": 960, "rec_batch": 1})
+    assert (tuned.det_max_side, tuned.rec_batch, tuned.mem_pattern) == (960, 1, True)
+
+
+def test_runtime_options_validation() -> None:
+    from suiyi_engine.ocr.engine import OcrRuntimeOptions
+
+    with pytest.raises(ValueError):
+        OcrRuntimeOptions(det_max_side=100)
+    with pytest.raises(ValueError):
+        OcrRuntimeOptions(rec_batch=0)
+    with pytest.raises(ValueError):
+        OcrRuntimeOptions(box_shrink=-1)
+    with pytest.raises(ValueError):
+        OcrRuntimeOptions(crop_pad=-1)
+    assert OcrRuntimeOptions(det_max_side=None).det_max_side is None
+
+
+def test_shrink_box_insets_short_side() -> None:
+    np = pytest.importorskip("numpy")
+    from suiyi_engine.ocr.engine import shrink_box
+
+    horizontal = np.array([[0, 0], [100, 0], [100, 20], [0, 20]], dtype=np.float32)
+    out = shrink_box(horizontal, 2.0, "一行文字")
+    assert out[:, 1].min() == pytest.approx(2) and out[:, 1].max() == pytest.approx(18)
+    assert out[:, 0].min() == 0 and out[:, 0].max() == 100
+    assert shrink_box(horizontal, 50.0, "一行")[:, 1].min() == pytest.approx(6)  # 最多收 30%
+    assert shrink_box(horizontal, 0.0, "一行") is horizontal
+    vertical = np.array([[0, 0], [20, 0], [20, 100], [0, 100]], dtype=np.float32)
+    out = shrink_box(vertical, 2.0, "竖排文字")
+    assert out[:, 0].min() == pytest.approx(2) and out[:, 0].max() == pytest.approx(18)
+    # 单字竖框按横排处理（与分段的竖排判断一致）
+    assert shrink_box(vertical, 2.0, "た")[:, 1].min() == pytest.approx(2)
+
+
+def test_crop_box_pads_short_side_and_clips() -> None:
+    np = pytest.importorskip("numpy")
+    from suiyi_engine.ocr.engine import _crop_box
+
+    box = np.array([[10, 10], [110, 10], [110, 30], [10, 30]], dtype=np.float32)
+    out = _crop_box(box, 3.0, 200, 32)
+    assert out[:, 1].min() == pytest.approx(7) and out[:, 1].max() == pytest.approx(31)
+    assert out[:, 0].min() == 10 and out[:, 0].max() == 110
+    same = _crop_box(box, 0.0, 200, 200)
+    assert same is not box and np.array_equal(same, box)
+
+
+def test_memory_aggregation_and_targets() -> None:
+    samples = [_row(paragraphs=["自动保存已开启。", "上次保存于三点。", "提示：可以关闭。"])]
+    variant = score_variant(_raw(), samples, [0.9])
+    overall = variant["memory"]["overall"]
+    assert overall["n"] == 3 and overall["max"] == 200 * 2**20
+    assert variant["memory"]["small"]["p50"] == 180 * 2**20
+    assert variant["memory"]["1080p"] is None
+    assert variant["samples"][0]["request_peak_max"] == 200 * 2**20
+    assert ocr_bench._peak_cell(overall) == "200 MB ✅"
+    assert ocr_bench._peak_cell({"max": 401 * 2**20}).endswith("❌")
+    assert ocr_bench._exact_cell({"exact_samples": 21, "samples": 32}, True) == "21/32 ✅"
+    assert ocr_bench._exact_cell({"exact_samples": 20, "samples": 32}, True) == "20/32 ❌"
+    assert ocr_bench._exact_cell({"exact_samples": 1, "samples": 1}, False) == "1/1"
+
+
+def test_peak_meter_sees_allocation_inside_request() -> None:
+    meter = ocr_bench.PeakMeter()
+    if meter.method == "none":
+        pytest.skip("本平台既没有 /proc/self/clear_refs 也没有 psutil")
+    before = ocr_bench.current_rss_bytes()
+    meter.start()
+    block = bytearray(64 * 2**20)
+    block[::4096] = b"x" * len(block[::4096])  # 触碰每一页，让它计入 RSS
+    time.sleep(0.05)  # 采样法（非 Linux）需要尖峰持续几个采样周期；Windows 计时精度约 15 ms
+    del block
+    peak = meter.stop()
+    assert peak is not None and before is not None
+    assert peak - before >= 48 * 2**20

@@ -30,8 +30,15 @@ result.to_dict()                          # {"lines", "paragraphs", "text", "ima
 
 - 一个进程共用一个 `OcrEngine`。模型只加载一次，并发的首次调用会等同一次加载（双重检查锁）。
 - 推理串行（一把锁）。onnxruntime 内部已经多线程（`intra_op_num_threads` 默认 `min(4, CPU 核数)`，可用 `threads=` 调整；`inter_op_num_threads=1`），并发推理不会更快，还会多占内存；串行也避开了 RapidOCR 前后处理里的共享状态。框选翻译一次一张图，排队的影响可以忽略。
-- 检测参数沿用 #51：`limit_type=max`、`limit_side_len=960`、`use_cls=false`。
-  #54 实测发现 RapidOCR 3.9 在 `limit_type=max` 时忽略 `limit_side_len`（按原图长边选 960/1500/2000），≤ 2000 px 的截图检测时不缩小；影响与调优实验见 [OCR 评测](OCR评测.md#内存与调优实验)。
+- 检测参数沿用 #51：`limit_type=max`（只缩不放）、`use_cls=false`。
+  #54 实测发现 RapidOCR 3.9 在 `limit_type=max` 时忽略 `limit_side_len`（按原图长边选 960/1500/2000），≤ 2000 px 的截图检测时不缩小。
+- **运行参数（#74，`OcrRuntimeOptions`，默认 `DEFAULT_RUNTIME`）**：RapidOCR 没有「只缩小检测图」的参数（`Global.max_side_len` 会连识别裁切一起缩小），
+  所以后端拆成两步，只用 RapidOCR 的公开对象、不改其源码：
+  1. 长边 > `det_max_side`（1024）时用 `cv2.INTER_AREA` 缩图，交给 `RapidOCR(use_rec=False)` 只做检测；缩放时关闭 DB 后处理的 2×2 膨胀（`det_dilation=None`）。
+  2. 框按比例换回原图坐标，**从原图裁切**（沿短边外扩 `crop_pad / scale` 像素，补回膨胀的余量），交给 `engine.text_rec` 识别，批大小 `rec_batch=1`。
+  3. 返回给分段的行框沿短边每侧收回 `box_shrink × (1/scale − 1)` 像素（缩放补偿：DB 外扩在检测图上是常数像素，换回原图被放大，会吃掉段间距）。不缩放时为 0。
+  - onnxruntime：`enable_cpu_mem_arena=False`；`enable_mem_pattern=False`（RapidOCR 不暴露，创建会话期间临时替换其会话选项构造函数）。
+  - 取值依据与前后对比见 [OCR 评测 · #74 内存与耗时调优](OCR评测.md#74-内存与耗时调优)。`LEGACY_RUNTIME` 保留 #74 之前的行为，供评测对比（`--det small+legacy`）。
 - `OcrResult.stats` 给出 `load_decode_ms` / `ocr_ms` / `layout_ms`。段落合并是纯 Python，几十行的截图在 1 ms 以内。
 
 ## 数据结构
@@ -62,7 +69,9 @@ result.to_dict()                          # {"lines", "paragraphs", "text", "ima
 
 ### 1. 横竖判定
 
-框高 ≥ 宽 × 1.5 且文本至少 2 个字符，判为竖排列。单个字符的框接近正方形，无法判断，按横排处理。横排与竖排的行分开合并，最后一起排阅读顺序。
+框高 ≥ 宽 × 1.5 且文本至少 2 个字符，判为竖排列。单个字符的框接近正方形，无法判断，按横排处理；
+例外（#74）：单字框紧接在某个竖排列正下方（列尾），或在某列左侧紧邻且与列顶对齐（下一列的列首），宽度不超过列宽 × 1.5，归入竖排。
+缩小检测图后，换列只剩一个字的列常被单独切出，按横排处理会变成孤立段落。横排与竖排的行分开合并，最后一起排阅读顺序。
 
 ### 2. 流坐标
 
@@ -78,7 +87,7 @@ RapidOCR 有时把一行切成几段（UI 菜单、中英混排、竖排里的�
 
 | 条件 | 不满足时 |
 | --- | --- |
-| 字号比 ≤ 1.35 | 标题与正文，分段 |
+| 字号比 ≤ 1.35（新行只有一个字时不比：单字框的尺寸随字形变化，#74） | 标题与正文，分段 |
 | 行首比上一行多缩进 ≤ 1 × 字号 | 首行缩进，新段 |
 | 行首与上一行对齐（容差 0.8 × 字号）；段落只有一行且新行更靠左时例外（上一行是缩进的首行） | 分段 |
 | 上一行行尾不比段落右缘短 2 × 字号以上 | 上一行是段尾（或短标题），分段 |

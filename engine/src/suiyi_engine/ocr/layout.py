@@ -74,6 +74,35 @@ def is_vertical(line: OcrLine, options: LayoutOptions = DEFAULT_OPTIONS) -> bool
     return len(line.text.strip()) >= 2 and height >= options.vertical_ratio * max(width, 1e-6)
 
 
+def _is_column_tail(
+    line: OcrLine, lines: Sequence[OcrLine], vertical: list[int], options: LayoutOptions
+) -> bool:
+    """单个字符的框属于竖排：紧接在某列正下方（列尾），或在某列左侧与列顶对齐（下一列的列首）。
+
+    单字框接近正方形，:func:`is_vertical` 判不出方向；按横排处理会变成孤立的段落。
+    """
+
+    if len(line.text.strip()) != 1:
+        return False
+    x0, y0, x1, y1 = line.rect
+    for index in vertical:
+        c0, top, c1, bottom = lines[index].rect
+        width = c1 - c0
+        if x1 - x0 > options.vertical_ratio * width:  # 单字框偏胖，放宽到 1.5 倍列宽
+            continue
+        below = (
+            _overlap(x0, x1, c0, c1) >= options.same_row_overlap * min(width, x1 - x0)
+            and -0.5 * width <= y0 - bottom <= options.same_row_gap * width
+        )
+        next_head = (
+            abs(y0 - top) <= options.align * width
+            and -0.5 * width <= c0 - x1 <= options.line_gap * width
+        )
+        if below or next_head:
+            return True
+    return False
+
+
 def merge_paragraphs(
     lines: Sequence[OcrLine], options: LayoutOptions = DEFAULT_OPTIONS
 ) -> list[OcrParagraph]:
@@ -88,6 +117,10 @@ def merge_paragraphs(
         if line.low_confidence or not line.text.strip():
             continue
         (vertical if is_vertical(line, options) else horizontal).append(index)
+    tails = [i for i in horizontal if _is_column_tail(lines[i], lines, vertical, options)]
+    if tails:
+        vertical += tails
+        horizontal = [i for i in horizontal if i not in tails]
 
     paragraphs = _build(lines, horizontal, False, options) + _build(lines, vertical, True, options)
     return _reading_order(paragraphs)
@@ -259,7 +292,8 @@ def _group_rows(rows: list[_Row], options: LayoutOptions) -> list[_Para]:
 def _continues(para: _Para, row: _Row, options: LayoutOptions) -> bool:
     last = para.last
     size = max(row.size, last.size)
-    if max(row.size, last.size) > options.height_ratio * min(row.size, last.size):
+    single = len(row.text.strip()) == 1  # 单字框的尺寸随字形变化，不拿来比字号
+    if not single and size > options.height_ratio * min(row.size, last.size):
         return False  # 字号不同：标题与正文
     if row.rect[0] - last.rect[0] > options.indent * size:
         return False  # 首行缩进：新段

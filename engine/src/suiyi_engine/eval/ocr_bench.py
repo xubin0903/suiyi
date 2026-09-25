@@ -1,7 +1,8 @@
 """OCR 评测与性能基线的编排（#54）。命令行入口：``scripts/eval_ocr.py``。
 
 - 每个检测模型（det）变体在**独立子进程**里跑，内存互不干扰：冷加载耗时、首次识别、
-  每张样例 ``warmup`` 次不计时 + ``repeats`` 次计时、RSS（基线 / 加载后 / 峰值）。
+  每张样例 ``warmup`` 次不计时 + ``repeats`` 次计时；内存按 #74 口径：**单次请求峰值增量**
+  （相对 OCR 已预热、空闲时的进程）与**常驻**（空闲 RSS、跑完全部样例后的增长）。
 - 主进程拿子进程返回的文本行，在本进程里重新做段落合并并打分：CER（按类别/语种/尺寸）、
   段落切分（误合并 / 误拆分），以及 ``line_gap`` 扫描（只重跑合并，不重跑模型）。
 - 输出 ``report.md`` 与 ``report.json``（默认 ``reports/ocr-eval-<时间>/``，已被 .gitignore）。
@@ -18,9 +19,10 @@ import platform
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -44,7 +46,13 @@ SIZE_CLASSES = ("small", "720p", "1080p")
 SIZE_LABELS = {"small": "400×150", "720p": "1280×720", "1080p": "1920×1080"}
 TARGET_P95_MS = {"small": 800.0, "720p": 800.0, "1080p": 1500.0}
 TARGET_CER = {"中文网页正文": 0.05, "英文文档": 0.05, "日文网页横排": 0.10}
-TARGET_RSS_MB = 300.0
+TARGET_REQUEST_PEAK_MB = 400.0
+"""单次 OCR 请求峰值内存增量上限（相对预热后空闲进程，#74 负责人拍板，取代 #54 的 300 MB）。"""
+TARGET_DENSE_1080_P95_MS = 1500.0
+DENSE_CATEGORY = "密集文字"
+BASELINE_EXACT = 21
+"""#54 small 基线的段落完全正确数（完整 32 张样例集），#74 要求不低于它。"""
+FULL_SAMPLE_COUNT = 32
 DET_ALIASES = {
     "small": "PP-OCRv6_det_small",
     "tiny": "PP-OCRv6_det_tiny",
@@ -187,7 +195,7 @@ def run(args: argparse.Namespace, *, log: Log) -> int:
         if raw.get("ok"):
             log(
                 f"  完成：加载 {raw['load_ms']:.0f} ms，"
-                f"峰值 RSS 增量 {_mb(raw['rss']['peak_delta']):.0f} MB"
+                f"单请求峰值增量最大 {_mb(_max_peak(raw['samples'])):.0f} MB"
             )
         else:
             log(f"  失败：{raw.get('error')}")
@@ -209,7 +217,13 @@ def run(args: argparse.Namespace, *, log: Log) -> int:
             "recommended": dict(manifest.recommended),
         },
         "environment": collect_environment(),
-        "targets": {"p95_ms": TARGET_P95_MS, "cer": TARGET_CER, "rss_delta_mb": TARGET_RSS_MB},
+        "targets": {
+            "p95_ms": TARGET_P95_MS,
+            "dense_1080p_p95_ms": TARGET_DENSE_1080_P95_MS,
+            "cer": TARGET_CER,
+            "request_peak_delta_mb": TARGET_REQUEST_PEAK_MB,
+            "baseline_exact": BASELINE_EXACT,
+        },
         "variants": variants,
     }
     json_path = out_dir / "report.json"
@@ -274,15 +288,22 @@ def select_samples(
     return [by_id[i] for i in only]
 
 
+VARIANT_FLAGS = "legacy、rb<N>、mp、nomp、dil、nodil、sh<X>、pad<X>"
+
+
 def resolve_det(token: str, models: Mapping[str, Any]) -> str:
-    """变体写法：``检测模型[@长边上限][+rb<N>][+nomp]``，返回规范化的变体名。
+    """变体写法：``检测模型[@长边上限][+开关...]``，返回规范化的变体名。
+
+    不带任何开关时使用引擎默认运行参数（:data:`suiyi_engine.ocr.engine.DEFAULT_RUNTIME`）。
 
     - 检测模型：别名 small/tiny/medium 或清单 id，例如 ``small`` → ``PP-OCRv6_det_small``；
-    - ``@N``：检测前把长边缩到 N 像素以内（识别仍用原图裁切）；
-    - ``+rb<N>``：识别批大小（RapidOCR 默认 6）；
-    - ``+nomp``：关闭 onnxruntime 的 memory pattern。
-
-    后三项是实验开关，只在评测子进程里生效，不改变引擎默认行为。
+    - ``@N``：检测长边上限 N 像素（``@0`` = 不缩放，RapidOCR 3.9 原行为）；
+    - ``+legacy``：#74 之前的全部默认（不缩放、识别批 6、memory pattern 开、膨胀开），
+      其余开关叠加其上；
+    - ``+rb<N>``：识别批大小；``+mp`` / ``+nomp``：开/关 onnxruntime memory pattern；
+    - ``+dil`` / ``+nodil``：检测后处理膨胀开/关（默认：缩放时关）；
+    - ``+sh<X>``：缩放补偿 ``box_shrink``（检测图像素，``+sh0`` = 不补偿）；
+    - ``+pad<X>``：识别裁切外扩 ``crop_pad``（检测图像素，``+pad0`` = 不外扩）。
     """
 
     head, *flags = token.split("+")
@@ -296,31 +317,64 @@ def resolve_det(token: str, models: Mapping[str, Any]) -> str:
         )
     variant = det
     if limit:
-        if not limit.isdigit() or int(limit) < 320:
-            raise OcrEvalError(f"检测长边上限必须是 ≥320 的整数：{token!r}", code=2)
+        if not limit.isdigit() or (int(limit) != 0 and int(limit) < 320):
+            raise OcrEvalError(f"检测长边上限必须是 0 或 ≥320 的整数：{token!r}", code=2)
         variant += f"@{int(limit)}"
     for flag in flags:
-        if flag == "nomp" or (flag.startswith("rb") and flag[2:].isdigit() and int(flag[2:]) >= 1):
+        rb = flag.startswith("rb") and flag[2:].isdigit() and int(flag[2:]) >= 1
+        sh = flag.startswith("sh") and _is_nonneg_float(flag[2:])
+        pad = flag.startswith("pad") and _is_nonneg_float(flag[3:])
+        if flag in ("legacy", "mp", "nomp", "dil", "nodil") or rb or sh or pad:
             variant += f"+{flag}"
         else:
-            raise OcrEvalError(f"未知变体开关 {flag!r}（可用 rb<N>、nomp）：{token!r}", code=2)
+            raise OcrEvalError(f"未知变体开关 {flag!r}（可用 {VARIANT_FLAGS}）：{token!r}", code=2)
     return variant
 
 
+def _is_nonneg_float(raw: str) -> bool:
+    try:
+        return float(raw) >= 0
+    except ValueError:
+        return False
+
+
 def split_variant(variant: str) -> tuple[str, dict[str, Any]]:
-    """``PP-OCRv6_det_small@960+rb1+nomp`` → ``("PP-OCRv6_det_small", {...})``。"""
+    """``PP-OCRv6_det_small@960+rb1+nomp`` → ``("PP-OCRv6_det_small", {...})``。
+
+    返回的字典是相对基准的覆盖项；``legacy`` 键为真时基准是 #74 之前的行为。
+    """
 
     head, *flags = variant.split("+")
     det, _sep, limit = head.partition("@")
     options: dict[str, Any] = {}
     if limit:
-        options["det_max_side"] = int(limit)
+        options["det_max_side"] = int(limit) or None
     for flag in flags:
-        if flag == "nomp":
-            options["mem_pattern"] = False
-        elif flag.startswith("rb"):
+        if flag == "legacy":
+            options["legacy"] = True
+        elif flag in ("mp", "nomp"):
+            options["mem_pattern"] = flag == "mp"
+        elif flag in ("dil", "nodil"):
+            options["det_dilation"] = flag == "dil"
+        elif flag.startswith("rb") and flag[2:].isdigit():
             options["rec_batch"] = int(flag[2:])
+        elif flag.startswith("sh") and _is_nonneg_float(flag[2:]):
+            options["box_shrink"] = float(flag[2:])
+        elif flag.startswith("pad") and _is_nonneg_float(flag[3:]):
+            options["crop_pad"] = float(flag[3:])
+        else:
+            raise OcrEvalError(f"变体 {variant!r} 含未知标记 {flag!r}", code=2)
     return det, options
+
+
+def runtime_for(options: Mapping[str, Any]) -> Any:
+    """覆盖项 → :class:`~suiyi_engine.ocr.engine.OcrRuntimeOptions`。"""
+
+    from suiyi_engine.ocr.engine import DEFAULT_RUNTIME, LEGACY_RUNTIME
+
+    overrides = {k: v for k, v in options.items() if k != "legacy"}
+    base = LEGACY_RUNTIME if options.get("legacy") else DEFAULT_RUNTIME
+    return replace(base, **overrides)
 
 
 def parse_floats(raw: str) -> list[float]:
@@ -396,6 +450,8 @@ def run_worker(config_path: Path, out_path: Path | None) -> int:
 
 
 def _worker_body(config: Mapping[str, Any]) -> dict[str, Any]:
+    import gc
+
     import numpy  # noqa: F401 - 计入基线：解码图片本来就需要
     from PIL import Image  # noqa: F401
 
@@ -403,18 +459,19 @@ def _worker_body(config: Mapping[str, Any]) -> dict[str, Any]:
     from suiyi_engine.tools.ocr_models import load_manifest
 
     det, options = split_variant(config["det"])
+    runtime = runtime_for(options)
     manifest = load_manifest(Path(config["manifest"]))
     recommended = dict(manifest.recommended)
     recommended["det"] = det
     manifest = replace(manifest, recommended=recommended)
     images = [(s, Path(s["path"]).read_bytes()) for s in config["samples"]]
 
-    baseline = current_rss_bytes()
+    process_base = current_rss_bytes()
     engine = OcrEngine(
         Path(config["models_dir"]),
         manifest=manifest,
         threads=config.get("threads"),
-        backend_factory=_tuned_backend(**options) if options else None,
+        runtime=runtime,
     )
     engine.check()
     t0 = time.perf_counter()
@@ -424,6 +481,9 @@ def _worker_body(config: Mapping[str, Any]) -> dict[str, Any]:
     t0 = time.perf_counter()
     engine.warmup()
     first_ms = 1000 * (time.perf_counter() - t0)
+    gc.collect()
+    idle = current_rss_bytes()  # 预热后空闲：单请求峰值增量的基准
+    meter = PeakMeter()
 
     rows: list[dict[str, Any]] = []
     total = len(images)
@@ -431,11 +491,16 @@ def _worker_body(config: Mapping[str, Any]) -> dict[str, Any]:
         for _ in range(int(config["warmup"])):
             engine.recognize(data)
         times: list[float] = []
+        peaks: list[int] = []
         stages: dict[str, float] = {}
         result = None
         for _ in range(int(config["repeats"])):
+            meter.start()
             result = engine.recognize(data)
+            peak = meter.stop()
             times.append(result.elapsed_ms)
+            if peak is not None and idle is not None:
+                peaks.append(peak - idle)
             for key, value in result.stats.items():
                 stages[key] = stages.get(key, 0.0) + value
         assert result is not None
@@ -447,89 +512,123 @@ def _worker_body(config: Mapping[str, Any]) -> dict[str, Any]:
                 "width": result.width,
                 "height": result.height,
                 "times_ms": [round(t, 2) for t in times],
+                "request_peak_delta": peaks,
                 "stages_mean_ms": {k: round(v / n, 2) for k, v in stages.items()},
                 "lines": [line.to_dict() for line in result.lines],
                 "rss_after": current_rss_bytes(),
-                "peak_after": peak_rss_bytes(),
             }
         )
+        worst = f"，单请求峰值增量 {_mb(max(peaks)):.0f} MB" if peaks else ""
         print(
             f"  [{index}/{total}] {sample['id']}: "
-            f"中位 {percentile(times, 50):.0f} ms，{len(result.lines)} 行",
+            f"中位 {percentile(times, 50):.0f} ms，{len(result.lines)} 行{worst}",
             file=sys.stderr,
             flush=True,
         )
+    gc.collect()
     final = current_rss_bytes()
-    peak = peak_rss_bytes()
     return {
         "threads": engine.threads,
+        "runtime": asdict(runtime),
         "load_ms": round(load_ms, 1),
         "first_ms": round(first_ms, 1),
+        "peak_method": meter.method,
         "rss": {
-            "baseline": baseline,
+            "process_base": process_base,
             "after_load": after_load,
+            "idle": idle,
             "final": final,
-            "peak": peak,
-            "load_delta": _delta(after_load, baseline),
-            "peak_delta": _delta(peak, baseline),
+            "lifetime_peak": peak_rss_bytes(),
+            "model_delta": _delta(idle, process_base),
+            "resident_delta": _delta(final, idle),
         },
         "samples": rows,
     }
 
 
-def _tuned_backend(
-    *,
-    det_max_side: int | None = None,
-    rec_batch: int | None = None,
-    mem_pattern: bool = True,
-) -> Any:
-    """实验后端：与 :func:`suiyi_engine.ocr.engine.rapidocr_backend` 相同，外加三个开关。
+class PeakMeter:
+    """单次请求期间的峰值 RSS。
 
-    - ``det_max_side``：RapidOCR 3.9 在 ``limit_type=max`` 时忽略 ``limit_side_len``，按原图长边
-      选 960/1500/2000，所以 ≤2000 的截图检测时从不缩小。这里替换检测器的预处理选择。
-    - ``rec_batch``：``Rec.rec_batch_num``。批内按最宽的行补齐，批越大补齐越多。
-    - ``mem_pattern``：onnxruntime ``SessionOptions.enable_mem_pattern``。
+    - Linux：请求前向 ``/proc/self/clear_refs`` 写 ``5`` 把 ``VmHWM`` 重置为当前 RSS，
+      请求后读 ``VmHWM``（精确）；
+    - 其他平台：后台线程每 2 ms 用 psutil 采样 RSS 取最大值（近似，可能漏掉极短的尖峰；
+      Windows 的计时精度约 15 ms）。Windows 另读进程峰值工作集 ``peak_wset``：请求期间它涨了，
+      说明请求峰值就是新的进程峰值，取这个精确值；``peak_wset`` 不能重置，没涨时只能靠采样；
+    - 两者都不可用时返回 ``None``。
     """
 
-    def factory(paths: Any, manifest: Any, threads: int) -> Any:
-        from rapidocr import RapidOCR
-        from rapidocr.ch_ppocr_det.utils import DetPreProcess
-        from rapidocr.inference_engine.onnxruntime import main as ort_main
+    def __init__(self) -> None:
+        self.method = "none"
+        self._clear_refs = Path("/proc/self/clear_refs")
+        self._status = Path("/proc/self/status")
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+        self._peak = 0
+        self._process: Any = None
+        self._lifetime_peak: int | None = None
+        if sys.platform.startswith("linux") and self._reset_hwm():
+            self.method = "linux-vmhwm"
+            return
+        try:
+            import psutil
 
-        from suiyi_engine.tools.ocr_models import rapidocr_params
+            self._process = psutil.Process()
+            self.method = "psutil-sampling-2ms"
+        except ImportError:
+            pass
 
-        if not mem_pattern:
-            original = ort_main.OrtInferSession._init_sess_opts
+    def start(self) -> None:
+        if self.method == "linux-vmhwm":
+            self._reset_hwm()
+        elif self._process is not None:
+            self._stop.clear()
+            info = self._process.memory_info()
+            self._peak = int(info.rss)
+            self._lifetime_peak = getattr(info, "peak_wset", None)
+            self._thread = threading.Thread(target=self._sample, daemon=True)
+            self._thread.start()
 
-            def init_opts(cfg: Any) -> Any:
-                options = original(cfg)
-                options.enable_mem_pattern = False
-                return options
+    def stop(self) -> int | None:
+        if self.method == "linux-vmhwm":
+            return self._read_hwm()
+        if self._process is None or self._thread is None:
+            return None
+        self._stop.set()
+        self._thread.join()
+        self._thread = None
+        info = self._process.memory_info()
+        peak = max(self._peak, int(info.rss))
+        lifetime = getattr(info, "peak_wset", None)
+        if (
+            lifetime is not None
+            and self._lifetime_peak is not None
+            and lifetime > self._lifetime_peak
+        ):
+            peak = max(peak, int(lifetime))  # 请求期间刷新了进程峰值：这就是请求峰值
+        return peak
 
-            ort_main.OrtInferSession._init_sess_opts = staticmethod(init_opts)
-        params = rapidocr_params(paths, manifest)
-        params["Global.text_score"] = 0.0
-        params["EngineConfig.onnxruntime.intra_op_num_threads"] = threads
-        params["EngineConfig.onnxruntime.inter_op_num_threads"] = 1
-        if rec_batch is not None:
-            params["Rec.rec_batch_num"] = rec_batch
-        engine = RapidOCR(params=params)
-        if det_max_side is not None:
-            det = engine.text_det
-            det.get_preprocess = lambda _wh: DetPreProcess(det_max_side, "max", det.mean, det.std)
+    def _sample(self) -> None:
+        while not self._stop.wait(0.002):
+            rss = int(self._process.memory_info().rss)
+            if rss > self._peak:
+                self._peak = rss
 
-        def run(image: Any) -> list[Any]:
-            result = engine(image)
-            if result.boxes is None or result.txts is None or result.scores is None:
-                return []
-            return [
-                (box.tolist(), text, float(score))
-                for box, text, score in zip(result.boxes, result.txts, result.scores, strict=True)
-            ]
+    def _reset_hwm(self) -> bool:
+        try:
+            self._clear_refs.write_text("5", encoding="ascii")
+        except OSError:
+            return False
+        return self._read_hwm() is not None
 
-        return run
-
-    return factory
+    def _read_hwm(self) -> int | None:
+        try:
+            text = self._status.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        for line in text.splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1]) * 1024
+        return None
 
 
 # ---------------------------------------------------------------- 打分
@@ -579,8 +678,7 @@ def score_variant(
                 "lines": len(lines),
                 "low_confidence": sum(1 for line in lines if line.low_confidence),
                 "p50_ms": round(percentile(times, 50), 1),
-                "rss_after": row.get("rss_after"),
-                "peak_after": row.get("peak_after"),
+                "request_peak_max": max(row.get("request_peak_delta") or [0]) or None,
                 "stages_mean_ms": row["stages_mean_ms"],
                 "predicted": predicted,
                 "ocr_lines": row["lines"],
@@ -598,6 +696,12 @@ def score_variant(
         load_ms=raw["load_ms"],
         first_ms=raw["first_ms"],
         rss=raw["rss"],
+        runtime=raw.get("runtime"),
+        peak_method=raw.get("peak_method"),
+        memory={
+            **{size: _memory(raw["samples"], size) for size in SIZE_CLASSES},
+            "overall": _memory(raw["samples"], None),
+        },
         cer={
             "overall": _cer_dict(merge_cer(cer_scores.values())),
             "by_category": {
@@ -639,6 +743,10 @@ def score_variant(
             for gap, scores in sweep.items()
         ],
         latency={size: _latency(raw["samples"], size) for size in SIZE_CLASSES},
+        dense_1080p=_latency(
+            [r for r in raw["samples"] if by_id[r["id"]]["category"] == DENSE_CATEGORY],
+            "1080p",
+        ),
         samples=per_sample,
     )
     return variant
@@ -671,6 +779,28 @@ def _options_dict(options: Any) -> dict[str, Any]:
     from dataclasses import asdict
 
     return asdict(options)
+
+
+def _max_peak(rows: Sequence[Mapping[str, Any]]) -> int | None:
+    peaks = [p for row in rows for p in row.get("request_peak_delta") or []]
+    return max(peaks) if peaks else None
+
+
+def _memory(rows: Sequence[Mapping[str, Any]], size: str | None) -> dict[str, Any] | None:
+    peaks = [
+        p
+        for row in rows
+        if size is None or row["size_class"] == size
+        for p in row.get("request_peak_delta") or []
+    ]
+    if not peaks:
+        return None
+    return {
+        "n": len(peaks),
+        "p50": round(percentile(peaks, 50)),
+        "p95": round(percentile(peaks, 95)),
+        "max": max(peaks),
+    }
 
 
 def _latency(rows: Sequence[Mapping[str, Any]], size: str) -> dict[str, Any] | None:
@@ -777,8 +907,30 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         if all(c == "—" for c in cells):
             continue
         add(f"| CER {category} | ≤ {target:.0%} | " + " | ".join(cells) + " |")
-    cells = [_rss_cell(v["rss"]["peak_delta"]) for v in ok]
-    add(f"| 峰值 RSS 增量 | ≤ {TARGET_RSS_MB:.0f} MB | " + " | ".join(cells) + " |")
+    if any(v.get("dense_1080p") for v in ok):
+        cells = [_p95_cell(v.get("dense_1080p"), TARGET_DENSE_1080_P95_MS) for v in ok]
+        add(
+            f"| P95 1080p 密集文字 | ≤ {TARGET_DENSE_1080_P95_MS:.0f} ms | "
+            + " | ".join(cells)
+            + " |"
+        )
+    cells = [_peak_cell(v["memory"]["overall"]) for v in ok]
+    add(
+        f"| 单请求峰值增量（最大） | ≤ {TARGET_REQUEST_PEAK_MB:.0f} MB | "
+        + " | ".join(cells)
+        + " |"
+    )
+    cells = [_mbs(v["rss"]["resident_delta"]) + " MB" for v in ok]
+    add("| 常驻增长（跑完全部样例后） | — | " + " | ".join(cells) + " |")
+    full = settings["sample_count"] == FULL_SAMPLE_COUNT
+    cells = [_exact_cell(v["segmentation"]["overall"], full) for v in ok]
+    target = f"≥ {BASELINE_EXACT}/{FULL_SAMPLE_COUNT}" if full else "—（非完整样例集）"
+    add(f"| 段落完全正确 | {target} | " + " | ".join(cells) + " |")
+    add("")
+    add(
+        "CER 另要求不劣于 #54 基线（det small：全部 0.6%，日文竖排 11.4%），"
+        "请对照下方 CER 表与 legacy 列。"
+    )
     add("")
 
     add("## 字符错误率（CER）")
@@ -868,10 +1020,16 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     add("## 加载与内存")
     add("")
     add(
-        _row("检测模型", "冷加载 (ms)", "首次识别 (ms)", "基线 RSS (MB)")
-        + _row("加载后增量 (MB)", "峰值 RSS (MB)", "峰值增量 (MB)")[1:]
+        "口径（#74）：**单请求峰值增量** = 单次 `recognize` 期间的峰值 RSS"
+        " − OCR 已预热、空闲时的 RSS；"
+        "**常驻** = 空闲 RSS（绝对值），以及跑完全部样例后空闲 RSS 的增长。"
     )
-    add("|---|---:|---:|---:|---:|---:|---:|")
+    add("")
+    add(
+        _row("检测模型", "冷加载 (ms)", "首次识别 (ms)", "进程基线 (MB)", "模型+预热 (MB)")
+        + _row("空闲 RSS (MB)", "跑完后空闲 (MB)", "常驻增长 (MB)", "峰值测法")[1:]
+    )
+    add("|---|---:|---:|---:|---:|---:|---:|---:|---|")
     for v in ok:
         rss = v["rss"]
         add(
@@ -879,16 +1037,39 @@ def render_markdown(report: Mapping[str, Any]) -> str:
                 _short(v["det"]),
                 f"{v['load_ms']:.0f}",
                 f"{v['first_ms']:.0f}",
-                _mbs(rss["baseline"]),
-                _mbs(rss["load_delta"]),
-                _mbs(rss["peak"]),
-                _mbs(rss["peak_delta"]),
+                _mbs(rss["process_base"]),
+                _mbs(rss["model_delta"]),
+                _mbs(rss["idle"]),
+                _mbs(rss["final"]),
+                _mbs(rss["resident_delta"]),
+                v.get("peak_method", ""),
             )
         )
     add("")
+    add("单请求峰值增量（MB，按尺寸）：")
+    add("")
+    add(_row("尺寸", "检测模型", "次数", "P50", "P95", "最大", "目标"))
+    add("|---|---|---:|---:|---:|---:|---:|")
+    for size in (*SIZE_CLASSES, "overall"):
+        for v in ok:
+            mem = v["memory"].get(size)
+            if mem is None:
+                continue
+            add(
+                _row(
+                    SIZE_LABELS.get(size, "全部"),
+                    _short(v["det"]),
+                    mem["n"],
+                    _mbs(mem["p50"]),
+                    _mbs(mem["p95"]),
+                    _mbs(mem["max"]),
+                    f"≤ {TARGET_REQUEST_PEAK_MB:.0f}",
+                )
+            )
+    add("")
     add(
-        "基线 = 子进程导入 numpy/PIL/引擎后、加载 OCR 之前；"
-        "峰值取进程峰值（Linux VmHWM，Windows peak_wset）。"
+        "峰值测法：Linux 每次请求前经 `/proc/self/clear_refs` 重置 `VmHWM`（精确）；"
+        "其他平台用 psutil 每 2 ms 采样（近似，可能漏掉极短尖峰）。"
     )
     add("")
     add("## 逐样例")
@@ -929,10 +1110,11 @@ def _seg_row(label: str, s: Mapping[str, Any]) -> str:
     )
 
 
-def _p95_cell(lat: Mapping[str, Any] | None) -> str:
+def _p95_cell(lat: Mapping[str, Any] | None, target: float | None = None) -> str:
     if lat is None:
         return "—"
-    mark = "✅" if lat["p95_ms"] <= lat["target_p95_ms"] else "❌"
+    limit = lat["target_p95_ms"] if target is None else target
+    mark = "✅" if lat["p95_ms"] <= limit else "❌"
     return f"{lat['p95_ms']:.0f} ms {mark}"
 
 
@@ -943,11 +1125,18 @@ def _cer_cell(score: Mapping[str, Any] | None, target: float) -> str:
     return f"{score['cer']:.1%} {mark}"
 
 
-def _rss_cell(delta: int | None) -> str:
-    if delta is None:
+def _peak_cell(mem: Mapping[str, Any] | None) -> str:
+    if mem is None:
         return "未测（缺 psutil）"
-    mark = "✅" if _mb(delta) <= TARGET_RSS_MB else "❌"
-    return f"{_mb(delta):.0f} MB {mark}"
+    mark = "✅" if _mb(mem["max"]) <= TARGET_REQUEST_PEAK_MB else "❌"
+    return f"{_mb(mem['max']):.0f} MB {mark}"
+
+
+def _exact_cell(seg: Mapping[str, Any], full: bool) -> str:
+    text = f"{seg['exact_samples']}/{seg['samples']}"
+    if not full:
+        return text
+    return text + (" ✅" if seg["exact_samples"] >= BASELINE_EXACT else " ❌")
 
 
 def _pct(score: Mapping[str, Any] | None) -> str:

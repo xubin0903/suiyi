@@ -276,3 +276,22 @@ def test_low_confidence_and_blank_lines_are_skipped() -> None:
 def test_empty_input() -> None:
     assert merge_paragraphs([]) == []
     assert merge_paragraphs([line("x", 0, 0, 10, 10, low_confidence=True)]) == []
+
+
+def test_single_char_column_head_and_tail_join_vertical_paragraph() -> None:
+    # #74：缩小检测图后，列首/列尾的单个字常被单独切出，框偏胖（接近正方形）
+    head = [column("宿題は最後の三日間で片づけ", 200, 10), line("た", 150, 8, 188, 50)]
+    assert texts(head) == ["宿題は最後の三日間で片づけた"]
+    tail = [column("春の朝は空気がやわらか", 200, 10), line("い", 198, 10 + 32 * 11 + 4, 232, 400)]
+    assert texts(tail) == ["春の朝は空気がやわらかい"]
+    # 远离竖排列的单字仍按横排
+    lone = [column("春の朝は空気が", 200, 10), line("字", 20, 300, 50, 330)]
+    assert sorted(texts(lone)) == ["字", "春の朝は空気が"]
+
+
+def test_single_char_row_is_not_compared_by_font_size() -> None:
+    # 单字行的框随字形变胖，不因字号比把它从段落里切出去
+    lines = [line("第一行文字比较长一些", 10, 10, 210, 30), line("对。", 10, 36, 50, 64)]
+    assert len(texts(lines)) == 2  # 两个字：照常按字号比切开
+    lines = [line("第一行文字比较长一些", 10, 10, 210, 30), line("。", 10, 36, 40, 64)]
+    assert texts(lines) == ["第一行文字比较长一些。"]

@@ -134,16 +134,16 @@ jobs:
           echo "OCR_PY=$PY" >> "$GITHUB_ENV"
           echo "OCR_MODELS=$MODELS" >> "$GITHUB_ENV"
 
-      - name: OCR 评测快速子集（CI 环境数据，#54）
+      - name: OCR 评测快速子集（CI 环境数据，#54 / #74）
         # 验证 scripts/eval_ocr.py 在 Windows / Linux 上一条命令能跑通并写出报告与 JSON。
-        # 只有 wheel 自带的 det small（不下载 tiny）；另跑一个调优变体，验证实验开关在两个平台可用。
+        # 只有 wheel 自带的 det small（不下载 tiny）；当前默认参数（#74）对比 +legacy（#74 之前）。
         # 耗时是 GitHub 托管 runner 的数据，只用于确认脚本可用，不作为性能基线。
         # psutil 在审计之后单独装，不影响上一步的依赖审计。
         env:
           PYTHONUTF8: "1"
         run: |
           "$OCR_PY" -m pip install --quiet "psutil>=5.9"
-          "$OCR_PY" scripts/eval_ocr.py --quick --det small,small@960+rb1+nomp \
+          "$OCR_PY" scripts/eval_ocr.py --quick --det small,small+legacy \
             --models-dir "$OCR_MODELS" --label "CI ${RUNNER_OS}（GitHub 托管 runner）" \
             --out "$RUNNER_TEMP/ocr-eval"
           cat "$RUNNER_TEMP/ocr-eval/report.md" >> "$GITHUB_STEP_SUMMARY"
