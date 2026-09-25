@@ -187,7 +187,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
 
     /// <summary>重试上一次请求（浮窗「重试」）。</summary>
     /// <remarks>
-    /// 服务已失败，或上一次是「启动超时」且服务仍未就绪时，顺带重启服务（与托盘「重启翻译服务」同一条路径），
+    /// 服务已失败、上一次是「服务未运行」，或上一次是「启动超时」且服务仍未就绪时，顺带重启服务（与托盘「重启翻译服务」同一条路径），
     /// 然后按正常流程等待就绪并自动补译。重启进行中不会重复触发。
     /// </remarks>
     public void Retry()
@@ -198,8 +198,10 @@ public sealed class TranslateFlowCoordinator : IDisposable
         }
 
         var state = _engine.State;
-        var startTimedOut = _popup.Kind == PopupKind.Error && _popup.Error?.Kind == PopupErrorKind.EngineStartTimeout;
-        var restart = state == EngineState.Failed || (startTimedOut && state != EngineState.Ready);
+        var errorKind = _popup.Kind == PopupKind.Error ? _popup.Error?.Kind : null;
+        var restart = state == EngineState.Failed
+            || errorKind == PopupErrorKind.ServiceUnavailable
+            || (errorKind == PopupErrorKind.EngineStartTimeout && state != EngineState.Ready);
         Start(last with { Started = _timeProvider.GetTimestamp(), WaitSince = null }, restart);
     }
 
@@ -234,9 +236,14 @@ public sealed class TranslateFlowCoordinator : IDisposable
         CancelInFlight();
         _last = request;
         var state = _engine.State;
-        if (restartEngine)
+        if (restartEngine || _restartRequested)
         {
-            RequestRestart();
+            // 重启进行中（服务可能仍短暂报告 Ready）：新请求一律等重启后的就绪事件。
+            if (restartEngine)
+            {
+                RequestRestart();
+            }
+
             WaitForEngine(request);
             return;
         }

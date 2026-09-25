@@ -508,6 +508,64 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public void ServiceUnavailable_Retry_RestartsEngine_ThenTranslatesWhenReady()
+    {
+        // 连接被拒且 5 s 内服务仍自称就绪 →「服务未运行」；点重试走重启（#50 拍板 4）。
+        _engine.OnRestart = () => _engine.Raise(EngineState.Starting);
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+        _time.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(PopupErrorKind.ServiceUnavailable, _popup.Error!.Kind);
+        Assert.Equal("翻译服务未运行或已退出，点「重试」会重启翻译服务", _popup.ErrorMessage);
+
+        _popup.RequestRetry();
+
+        Assert.Equal(1, _engine.Restarts);
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        Assert.Single(_translator.Calls); // 重启就绪前不发请求
+
+        _engine.Raise(EngineState.Ready);
+        _translator.Complete(1);
+
+        Assert.Equal(2, _translator.Calls.Count);
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+    }
+
+    [Fact]
+    public void ServiceUnavailable_RetryTwiceWhileRestarting_RestartsOnce()
+    {
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+        _time.Advance(TimeSpan.FromSeconds(5));
+
+        _popup.RequestRetry();
+        _flow.Retry(); // 服务仍报告 Ready（重启还没开始），不应再次重启
+        _flow.OnTextCaptured("World", ClipboardTrigger.Monitor); // 新请求也等重启后的就绪
+
+        Assert.Equal(1, _engine.Restarts);
+        Assert.Single(_translator.Calls);
+        Assert.True(_flow.IsWaitingForEngine);
+
+        _engine.Raise(EngineState.Starting);
+        _engine.Raise(EngineState.Ready);
+        Assert.Equal("World", _translator.Calls[1].Text);
+    }
+
+    [Fact]
+    public void StartTimeoutButEngineNowReady_Retry_JustResends()
+    {
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _time.Advance(TimeSpan.FromSeconds(30));
+        _engine.State = EngineState.Ready; // 超时后才就绪
+
+        _popup.RequestRetry();
+
+        Assert.Equal(0, _engine.Restarts);
+        Assert.Single(_translator.Calls);
+    }
+
+    [Fact]
     public void OtherErrors_Retry_DoesNotRestart()
     {
         _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);

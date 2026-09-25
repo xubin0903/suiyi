@@ -2,6 +2,8 @@
 
 C# **.NET 8** WPF 客户端。一期只做 **Windows**：托盘常驻、全局热键、剪贴板翻译，以及快捷键裁剪后的 OCR 翻译（M3）。翻译本身调用 `engine/` 的本机 HTTP 服务（见 [HTTP API](../docs/engine/HTTP-API.md)），不在客户端内嵌模型。
 
+在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)。
+
 ## 目录
 
 ```
@@ -117,8 +119,8 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 
 - **目标语言：** `TranslationService` 每次请求读取 `settings.primaryTarget` / `secondaryTarget`，检测到原文等于主目标时改译为次目标；托盘切换目标后下一次翻译即生效。
 - **服务未就绪**（`IEngineStatus.State` 为 Starting / Restarting / Stopped）：浮窗「正在准备翻译服务…」（不自动消失）。只要浮窗没关，服务就绪后自动补译最后一次请求；新请求替换等待中的旧请求，用户关闭浮窗则取消。最多等 `TranslateFlowOptions.ReadyWaitTimeout`（默认 30 s），超时显示「翻译服务启动超时，点「重试」会重启翻译服务」。服务变为 **Failed** 时立即显示「翻译服务启动失败，点「重试」会重启翻译服务」（监管器因启动超时而失败时显示前一条）。浮窗不会一直停在「正在准备」（#50）。
-- **重试时重启服务：** 服务 Failed，或上一次是启动超时且服务仍未就绪时，点「重试」调用 `IEngineStatus.RestartAsync()`（与托盘「重启翻译服务」同一条路径），再按上面的规则等待就绪、自动补译。`EngineSupervisor` 把一次重启算到服务再次进入 Ready / Failed / Stopped 为止，期间再点重试或托盘重启都被忽略，不会叠加。其他错误的重试只重发请求。
-- **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，浮窗显示「正在准备」。状态转为 Starting / Restarting 则按上面的 30 s 就绪等待处理，恢复后自动重译；`TranslateFlowOptions.UnavailableConfirmTimeout`（默认 5 s）内服务仍自称就绪，则报「翻译服务未运行或已退出」（可重试）。同一请求的多次就绪等待共用一个 30 s 时限（从第一次等待算起）。
+- **重试时重启服务：** 服务 Failed、上一次是「服务未运行」，或上一次是启动超时且服务仍未就绪时，点「重试」调用 `IEngineStatus.RestartAsync()`（与托盘「重启翻译服务」同一条路径），再按上面的规则等待就绪、自动补译。`EngineSupervisor` 把一次重启算到服务再次进入 Ready / Failed / Stopped 为止，期间再点重试或托盘重启都被忽略，不会叠加；编排器在重启后的就绪事件到达前，新请求一律等待（服务可能仍短暂报告 Ready）。其他错误的重试只重发请求。
+- **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，浮窗显示「正在准备」。状态转为 Starting / Restarting 则按上面的 30 s 就绪等待处理，恢复后自动重译；`TranslateFlowOptions.UnavailableConfirmTimeout`（默认 5 s）内服务仍自称就绪，则报「翻译服务未运行或已退出，点「重试」会重启翻译服务」。同一请求的多次就绪等待共用一个 30 s 时限（从第一次等待算起）。
 - **最新优先：** 新请求取消旧请求（`CancellationToken`），并用代次号丢弃旧请求晚到的结果或错误。用户关闭浮窗也会取消进行中的请求。
 - **暂停监听：** 忽略 `ClipboardTrigger.Monitor`，快捷键和托盘照常翻译。
 
@@ -126,7 +128,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 
 | `EngineErrorKind` | 浮窗 |
 |---|---|
-| `Unavailable` | 先催健康检查并观察（见上）；映射表本身为 `ServiceUnavailable` |
+| `Unavailable` | 先催健康检查并观察（见上）；确认后为 `ServiceUnavailable`「翻译服务未运行或已退出，点「重试」会重启翻译服务」 |
 | `Timeout` | `Timeout`「翻译超时，请重试」 |
 | `UnsupportedPair` | `MissingModels`（带缺失模型 id） |
 | `TextTooLong` | `TextTooLong`（带 `Limit` / `Length`，不可重试） |

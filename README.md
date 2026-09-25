@@ -23,6 +23,7 @@
 - [引擎验收标准](docs/research/引擎验收标准-v0.1.md)
 - [剪贴板与截屏可行性](docs/research/剪贴板与截屏可行性一页纸.md)
 - [开源引擎技术详解](docs/research/开源引擎技术详解.md)
+- [M2 实机测试](docs/client/M2-实机测试.md)（Windows 从源码运行与验收清单）
 
 ## 许可证
 

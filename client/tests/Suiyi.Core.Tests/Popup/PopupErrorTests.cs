@@ -5,7 +5,7 @@ namespace Suiyi.Core.Tests.Popup;
 public sealed class PopupErrorTests
 {
     [Theory]
-    [InlineData(PopupErrorKind.ServiceUnavailable, "翻译服务未运行或已退出")]
+    [InlineData(PopupErrorKind.ServiceUnavailable, "翻译服务未运行或已退出，点「重试」会重启翻译服务")]
     [InlineData(PopupErrorKind.Timeout, "翻译超时，请重试")]
     [InlineData(PopupErrorKind.MissingModels, "未安装该语向的模型")]
     [InlineData(PopupErrorKind.DetectFailed, "无法识别原文语种，请点击语种标签手动指定")]
@@ -56,6 +56,6 @@ public sealed class PopupErrorTests
     public void ServiceUnavailable_UsesDetailWhenPresent()
     {
         Assert.Equal("正在重启", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " 正在重启 " }.Message);
-        Assert.Equal("翻译服务未运行或已退出", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " " }.Message);
+        Assert.Equal("翻译服务未运行或已退出，点「重试」会重启翻译服务", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " " }.Message);
     }
 }

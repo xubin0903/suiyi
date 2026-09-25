@@ -27,6 +27,10 @@
 
 [docs/engine/](engine/README.md) 存放引擎设计、HTTP API、模型清单与第三方模型署名。已有 [模型目录约定](engine/模型目录约定.md)（转换脚本的输出布局）、[语种检测](engine/语种检测.md)、[翻译核心](engine/翻译核心.md)、[HTTP API](engine/HTTP-API.md)、[评测](engine/评测.md) 和 [性能基线](engine/性能基线.md)。其余文档由后续 Issue 加在该目录，不在调研目录里另起一份。
 
+## 客户端文档
+
+[docs/client/](client/README.md) 存放 Windows 客户端的使用与测试文档。已有 [M2 实机测试](client/M2-实机测试.md)：在 Windows 上从源码运行服务和客户端，并按清单验收、记录延迟。客户端的设计与设置说明见 [client/README.md](../client/README.md)。
+
 ## 代码目录说明
 
 | 路径 | 说明 |
