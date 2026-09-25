@@ -25,7 +25,8 @@ public enum RegionTranslateTrigger
 /// <item>遮罩显示期间重复触发、文本捕获（剪贴板 / 快捷键 / 托盘）一律忽略，避免浮窗盖在遮罩上。</item>
 /// <item>「暂停监听」不影响框选翻译。</item>
 /// <item>服务未就绪、连接被拒、重试时重启服务、30 秒等待上限：与复制翻译共用同一套规则。</item>
-/// <item>截图只在内存中：识别成功、浮窗关闭或新请求开始后即丢弃引用；出错时保留到浮窗关闭，供「重试」复用同一张 PNG。</item>
+/// <item>截图只在内存中，最多一张：跟着浮窗内容保留到下一次框选拿到新截图，或浮窗改为显示复制翻译的内容；供「重试」复用同一张 PNG
+/// （包括忙碌时关闭浮窗后，托盘重新显示的「已取消」，#71）。</item>
 /// <item>端到端延迟 <c>ocr_e2e_ms</c>：从框选完成（鼠标松开、拿到 PNG）到浮窗结果渲染完成，单独统计 <see cref="OcrLatency"/>。</item>
 /// </list>
 /// </remarks>
@@ -92,8 +93,8 @@ public sealed partial class TranslateFlowCoordinator
 
         // 隐藏当前浮窗、取消进行中的请求：新的框选优先。旧截图留到新截图到手才替换：
         // 这次若取消框选，托盘左键重新显示的旧浮窗仍可重试。
-        CancelInFlight();
         _popup.Close(PopupCloseReason.Program);
+        CancelForHiddenPopup("开始新的框选"); // 旧请求停在忙碌态时改为「已取消」：这次框选若取消，托盘左键重新显示的是可重试的旧请求。
 
         var capture = await _region.RunAsync(cancellationToken).ConfigureAwait(true);
         if (capture is null || _disposed || cancellationToken.IsCancellationRequested)
@@ -124,8 +125,14 @@ public sealed partial class TranslateFlowCoordinator
         {
             outcome = await _ocr!.TranslateImageAsync(request.Png, cts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
+            return;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // 不是我们取消的：按超时报错，浮窗不能停在忙碌态（#71）。
+            _dispatch(() => OnFailed(generation, request, new EngineException(EngineErrorKind.Timeout, ex.GetType().Name, ex)));
             return;
         }
         catch (EngineException ex)
@@ -150,13 +157,27 @@ public sealed partial class TranslateFlowCoordinator
 
     private void OnOcrSucceeded(int generation, OcrRequest request, OcrTranslationOutcome outcome, bool waitedForEngine)
     {
-        if (generation != _generation || _disposed)
+        if (_disposed)
         {
             return;
         }
 
-        _cts = null; // 截图继续保留（跟着这次结果），直到被下一次框选替换。
         var result = OcrResultMapper.Map(outcome.Response, outcome.Target) with { Elapsed = outcome.ClientElapsed };
+        if (generation != _generation)
+        {
+            // 只有「关浮窗时结果已经到手」的那次写回浮窗（不弹出），托盘左键可查看。
+            if (AcceptAfterClose(generation))
+            {
+                _logger.Info(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"框选翻译：浮窗关闭时结果已到（size={request.Width}x{request.Height}），写入浮窗但不弹出，托盘左键可查看"));
+                _popup.UpdateWithoutShowing(() => _popup.ShowOcrResult(result, request.Anchor));
+            }
+
+            return;
+        }
+
+        _cts = null; // 截图继续保留（跟着这次结果），直到被下一次框选替换。
         _popup.ShowOcrResult(result, request.Anchor);
 
         // 回调里只捕获计时与尺寸，不捕获 request，避免 PNG 被闭包多留一帧。

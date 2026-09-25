@@ -11,11 +11,18 @@ internal sealed class FakeTranslationService : ITranslationService
 
     public int CancelCurrentCount { get; private set; }
 
+    /// <summary>模拟取消没能生效（请求已发出、服务照常返回）：取消令牌不再让任务结束。</summary>
+    public bool IgnoreCancellation { get; set; }
+
     public Task<TranslationOutcome> TranslateAsync(string text, string? sourceOverride = null, CancellationToken cancellationToken = default)
     {
         // 同步延续：Complete / Fail 返回时编排器已处理完毕，测试无需等待。
         var call = new Call(text, sourceOverride, new TaskCompletionSource<TranslationOutcome>(), cancellationToken);
-        cancellationToken.Register(() => call.Completion.TrySetCanceled(cancellationToken));
+        if (!IgnoreCancellation)
+        {
+            cancellationToken.Register(() => call.Completion.TrySetCanceled(cancellationToken));
+        }
+
         _calls.Add(call);
         return call.Completion.Task;
     }

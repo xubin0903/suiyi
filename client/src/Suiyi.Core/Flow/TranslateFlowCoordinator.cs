@@ -24,6 +24,8 @@ namespace Suiyi.Core.Flow;
 /// <item>服务失败或启动超时后点「重试」：顺带重启服务（重启中不重复触发），再等待就绪并自动补译。</item>
 /// <item>暂停监听时忽略 <see cref="ClipboardTrigger.Monitor"/>，快捷键与托盘仍可翻译。</item>
 /// <item>自动监听遇到过长文本不弹窗，只在托盘提示一次（每次运行最多一次）。</item>
+/// <item>忙碌态时关闭浮窗（或开始新的框选）即取消请求；浮窗内容改为可重试的「已取消」，托盘左键重新显示时不会停在忙碌态（#71）。
+/// 关闭时结果或错误其实已经到手（已排进 UI 线程队列）的，静默写入浮窗、不弹出。</item>
 /// </list>
 /// 日志只记录长度、尺寸、耗时与语种，不记录正文、识别文本与图片。
 /// </summary>
@@ -56,6 +58,9 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
     private FlowRequest? _pending;
     private CancellationTokenSource? _cts;
     private int _generation;
+
+    /// <summary>因浮窗被关闭而取消的那次请求的 <see cref="_generation"/>；它的结果或错误若仍到达，静默写入浮窗（#71）。-1 表示没有。</summary>
+    private int _closedGeneration = -1;
     private bool _tooLongNotified;
     private bool _confirmingUnavailable;
     private bool _restartRequested;
@@ -480,8 +485,14 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         {
             outcome = await _translator.TranslateAsync(request.Text, request.SourceOverride, cts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
+            return;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // 不是我们取消的（服务层本应转成 EngineException）：按超时报错，浮窗不能停在忙碌态（#71）。
+            _dispatch(() => OnFailed(generation, request, new EngineException(EngineErrorKind.Timeout, ex.Message, ex)));
             return;
         }
         catch (EngineException ex)
@@ -506,17 +517,30 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
 
     private void OnSucceeded(int generation, TextRequest request, TranslationOutcome outcome, bool waitedForEngine)
     {
-        if (generation != _generation || _disposed)
+        if (_disposed)
         {
-            return; // 已被更新的请求取代。
+            return;
         }
 
-        _cts = null;
-        _popup.ShowResult(new PopupResult(outcome.Text, outcome.SourceLanguage, outcome.TargetLanguage)
+        var result = new PopupResult(outcome.Text, outcome.SourceLanguage, outcome.TargetLanguage)
         {
             SourceDetected = outcome.SourceDetected,
             Elapsed = outcome.ClientElapsed,
-        });
+        };
+        if (generation != _generation)
+        {
+            // 已被更新的请求取代；只有「关浮窗时结果已经到手」的那次写回浮窗（不弹出）。
+            if (AcceptAfterClose(generation))
+            {
+                _logger.Info($"翻译：浮窗关闭时结果已到（chars={request.Text.Length}），写入浮窗但不弹出，托盘左键可查看");
+                _popup.UpdateWithoutShowing(() => _popup.ShowResult(result));
+            }
+
+            return;
+        }
+
+        _cts = null;
+        _popup.ShowResult(result);
 
         _afterRender(() =>
         {
@@ -538,8 +562,20 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
 
     private void OnFailed(int generation, FlowRequest request, EngineException ex)
     {
-        if (generation != _generation || _disposed)
+        if (_disposed)
         {
+            return;
+        }
+
+        if (generation != _generation)
+        {
+            if (AcceptAfterClose(generation))
+            {
+                // 关浮窗时错误已经到手：写入浮窗（不弹出、不再等服务或重启），托盘左键可查看并重试。
+                LogFailure(request, ex);
+                _popup.UpdateWithoutShowing(() => ShowError(request, PopupErrorMapper.Map(ex, request is OcrRequest ? _ocr?.KnownOcrError : null)));
+            }
+
             return;
         }
 
@@ -639,10 +675,37 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         // 用户关掉浮窗：不再需要这次翻译。
         if (e.Reason == PopupCloseReason.User)
         {
-            CancelInFlight();
+            CancelForHiddenPopup("关闭浮窗");
         }
 
         // 截图不随浮窗关闭丢弃：托盘左键重新显示时仍可重试。
+    }
+
+    /// <summary>
+    /// 浮窗被隐藏（用户关闭、开始新的框选）时取消进行中的请求（#71）。浮窗若停在忙碌态，改为可重试的「已取消」，
+    /// 托盘左键重新显示时看到它；正在跑的那次请求记为 <see cref="_closedGeneration"/>，它的结果若已排进 UI 线程队列，仍会静默写回浮窗。
+    /// </summary>
+    private void CancelForHiddenPopup(string cause)
+    {
+        var running = _cts is not null ? _generation : -1;
+        CancelInFlight();
+        _closedGeneration = running;
+        if (_popup.ShowCancelled())
+        {
+            _logger.Info($"翻译：{cause}，请求已取消；浮窗改为「已取消」，托盘左键重新显示时可重试（{_popup.Mode}）");
+        }
+    }
+
+    /// <summary>是否接受因关闭浮窗而取消的请求迟到的结果或错误：只接受那一次，且浮窗仍显示「已取消」（没有被别的内容替换）。</summary>
+    private bool AcceptAfterClose(int generation)
+    {
+        if (generation != _closedGeneration || _popup.Kind != PopupKind.Error || _popup.Error?.Kind != PopupErrorKind.Cancelled)
+        {
+            return false;
+        }
+
+        _closedGeneration = -1;
+        return true;
     }
 
     private void OnPopupPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -659,6 +722,7 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
 
     private void CancelInFlight()
     {
+        _closedGeneration = -1;
         _generation++;
         _pending = null;
         _confirmingUnavailable = false;

@@ -49,10 +49,17 @@ internal sealed class FakeOcrService : IOcrTranslationService
 
     public int CancelCurrentCount { get; private set; }
 
+    /// <summary>模拟取消没能生效：取消令牌不再让任务结束。</summary>
+    public bool IgnoreCancellation { get; set; }
+
     public Task<OcrTranslationOutcome> TranslateImageAsync(ReadOnlyMemory<byte> png, CancellationToken cancellationToken = default)
     {
         var call = new Call(png, new TaskCompletionSource<OcrTranslationOutcome>(), cancellationToken);
-        cancellationToken.Register(() => call.Completion.TrySetCanceled(cancellationToken));
+        if (!IgnoreCancellation)
+        {
+            cancellationToken.Register(() => call.Completion.TrySetCanceled(cancellationToken));
+        }
+
         _calls.Add(call);
         return call.Completion.Task;
     }

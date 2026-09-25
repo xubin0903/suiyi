@@ -122,6 +122,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 - **重试时重启服务：** 服务 Failed、上一次是「服务未运行」，或上一次是启动超时且服务仍未就绪时，点「重试」调用 `IEngineStatus.RestartAsync()`（与托盘「重启翻译服务」同一条路径），再按上面的规则等待就绪、自动补译。`EngineSupervisor` 把一次重启算到服务再次进入 Ready / Failed / Stopped 为止，期间再点重试或托盘重启都被忽略，不会叠加；编排器在重启后的就绪事件到达前，新请求一律等待（服务可能仍短暂报告 Ready）。其他错误的重试只重发请求。
 - **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，浮窗显示「正在准备」。状态转为 Starting / Restarting 则按上面的 30 s 就绪等待处理，恢复后自动重译；`TranslateFlowOptions.UnavailableConfirmTimeout`（默认 5 s）内服务仍自称就绪，则报「翻译服务未运行或已退出，点「重试」会重启翻译服务」。同一请求的多次就绪等待共用一个 30 s 时限（从第一次等待算起）。
 - **最新优先：** 新请求取消旧请求（`CancellationToken`），并用代次号丢弃旧请求晚到的结果或错误。用户关闭浮窗也会取消进行中的请求。
+- **忙碌时关闭（#71）：** 浮窗在「正在翻译 / 正在识别 / 正在准备」时被关闭（× / Esc / Alt+F4），或开始新的框选把它隐藏，请求照旧取消，浮窗内容改为 `Cancelled`「已取消：浮窗在完成前被关闭，点「重试」重新翻译」（`PopupViewModel.ShowCancelled()`，不弹出）。托盘左键重新显示时看到它和「重试」：复制翻译重译原文，框选翻译用保留的截图重发。关闭那一刻结果或错误其实已经到手（已排进 UI 线程队列），或取消没能生效、请求照常返回时，结果或错误经 `PopupViewModel.UpdateWithoutShowing` 静默写入浮窗（不弹出、不等服务、不催健康检查），托盘左键看到的是结果或错误。只接受被关闭的那一次，之后有新请求或点了重试则丢弃。浮窗不会停在忙碌态。不是编排器发起的 `OperationCanceledException` 按 `Timeout` 处理。
 - **暂停监听：** 忽略 `ClipboardTrigger.Monitor`，快捷键和托盘照常翻译。
 
 **错误映射（`PopupErrorMapper`）：**
@@ -137,6 +138,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | 等待服务就绪超时 | `EngineStartTimeout`「翻译服务启动超时，点「重试」会重启翻译服务」 |
 | 服务 Failed（启动超时，`EngineFailureReason.StartupTimeout`） | 同「等待服务就绪超时」 |
 | 服务 Failed（其他原因） | `ServiceUnavailable`，文案 `PopupErrorMapper.EngineFailedMessage` |
+| 忙碌时关闭浮窗（#71） | `Cancelled`「已取消：浮窗在完成前被关闭，点「重试」重新翻译」（可重试，托盘左键重新显示时可见） |
 
 **端到端计时：** 从 `WM_CLIPBOARDUPDATE`（监听）或快捷键按下，到浮窗显示译文后 WPF 完成布局（`Dispatcher` 的 `Loaded` 优先级回调）。每次写一行日志，不含正文：
 
@@ -180,7 +182,7 @@ TranslateRegionAsync(trigger)
 - **重试按 `PopupViewModel.Mode` 分流：** `Ocr` 用原来那张 PNG 重发（不重新框选）；`Text` 走原来的文本重试。服务 Failed / 未运行 / 启动超时后的重试同样会先 `RestartAsync()`。
 - **截图生命周期：** PNG 只在内存，内存里最多一张：跟着对应浮窗的内容一直保留（识别成功、失败、浮窗关闭后都还在），直到被下一次框选**成功拿到的**新截图替换（框选途中按 Esc 取消不影响旧截图）。托盘左键重新显示旧的框选错误浮窗时，点「重试」仍用这张 PNG 重发。浮窗改为显示复制翻译的内容（新的文本请求、「文本过长」提示等，即 `Mode` 变为 `Text`）时旧的框选内容不会再显示，截图随即丢弃；被忽略的文本捕获（暂停监听、遮罩期间）不影响。只丢引用，不主动清零。`--region-demo` 另存一份到临时目录，正式流程不落盘。
 - **「重试」不会点了没反应：** 编排器通过 `PopupViewModel.SetRetryAvailability(text, ocr)` 告知两种来源是否还有可重发的请求，`CanRetry` 按当前 `Mode` 取值，没有截图（或没有上一次文本）时隐藏「重试」。
-- **关闭浮窗即取消**进行中或等待服务的框选请求。
+- **关闭浮窗即取消**进行中或等待服务的框选请求；托盘左键重新显示时是可重试的「已取消」（用同一张截图重发），关闭时结果已到则显示结果（见[主流程](#主流程)「忙碌时关闭」）。
 - **暂停监听不影响框选**（Issue 要求）。
 - **目标语言：** 与复制翻译一样读 `primaryTarget` / `secondaryTarget`，识别出的主要语种等于主目标时由 `OcrTranslationService` 改译为次目标。
 - **错误：** OCR 错误码经 `PopupErrorMapper` → `OcrResultMapper.MapError`：`image_too_large`「选区过大…」（不可重试）、`invalid_image` / `unsupported_media_type`「截图无法识别，请重新框选」、`ocr_unavailable`「OCR 模型未安装：…」+ 第二行修复方法（可重试，不触发重启，见下）；`Unavailable` / 超时 / 服务 Failed 与复制翻译一致（催健康检查、30 s 就绪等待、重试重启）。
@@ -275,7 +277,7 @@ TranslateRegionAsync(trigger)
 
 | 类型 | 位置 | 作用 |
 |------|------|------|
-| `PopupViewModel` | Core | 集成方调用 `ShowPreparing()`、`ShowLoading(sourceText)`、`ShowResult(PopupResult)`、`ShowError(PopupError)`、`ShowLast()`、`Close(reason)`；事件 `CopyTranslationRequested(Text)`、`RetryRequested`、`SourceLanguageOverride(Language)`、`Closed(Reason)`；窗口用 `Shown(Reposition)`、`PropertyChanged`、`TogglePin()`、`SetHovered()`、`RequestCopy()`、`RequestRetry()`、`RequestSourceOverride()` |
+| `PopupViewModel` | Core | 集成方调用 `ShowPreparing()`、`ShowLoading(sourceText)`、`ShowResult(PopupResult)`、`ShowError(PopupError)`、`ShowCancelled()`、`UpdateWithoutShowing(update)`、`ShowLast()`、`Close(reason)`；事件 `CopyTranslationRequested(Text)`、`RetryRequested`、`SourceLanguageOverride(Language)`、`Closed(Reason)`；窗口用 `Shown(Reposition)`、`PropertyChanged`、`TogglePin()`、`SetHovered()`、`RequestCopy()`、`RequestRetry()`、`RequestSourceOverride()` |
 | `PopupKind` | Core | `None` / `Preparing` / `Loading` / `Result` / `Error` |
 | `PopupResult` | Core | `Translation`、`Source`、`Target`、`SourceDetected`、`Elapsed` |
 | `PopupOcrResult` | Core | 框选翻译结果（#57）：`SourceParagraphs` / `TranslationParagraphs`（一一对应）、`Source`、`Target`、`SourceDetected`、`Elapsed`；`SourceText` / `TranslationText`（段落间空一行）、`IsEmpty`、`Empty(target)` |

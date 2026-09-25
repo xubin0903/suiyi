@@ -533,4 +533,106 @@ public sealed class PopupViewModelTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => _popup.ShowResult(null!));
         Assert.Throws<ArgumentNullException>(() => _popup.ShowError(null!));
     }
+
+    // ---- #71：忙碌态关闭后的「已取消」与静默更新 ----
+
+    [Fact]
+    public void ShowCancelled_FromHiddenLoading_BecomesRetryableErrorWithoutShowing()
+    {
+        _popup.ShowOcrLoading(new PopupRect(10, 20, 300, 100));
+        Advance(_popup.Options.LoadingIndicatorDelay.TotalMilliseconds);
+        _popup.Close();
+        var shown = _shown.Count;
+
+        Assert.True(_popup.ShowCancelled());
+
+        Assert.False(_popup.IsVisible);
+        Assert.Equal(shown, _shown.Count);
+        Assert.Equal(PopupKind.Error, _popup.Kind);
+        Assert.Equal(PopupErrorKind.Cancelled, _popup.Error!.Kind);
+        Assert.Equal(PopupContentMode.Ocr, _popup.Mode);
+        Assert.Equal(new PopupRect(10, 20, 300, 100), _popup.AnchorRect);
+        Assert.False(_popup.ShowLoadingIndicator);
+        Assert.True(_popup.CanRetry);
+
+        Assert.True(_popup.ShowLast());
+        Assert.True(_popup.IsVisible);
+        Assert.True(_shown[^1]); // 重新定位
+    }
+
+    [Fact]
+    public void ShowCancelled_FromPreparing()
+    {
+        _popup.ShowPreparing();
+        _popup.Close();
+
+        Assert.True(_popup.ShowCancelled());
+        Assert.Equal(PopupContentMode.Text, _popup.Mode);
+        Assert.Equal(PopupErrorKind.Cancelled, _popup.Error!.Kind);
+    }
+
+    [Fact]
+    public void ShowCancelled_NotBusy_DoesNothing()
+    {
+        Assert.False(_popup.ShowCancelled()); // None
+
+        _popup.ShowResult(Sample);
+        _popup.Close();
+        Assert.False(_popup.ShowCancelled());
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout));
+        Assert.False(_popup.ShowCancelled());
+        Assert.Equal(PopupErrorKind.Timeout, _popup.Error!.Kind);
+    }
+
+    [Fact]
+    public void ShowCancelled_HiddenLoadingTimerDoesNotShowLater()
+    {
+        _popup.ShowLoading("Hello"); // 浮窗原本隐藏：加载指示与窗口都延迟出现
+        Assert.False(_popup.IsVisible);
+
+        Assert.True(_popup.ShowCancelled());
+        Advance(_popup.Options.LoadingIndicatorDelay.TotalMilliseconds * 2);
+
+        Assert.False(_popup.IsVisible);
+        Assert.Empty(_shown);
+    }
+
+    [Fact]
+    public void UpdateWithoutShowing_Hidden_ChangesContentOnly()
+    {
+        _popup.ShowLoading("Hello");
+        Advance(_popup.Options.LoadingIndicatorDelay.TotalMilliseconds);
+        _popup.Close();
+        var shown = _shown.Count;
+
+        _popup.UpdateWithoutShowing(() => _popup.ShowResult(Sample));
+
+        Assert.False(_popup.IsVisible);
+        Assert.Equal(shown, _shown.Count);
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+        Assert.Equal("你好", _popup.Translation);
+        Advance(_popup.Options.AutoHideSeconds * 2000.0);
+        Assert.Single(_closed); // 隐藏时不计时自动消失
+
+        Assert.True(_popup.ShowLast());
+        Assert.True(_popup.IsVisible);
+
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout)); // 之后的更新照常显示
+        Assert.True(_popup.IsVisible);
+    }
+
+    [Fact]
+    public void UpdateWithoutShowing_Visible_BehavesNormally()
+    {
+        _popup.ShowResult(Sample);
+        Assert.True(_popup.IsVisible);
+
+        _popup.UpdateWithoutShowing(() => _popup.ShowError(new PopupError(PopupErrorKind.Timeout)));
+
+        Assert.True(_popup.IsVisible);
+        Assert.Equal(PopupKind.Error, _popup.Kind);
+        Assert.Throws<ArgumentNullException>(() => _popup.UpdateWithoutShowing(null!));
+    }
 }
