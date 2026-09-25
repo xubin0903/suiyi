@@ -1,6 +1,6 @@
 # 贡献指南
 
-随译（Suiyi）是开源桌面翻译工具，许可证为 [MIT](LICENSE)。一期只做 **Windows**。翻译服务用 Python + CTranslate2（`engine/`），客户端用 C# .NET 8 WPF（`client/`，M2 起）。规格以 [MVP 范围冻结 v0.1](docs/research/MVP范围冻结-v0.1.md) 与 [引擎验收标准 v0.1](docs/research/引擎验收标准-v0.1.md) 为准。
+随译（Suiyi）是开源桌面翻译工具，许可证为 [MIT](LICENSE)。一期只做 **Windows**。翻译服务用 Python + CTranslate2（`engine/`），客户端用 C# .NET 8 WPF（`client/`）。规格以 [MVP 范围冻结 v0.1](docs/research/MVP范围冻结-v0.1.md) 与 [引擎验收标准 v0.1](docs/research/引擎验收标准-v0.1.md) 为准。
 
 本文约定目录布局、分支、提交与 PR 流程。后续 Issue 按此落文件，不要另起一套结构。
 
@@ -10,7 +10,7 @@
 engine/                 Python 翻译服务（pyproject.toml 放这里）
   src/suiyi_engine/     包源码（导入名 suiyi_engine）
   tests/                引擎单元测试（pytest）
-client/                 C# .NET 8 WPF 客户端（M2 起）
+client/                 C# .NET 8 WPF 客户端（Suiyi.sln）
 docs/
   research/             调研与规格（已有）
   engine/               引擎设计、HTTP API、模型清单等文档
@@ -63,7 +63,7 @@ models/                 本地模型缓存（仅本地，git 忽略）
 - **一 PR 对应一 Issue。** 不要把无关改动塞进同一个 PR。
 - 填写现有 PR 模板：改了什么、怎么验证、相关 Issue。
 - 正文关联 Issue（`Closes #n`），便于合并后自动关闭。
-- **CI 须为绿**再请负责人审查。GitHub Actions 由后续 Issue 接入；接入前在 PR 里写明本地验证命令和结果，接入后以 CI 为准。
+- **CI 须为绿**再请负责人审查。以「CI / engine 检查」与「CI / client 检查」两项汇总检查为准。
 - 不提交模型权重、大文件或密钥。权重扩展名（`*.bin`、`*.onnx`、`*.gguf`、`*.argosmodel`）和根目录 `models/` 已被 `.gitignore` 忽略；`.env`、`*.pem` 同样不要入库。
 
 ## 模型与许可证纪律
@@ -89,18 +89,21 @@ models/                 本地模型缓存（仅本地，git 忽略）
 
 ## 本地开发环境
 
-详细命令由后续 Issue 补充，此处只固定版本基线：
+版本基线：
 
-- **翻译服务：** Python 3.11。工程在 `engine/`，依赖与 `ruff` / `pytest` 命令见 `engine/README.md`（Python 工程初始化后补全安装步骤）。
-- **客户端（M2 起）：** .NET 8 SDK，工程在 `client/`。M2 之前不要在这里加解决方案或业务代码。
+- **翻译服务：** Python 3.11。工程在 `engine/`，依赖与 `ruff` / `pytest` 命令见 [engine/README.md](engine/README.md)。
+- **客户端：** .NET 8 SDK，解决方案是 `client/Suiyi.sln`，目录与分层约定见 [client/README.md](client/README.md)。纯逻辑放 `Suiyi.Core`（Linux 可测），WPF 与 Win32 互操作放 `Suiyi.App`。
 - **模型：** 不要提交到仓库。需要真实模型的测试应在模型目录未配置时跳过，避免 CI 下载权重。
 
-当前占位：
-
 ```bash
-# 引擎（目录与命令随 engine/ 工程初始化补全）
+# 引擎
 python3.11 --version
 
-# 客户端（M2 起）
-dotnet --version
+# 客户端（仓库根目录）
+dotnet --version                                     # 8.0.x
+dotnet format client/Suiyi.sln --verify-no-changes
+dotnet build client/Suiyi.sln -c Release
+dotnet test client/Suiyi.sln -c Release
 ```
+
+Windows 上运行客户端：`dotnet run --project client/src/Suiyi.App`。Linux 上可以构建全部项目、运行 `client/tests/Suiyi.Core.Tests`，但不能运行 WPF 应用。

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WPF 应用：窗口、托盘、Win32 互操作（Interop/）与组合根（App.xaml.cs）。 -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Suiyi.App</RootNamespace>
+    <AssemblyName>Suiyi</AssemblyName>
+    <!-- 手写 LibraryImport 需要。 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Suiyi.Core\Suiyi.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -5,9 +5,14 @@
 # 路径过滤取舍：
 # 不用 workflow 级 paths。文档类 PR 若因此整份工作流被跳过，
 # 将来把某个 job 设为必需检查时，GitHub 会把它当成「未运行」而卡住合并。
-# 这里改为 job 级过滤：文档类 PR 仍会跑「变更检测」和「engine 检查」，
-# 但跳过真正的 lint/test。分支保护应只要求「CI / engine 检查」，
-# 不要要求矩阵里的 ubuntu/windows job。
+# 这里改为 job 级过滤：文档类 PR 仍会跑「变更检测」「engine 检查」「client 检查」，
+# 但跳过真正的 lint/build/test。
+#
+# 两项稳定汇总检查：
+# - 「engine 检查」：engine/** 或工作流有变更时，engine 矩阵必须 success；否则必须 skipped。
+# - 「client 检查」：client/** 或工作流有变更时，client job 必须 success；否则必须 skipped。
+# 分支保护应只要求「CI / engine 检查」与「CI / client 检查」，
+# 不要要求矩阵里的 ubuntu/windows job 或 client（windows-latest）job。
 
 name: CI
 
@@ -35,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       engine: ${{ steps.filter.outputs.engine }}
+      client: ${{ steps.filter.outputs.client }}
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -43,7 +49,7 @@ jobs:
           fetch-depth: 0
 
       # token 置空，走 git diff，避免再申请 pull-requests: read。
-      - name: 判断是否需要跑 engine
+      - name: 判断是否需要跑 engine / client
         id: filter
         uses: dorny/paths-filter@v3
         with:
@@ -51,6 +57,9 @@ jobs:
           filters: |
             engine:
               - 'engine/**'
+              - '.github/workflows/**'
+            client:
+              - 'client/**'
               - '.github/workflows/**'
 
   engine:
@@ -118,13 +127,17 @@ jobs:
             exit 1
           fi
 
-  # M2 初始化 WPF 工程后再启用。启用时删掉 `if: false`，保留下面的构建步骤。
   # 不要把是否启用写在 job 级 hashFiles('client/**/*.csproj') 上：
-  # hashFiles 在 checkout 之前求值，工作区还是空的，条件会一直为假。
+  # hashFiles 在 checkout 之前求值，工作区还是空的，条件会一直为假。改用 changes 的输出。
   client:
-    name: client（预留）
-    if: false
+    name: client（windows-latest）
+    needs: changes
+    if: ${{ needs.changes.outputs.client == 'true' }}
     runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -132,7 +145,54 @@ jobs:
       - name: 安装 .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          global-json-file: client/global.json
 
-      - name: 构建客户端
-        run: dotnet build client
+      # setup-dotnet 的内置缓存要求 packages.lock.json，这里直接缓存 NuGet 全局包目录。
+      - name: NuGet 缓存
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('client/**/*.csproj', 'client/Directory.Packages.props', 'client/Directory.Build.props', 'client/global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: dotnet restore
+        run: dotnet restore client/Suiyi.sln
+
+      - name: dotnet format
+        run: dotnet format client/Suiyi.sln --verify-no-changes --no-restore
+
+      - name: dotnet build
+        run: dotnet build client/Suiyi.sln -c Release --no-restore
+
+      - name: dotnet test
+        run: dotnet test client/Suiyi.sln -c Release --no-build
+
+  # 稳定的汇总检查，与「engine 检查」对称。
+  # client job 被跳过时本 job 仍成功；client job 失败或被取消时本 job 失败。
+  client-check:
+    name: client 检查
+    needs: [changes, client]
+    if: ${{ always() && needs.changes.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 汇总 client 结果
+        run: |
+          filter="${{ needs.changes.outputs.client }}"
+          result="${{ needs.client.result }}"
+          echo "client 路径是否变更: ${filter}"
+          echo "client job 结果: ${result}"
+          if [ "$filter" = "true" ]; then
+            if [ "$result" != "success" ]; then
+              echo "client 或工作流有变更，但 client job 不是 success。"
+              exit 1
+            fi
+          elif [ "$filter" = "false" ]; then
+            if [ "$result" != "skipped" ]; then
+              echo "本次变更不应跑 client，实际结果是 ${result}。"
+              exit 1
+            fi
+          else
+            echo "无法识别的过滤结果: ${filter}"
+            exit 1
+          fi

@@ -1,0 +1,27 @@
+<Project>
+  <!-- client/ 下所有项目的公共属性。单个项目只写与自己相关的差异。 -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- 分析器即 lint：构建告警即失败。 -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- IDE0005（多余 using）只有生成 XML 文档时才会在构建中报告。
+         缺 XML 注释（CS1591）不在骨架阶段强制，由各 Issue 自行要求。 -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- 让 Linux / macOS 也能构建 net8.0-windows 的 WPF 项目（不能运行）。 -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <Deterministic>true</Deterministic>
+    <Company>Suiyi</Company>
+    <Product>随译</Product>
+    <Copyright>MIT License</Copyright>
+    <Version>0.0.1</Version>
+  </PropertyGroup>
+</Project>
