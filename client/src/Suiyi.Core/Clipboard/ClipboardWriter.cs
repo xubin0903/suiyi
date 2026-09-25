@@ -41,4 +41,7 @@ public sealed class ClipboardWriter
 
     /// <summary>在 <paramref name="window"/> 内让监听器忽略下一次剪贴板变化（快捷键模拟复制用）。</summary>
     public void SuppressNext(TimeSpan window) => _tracker.SuppressNext(window);
+
+    /// <summary>取消尚未消耗的 <see cref="SuppressNext"/>（模拟复制没有引起变化时调用，避免吞掉用户下一次复制）。</summary>
+    public void CancelSuppress() => _tracker.CancelSuppress();
 }

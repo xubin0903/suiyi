@@ -100,6 +100,41 @@ WM_CLIPBOARDUPDATE → 去抖（默认 150 ms，只处理最后一次）→ 序�
 
 **手测：** 目前 `Suiyi.App` 启动即开始监听，结果写日志（`剪贴板：接受 N 字` / `剪贴板：跳过（原因，N 字）` / `剪贴板：忽略自身写入`）。占位窗口上有「暂停剪贴板监听」勾选框和「写入测试文本（不应触发）」按钮，托盘（#29）替换占位窗口时一并移除。翻译与浮窗由 #34 接到 `TextCaptured` 上。
 
+## 全局快捷键
+
+默认 `Ctrl+Alt+T`（#33）：有选中文本就复制并翻译它，否则翻译当前剪贴板文本。**暂停剪贴板监听时快捷键仍然可用。** 纯逻辑在 `Suiyi.Core/Hotkeys`，Win32 在 `Suiyi.App/Interop`。
+
+```
+WM_HOTKEY（RegisterHotKey + MOD_NOREPEAT，长按不连发）
+  → 等待松开 Ctrl/Alt/Shift/Win（每 10 ms 查一次，最长 500 ms，超时仍继续）
+  → ClipboardWriter.SuppressNext(1 s)：让剪贴板监听忽略这次模拟复制
+  → 记录剪贴板序号 → SendInput 模拟 Ctrl+C
+  → 300 ms 内序号变化：读新文本；没变：取消 SuppressNext，回退为当前剪贴板文本
+  → 过滤（与监听同一套规则，上限放宽到 10000 字，不做 2 s 去重）
+  → TextCaptured(text, ClipboardTrigger.Hotkey) 或 Rejected(reason)
+```
+
+| 类型 | 所在 | 作用 |
+|------|------|------|
+| `HotkeyParser` | Core | `TryParse` / `Normalize`；`DefaultTranslate = "Ctrl+Alt+T"` |
+| `HotkeyGesture` / `HotkeyModifiers` / `HotkeyKeys` | Core | 修饰键（取值同 `MOD_*`）+ 虚拟键码；`ToString()` 为规范写法 |
+| `HotkeyManager` | Core | `Update(string)` 注册 / 重新注册 / 禁用；`Current`；事件 `Pressed`、`RegistrationFailed`（`Message` 为面向用户的提示） |
+| `HotkeyTranslateAction` | Core | 取词流程 `ExecuteAsync()`；事件 `TextCaptured`、`Rejected`；上一次未结束时返回 `AlreadyRunning` |
+| `IHotkeyRegistrar` / `Win32HotkeyRegistrar` | Core / App | `RegisterHotKey` 抽象与实现（自建仅消息窗口收 `WM_HOTKEY`） |
+| `IKeyboardInput` / `Win32KeyboardInput` | Core / App | `GetAsyncKeyState` 查修饰键、`SendInput` 模拟 Ctrl+C |
+
+**快捷键写法：** 修饰键 `Ctrl`（`Control`）、`Alt`、`Shift`、`Win`（`Windows`）加一个按键，用 `+` 连接，大小写与空格不敏感，例如 `Ctrl+Alt+T`、`Ctrl+Shift+F1`、`Win+Alt+Y`。按键可以是 `A`–`Z`、`0`–`9`、`F1`–`F24`、`NumPad0`–`NumPad9`、`Space`、`Enter`、`Tab`、`Esc`、`Backspace`、`Insert`、`Delete`、`Home`、`End`、`PageUp`、`PageDown`、方向键、`Pause`、`PrintScreen`。除 `F1`–`F24` 外必须带 `Ctrl`、`Alt` 或 `Win`（`Shift+T` 会打出大写字母，不允许）。空字符串表示禁用。
+
+**修改：** 设置（#27）接入前，用命令行 `dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"` 指定，或在占位窗口的输入框里改后点「应用快捷键」（调用 `HotkeyManager.Update`）。接入设置后改 `settings.json` 的 `hotkey.translate`。
+
+**被占用：** 注册失败时发 `RegistrationFailed`，提示「快捷键 Ctrl+Alt+T 已被其他程序占用，请在设置中修改」，程序继续运行；集成（#34）用托盘气泡显示，目前显示在占位窗口上并写日志。
+
+**已知行为：**
+
+- **不恢复剪贴板。** 选中文本时，模拟复制会用选中内容替换剪贴板原内容（恢复多格式内容复杂且容易丢数据，M2 不做）。
+- **管理员窗口。** 目标窗口以管理员权限运行而随译没有时，`SendInput` 会被 UIPI 静默拦截，剪贴板不变，此时退化为翻译当前剪贴板，并写日志。
+- 部分终端、远程桌面等程序对模拟 Ctrl+C 的处理不同，同样会退化为翻译当前剪贴板。
+
 ## 与引擎通信
 
 代码在 `Suiyi.Core/Engine/`，契约见 [HTTP API](../docs/engine/HTTP-API.md)，超时阈值依据 [性能基线](../docs/engine/性能基线.md)「给 M2 客户端」。
