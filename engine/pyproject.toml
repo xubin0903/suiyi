@@ -5,22 +5,28 @@ build-backend = "hatchling.build"
 [project]
 name = "suiyi-engine"
 dynamic = ["version"]
-description = "随译本地翻译引擎。CTranslate2 / OPUS-MT 推理、语种路由与分句拼回。"
+description = "随译本地翻译引擎。CTranslate2 / OPUS-MT 推理、语种路由、分句拼回与本机 HTTP API。"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-# 运行时：语种检测 py3langid；翻译推理 ctranslate2 与 sentencepiece。
+# 运行时：语种检测 py3langid；翻译推理 ctranslate2 与 sentencepiece；
+# 本机 HTTP 用 fastapi 与 uvicorn。不要给 uvicorn 加 standard extra，以免带上
+# httptools、uvloop、watchfiles 等打包时用不到的额外依赖。
 # torch、transformers、huggingface_hub 只在可选组 convert，不能进运行时。
 dependencies = [
   "py3langid>=0.4.0,<0.5",
   "ctranslate2>=4.6",
   "sentencepiece>=0.2",
+  "fastapi>=0.115",
+  "uvicorn>=0.32",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3",
   "ruff>=0.8",
+  # Starlette TestClient 需要 httpx2。只在测试里用，不放进运行时。
+  "httpx2>=2",
 ]
 # 只用于 scripts/convert_models.py。torch 用 CPU 版即可，安装命令见 docs/engine/模型目录约定.md。
 convert = [

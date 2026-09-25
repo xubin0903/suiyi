@@ -1,4 +1,4 @@
-"""命令行：``--version``，以及 ``translate``。"""
+"""命令行：``--version``、``translate`` 与 ``serve``。"""
 
 from __future__ import annotations
 
@@ -26,12 +26,46 @@ def main(argv: list[str] | None = None) -> int:
     )
     translate.add_argument("text", help="待翻译文本")
 
+    serve = subparsers.add_parser("serve", help="启动只监听本机回环的 HTTP 翻译服务")
+    serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="只接受 127.0.0.1、::1、localhost，默认 127.0.0.1",
+    )
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="端口，默认环境变量 SUIYI_PORT 或 18780",
+    )
+    serve.add_argument(
+        "--models-dir",
+        default=None,
+        help="模型目录，默认 SUIYI_MODELS_DIR 或仓库 models/",
+    )
+    serve.add_argument(
+        "--preload",
+        default="",
+        help="启动前预热的语向，逗号分隔，例如 zh-en,en-zh",
+    )
+    serve.add_argument(
+        "--max-text-chars",
+        type=int,
+        default=None,
+        help="单条文本字符上限，默认环境变量 SUIYI_MAX_TEXT_CHARS 或 10000",
+    )
+    serve.add_argument("--dev", action="store_true", help="开启 /docs 与 /openapi.json")
+
     args = parser.parse_args(argv)
     if args.version:
         print(__version__)
         return 0
     if args.command == "translate":
         return _cmd_translate(args)
+    if args.command == "serve":
+        from suiyi_engine.serve import serve_from_args
+
+        return serve_from_args(args)
     parser.print_help()
     return 0
 
