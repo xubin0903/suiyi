@@ -237,10 +237,24 @@ public sealed class PopupViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Preparing_AutoHides()
+    public void Preparing_DoesNotAutoHide()
+    {
+        // 「正在准备」由主流程在等待上限内换成结果或错误（#50），自己不消失，免得就绪后译文凭空弹出。
+        _popup.ShowPreparing();
+        Advance(60_000);
+
+        Assert.True(_popup.IsVisible);
+    }
+
+    [Fact]
+    public void AutoHide_CountsFromErrorAfterPreparing()
     {
         _popup.ShowPreparing();
-        Advance(8_000);
+        Advance(20_000);
+        _popup.ShowError(new PopupError(PopupErrorKind.EngineStartTimeout));
+        Advance(7_999);
+        Assert.True(_popup.IsVisible);
+        Advance(1);
 
         Assert.False(_popup.IsVisible);
     }

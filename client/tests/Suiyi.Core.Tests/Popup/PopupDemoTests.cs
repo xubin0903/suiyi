@@ -36,7 +36,7 @@ public sealed class PopupDemoTests
         Assert.Equal(PopupKind.Loading, kinds[1]);
         Assert.Contains(PopupKind.Result, kinds);
         Assert.Equal(
-            [PopupErrorKind.ServiceUnavailable, PopupErrorKind.Timeout, PopupErrorKind.MissingModels, PopupErrorKind.DetectFailed, PopupErrorKind.TextTooLong],
+            [PopupErrorKind.ServiceUnavailable, PopupErrorKind.EngineStartTimeout, PopupErrorKind.Timeout, PopupErrorKind.MissingModels, PopupErrorKind.DetectFailed, PopupErrorKind.TextTooLong],
             errors);
         Assert.Equal(new HashSet<string> { "中文", "English", "日本語" }, targets);
     }

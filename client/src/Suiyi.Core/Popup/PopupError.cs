@@ -22,6 +22,9 @@ public enum PopupErrorKind
 
     /// <summary>其他错误（服务内部错误、无效请求等）。</summary>
     Other,
+
+    /// <summary>等待翻译服务就绪超时（#50）。</summary>
+    EngineStartTimeout,
 }
 
 /// <summary>浮窗错误内容。</summary>
@@ -52,6 +55,7 @@ public sealed record PopupError(PopupErrorKind Kind)
         PopupErrorKind.TextTooLong => Limit is { } limit && Length is { } length
             ? string.Create(CultureInfo.InvariantCulture, $"文本过长：{length} 字，上限 {limit} 字")
             : "文本过长",
+        PopupErrorKind.EngineStartTimeout => "翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」",
         _ => string.IsNullOrWhiteSpace(Detail) ? "翻译失败，请重试" : Detail.Trim(),
     };
 

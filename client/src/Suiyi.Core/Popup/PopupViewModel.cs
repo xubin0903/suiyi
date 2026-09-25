@@ -329,7 +329,7 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
 
     private void RestartAutoHide()
     {
-        if (Options.AutoHideSeconds <= 0 || !IsVisible || IsPinned || IsHovered || Kind == PopupKind.Loading)
+        if (Options.AutoHideSeconds <= 0 || !IsVisible || IsPinned || IsHovered || Kind is PopupKind.Loading or PopupKind.Preparing)
         {
             _autoHideTimer.Stop();
             return;

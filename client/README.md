@@ -116,8 +116,8 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 **行为：**
 
 - **目标语言：** `TranslationService` 每次请求读取 `settings.primaryTarget` / `secondaryTarget`，检测到原文等于主目标时改译为次目标；托盘切换目标后下一次翻译即生效。
-- **服务未就绪**（`IEngineStatus.State` 为 Starting / Restarting / Stopped）：浮窗「正在准备翻译服务…」，5 s 内就绪自动继续；超时则丢弃请求、保留提示。服务 **Failed**：浮窗「翻译服务启动失败，可在托盘菜单「重启翻译服务」重试」。
-- **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，并按未就绪处理，恢复后自动重译；5 s 后服务仍自称就绪则报「翻译服务未运行或已退出」（可重试）。
+- **服务未就绪**（`IEngineStatus.State` 为 Starting / Restarting / Stopped）：浮窗「正在准备翻译服务…」（不自动消失）。只要浮窗没关，服务就绪后自动补译最后一次请求；新请求替换等待中的旧请求，用户关闭浮窗则取消。最多等 `TranslateFlowOptions.ReadyWaitTimeout`（默认 30 s），超时显示「翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」」，重试会重新等待 30 s。服务变为 **Failed** 时立即显示「翻译服务启动失败，可在托盘菜单「重启翻译服务」重试」。浮窗不会一直停在「正在准备」（#50）。
+- **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，并按未就绪处理，恢复后自动重译。同一请求的多次等待共用一个时限（从第一次等待算起），到时服务仍自称就绪则报「翻译服务未运行或已退出」，否则报启动超时（都可重试）。
 - **最新优先：** 新请求取消旧请求（`CancellationToken`），并用代次号丢弃旧请求晚到的结果或错误。用户关闭浮窗也会取消进行中的请求。
 - **暂停监听：** 忽略 `ClipboardTrigger.Monitor`，快捷键和托盘照常翻译。
 
@@ -131,6 +131,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `TextTooLong` | `TextTooLong`（带 `Limit` / `Length`，不可重试） |
 | `DetectFailed` | `DetectFailed`「无法识别原文语种，请点击语种标签手动指定」 |
 | `InvalidRequest` / `Internal` / `Unknown` / 其他异常 | `Other`，文案为 `EngineException.UserMessage` |
+| 等待服务就绪超时 | `EngineStartTimeout`「翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」」（可重试） |
 | 服务 Failed | `ServiceUnavailable`，文案 `PopupErrorMapper.EngineFailedMessage` |
 
 **端到端计时：** 从 `WM_CLIPBOARDUPDATE`（监听）或快捷键按下，到浮窗显示译文后 WPF 完成布局（`Dispatcher` 的 `Loaded` 优先级回调）。每次写一行日志，不含正文：
@@ -217,7 +218,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `PopupViewModel` | Core | 集成方调用 `ShowPreparing()`、`ShowLoading(sourceText)`、`ShowResult(PopupResult)`、`ShowError(PopupError)`、`ShowLast()`、`Close(reason)`；事件 `CopyTranslationRequested(Text)`、`RetryRequested`、`SourceLanguageOverride(Language)`、`Closed(Reason)`；窗口用 `Shown(Reposition)`、`PropertyChanged`、`TogglePin()`、`SetHovered()`、`RequestCopy()`、`RequestRetry()`、`RequestSourceOverride()` |
 | `PopupKind` | Core | `None` / `Preparing` / `Loading` / `Result` / `Error` |
 | `PopupResult` | Core | `Translation`、`Source`、`Target`、`SourceDetected`、`Elapsed` |
-| `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 `Flow/PopupErrorMapper` 映射 |
+| `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）、`EngineStartTimeout`（等服务就绪超时）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 `Flow/PopupErrorMapper` 映射 |
 | `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
 | `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
 | `PopupText` | Core | 语种标签（`中文 → English`、`English（自动） → 中文`）、耗时、原文摘要、按语种的字体回退链 |
@@ -228,7 +229,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 
 - **不抢焦点：** 未钉住时带 `WS_EX_NOACTIVATE`，`ShowActivated=false`。钉住后去掉该样式，可以激活窗口、选中文字、拖动标题栏。
 - **Loading：** 浮窗原本隐藏时，整个窗口在 300 ms 后才出现；结果先到就直接显示结果，不闪加载态。浮窗已显示时立即更新原文摘要，300 ms 后出现进度条。
-- **自动消失：** Preparing / Result / Error 显示后 8 s 消失（Loading 不计时）；悬停时暂停，移出后重新计满 8 s；钉住时不消失，取消钉住后重新计时；新内容会重新计时。
+- **自动消失：** Result / Error 显示后 8 s 消失（Preparing、Loading 不计时：它们由主流程在时限内换成结果或错误）；悬停时暂停，移出后重新计满 8 s；钉住时不消失，取消钉住后重新计时；新内容会重新计时。
 - **位置：** 每次新翻译（且未钉住）移到当前光标旁；钉住时原地更新内容。内容尺寸变化时按同一光标点重新夹紧。
 - **关闭：** 点 ×；Esc 在浮窗获得焦点时（钉住后）生效，未钉住时仅在鼠标悬停于浮窗上期间临时注册全局 Esc（移出即注销，不影响在原应用里按 Esc）。点击浮窗外不关闭。关闭会取消钉住，内容保留，托盘左键可重新显示。
 - **复制：** 发 `CopyTranslationRequested`，`App` 用 `ClipboardWriter.SetText` 写入（登记为自身写入，不触发监听），按钮显示「已复制」1 s。

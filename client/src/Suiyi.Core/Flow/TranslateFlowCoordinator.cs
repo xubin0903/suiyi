@@ -11,8 +11,8 @@ namespace Suiyi.Core.Flow;
 /// 主流程编排（#34）：捕获文本 → 翻译 → 浮窗。只能在 UI 线程上调用；后台回调经 <c>dispatch</c> 切回 UI 线程。
 /// <list type="bullet">
 /// <item>服务就绪：浮窗 Loading → <see cref="ITranslationService.TranslateAsync"/> → Result / Error。</item>
-/// <item>服务启动中 / 重启中：浮窗「正在准备翻译服务…」，在 <see cref="TranslateFlowOptions.ReadyWaitTimeout"/> 内就绪则自动继续；
-/// 服务已失败：浮窗提示可在托盘重启。</item>
+/// <item>服务启动中 / 重启中：浮窗「正在准备翻译服务…」，在 <see cref="TranslateFlowOptions.ReadyWaitTimeout"/>（默认 30 s）内就绪则自动补译最后一次请求；
+/// 超时显示「翻译服务启动超时」（可重试）；服务失败时立即提示可在托盘重启。浮窗不会一直停在「正在准备」。</item>
 /// <item>最新优先：新请求取消旧请求，旧请求的结果或错误一律丢弃。</item>
 /// <item>连接被拒（服务刚退出）：催监管器做健康检查，按「未就绪」处理，恢复后自动重译。</item>
 /// <item>暂停监听时忽略 <see cref="ClipboardTrigger.Monitor"/>，快捷键与托盘仍可翻译。</item>
@@ -186,7 +186,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
     {
         if (_last is { } last && !_disposed)
         {
-            Start(last with { Started = _timeProvider.GetTimestamp() });
+            Start(last with { Started = _timeProvider.GetTimestamp(), WaitSince = null });
         }
     }
 
@@ -195,7 +195,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
     {
         if (_last is { } last && !_disposed && TrayLanguages.IsSupported(language))
         {
-            Start(last with { SourceOverride = language.ToLowerInvariant(), Started = _timeProvider.GetTimestamp() });
+            Start(last with { SourceOverride = language.ToLowerInvariant(), Started = _timeProvider.GetTimestamp(), WaitSince = null });
         }
     }
 
@@ -239,29 +239,44 @@ public sealed class TranslateFlowCoordinator : IDisposable
         WaitForEngine(request);
     }
 
+    /// <summary>
+    /// 进入「等服务就绪」：浮窗显示「正在准备」，就绪后补译 <paramref name="request"/>。
+    /// 同一请求的多次等待（例如就绪后连接又被拒）共用一个时限，从第一次等待算起，保证在上限内进入结果或错误。
+    /// </summary>
     private void WaitForEngine(FlowRequest request)
     {
-        _pending = request;
+        var since = request.WaitSince ?? _timeProvider.GetTimestamp();
+        _pending = request with { WaitSince = since };
         _popup.ShowPreparing();
-        _readyWait.Start(Options.ReadyWaitTimeout, () =>
+        var remaining = Options.ReadyWaitTimeout - _timeProvider.GetElapsedTime(since);
+        if (remaining <= TimeSpan.Zero)
         {
-            if (_pending is null)
-            {
-                return;
-            }
+            OnReadyWaitTimeout();
+            return;
+        }
 
-            _pending = null;
-            if (_engine.State == EngineState.Ready)
-            {
-                // 连接被拒后服务仍报告就绪（没有发生重启）：按服务不可用报错，用户可重试。
-                _logger.Warn("翻译：服务报告就绪但连接失败，等待超时");
-                _popup.ShowError(new PopupError(PopupErrorKind.ServiceUnavailable));
-            }
-            else
-            {
-                _logger.Info("翻译：等待服务就绪超时，保持「正在准备」提示");
-            }
-        });
+        _readyWait.Start(remaining, OnReadyWaitTimeout);
+    }
+
+    private void OnReadyWaitTimeout()
+    {
+        if (_pending is null)
+        {
+            return;
+        }
+
+        _pending = null;
+        if (_engine.State == EngineState.Ready)
+        {
+            // 连接被拒后服务仍报告就绪（没有发生重启）：按服务不可用报错，用户可重试。
+            _logger.Warn("翻译：服务报告就绪但连接失败，等待超时");
+            _popup.ShowError(new PopupError(PopupErrorKind.ServiceUnavailable));
+        }
+        else
+        {
+            _logger.Warn($"翻译：等待服务就绪超时（{Options.ReadyWaitTimeout.TotalSeconds:0} 秒，服务状态 {_engine.State}）");
+            _popup.ShowError(new PopupError(PopupErrorKind.EngineStartTimeout));
+        }
     }
 
     private async Task RunAsync(FlowRequest request, bool waitedForEngine)
@@ -414,7 +429,12 @@ public sealed class TranslateFlowCoordinator : IDisposable
         }
     }
 
-    private sealed record FlowRequest(string Text, string? SourceOverride, ClipboardTrigger Trigger, long Started);
+    /// <param name="Text"></param>
+
+    /// <param name="SourceOverride"></param>
+    /// <param name="Trigger"></param>
+    /// <param name="Started"></param>    /// <param name="WaitSince">开始等服务就绪的时刻；<see langword="null"/> 表示还没等过。重试、改语种时重新计时。</param>
+    private sealed record FlowRequest(string Text, string? SourceOverride, ClipboardTrigger Trigger, long Started, long? WaitSince = null);
 }
 
 /// <summary><see cref="TranslateFlowCoordinator.Completed"/> 参数。</summary>

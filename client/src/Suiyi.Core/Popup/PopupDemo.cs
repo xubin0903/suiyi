@@ -18,6 +18,7 @@ public static class PopupDemo
         p => p.ShowResult(new PopupResult("随訳はパソコン上で動作する無料のオープンソース翻訳ツールです。", "zh", "ja") { SourceDetected = true, Elapsed = TimeSpan.FromMilliseconds(680) }),
         p => p.ShowResult(new PopupResult(string.Join("\n\n", Enumerable.Repeat("这是一段很长的译文，用来检查浮窗的最大宽度、自动换行和滚动条。长文本不应超出屏幕工作区的一半高度。", 12)), "en", "zh") { SourceDetected = true, Elapsed = TimeSpan.FromSeconds(2.4) }),
         p => p.ShowError(new PopupError(PopupErrorKind.ServiceUnavailable)),
+        p => p.ShowError(new PopupError(PopupErrorKind.EngineStartTimeout)),
         p => p.ShowError(new PopupError(PopupErrorKind.Timeout)),
         p => p.ShowError(new PopupError(PopupErrorKind.MissingModels) { MissingModels = ["opus-mt-en-zh", "opus-mt-ja-en"] }),
         p => p.ShowError(new PopupError(PopupErrorKind.DetectFailed)),
