@@ -15,7 +15,7 @@
 | 检测缩放 | 截图场景用 `Det.limit_type=max`、`Det.limit_side_len=960`（默认 `min`/736 会把小选区放大，见下文） |
 | 许可证 | RapidOCR 代码、全部候选模型均为 **Apache-2.0**，可默认分发。没有「不可默认分发」的候选 |
 | 离线 | det/cls/rec 各传本地 `model_path`，RapidOCR 不会进入下载分支；缺文件时我们先报缺失的模型 id，不联网 |
-| 依赖 | 不含 torch / paddlepaddle / transformers（已测，Linux；Windows 由 CI 审计步骤覆盖） |
+| 依赖 | 不含 torch / paddlepaddle / transformers（已测：Linux 本机，Windows x64 与 Linux 的 CI 干净 venv） |
 | 放置 | `<models_dir>/ocr/`，见 [模型目录约定](模型目录约定.md#ocr-模型目录51) |
 
 推荐组合与 rapidocr 3.9.2 的默认模型是同一组文件（wheel 里自带同样三个 ONNX，sha256 一致），上游默认、社区使用最多，升级路径清楚。
@@ -113,7 +113,25 @@ numpy                  2.4.6    protobuf        7.36.2    tqdm       4.70.1
 
 与引擎一起装（`pip install "engine[ocr]"`）是 39 个包，约 574 MB，其中 ctranslate2 占 133 MB。`python scripts/download_ocr_models.py audit` 会列出当前环境的包与体积，并在出现 torch / paddle / transformers 时返回非零。
 
-**Windows x64**：CI 的 engine 矩阵新增「OCR 依赖审计」步骤，在 windows-latest 与 ubuntu-latest 的干净 venv 里安装 `engine[ocr]`，打印 `pip list`，执行 `audit`、`check` 与禁网 `smoke`，截录见 PR。所有依赖在 PyPI 上都有 cp311 `win_amd64` 或 `py3-none-any` wheel（已核对 PyPI）。注意 numpy 2.5 起要求 Python ≥ 3.12，Python 3.11 下 pip 会解析到 numpy 2.4.x（有 cp311 wheel）。
+**Windows x64（已测，CI windows-latest，Python 3.11，干净 venv 安装 `engine[ocr]`）**：CI 的 engine 矩阵新增「OCR 依赖审计」步骤，在 windows-latest 与 ubuntu-latest 上各跑一次。它打印 `pip list`，执行 `audit`、`check` 和禁网 `smoke`，模型用 rapidocr wheel 自带的三个 ONNX，不走网络。首次通过的结果（PR #65 的 CI）：
+
+```
+annotated-doc 0.0.5, annotated-types 0.8.0, antlr4-python3-runtime 4.9.3, anyio 4.15.1, certifi 2026.7.22,
+charset-normalizer 3.5.1, click 8.5.0, colorama 0.4.6, colorlog 6.12.0, ctranslate2 4.8.2, fastapi 0.141.1,
+flatbuffers 25.12.19, h11 0.16.0, idna 3.20, numpy 2.4.6, omegaconf 2.3.1, onnxruntime 1.30.0,
+opencv-python 5.0.0.93, packaging 26.3, pillow 12.3.0, pip 26.2.1, protobuf 7.36.2, py3langid 0.4.0,
+pyclipper 1.4.0, pydantic 2.13.5, pydantic_core 2.46.5, PyYAML 6.0.3, rapidocr 3.9.2, requests 2.34.2,
+sentencepiece 0.2.2, setuptools 65.5.0, shapely 2.1.2, six 1.17.0, starlette 1.7.0, suiyi-engine 0.0.1,
+tqdm 4.70.1, typing_extensions 4.16.0, typing-inspection 0.4.4, urllib3 2.8.0, uvicorn 0.54.0
+合计 40 个包，376.1 MB（opencv-python 112.6 MB、numpy 53.5 MB、onnxruntime 44.3 MB、rapidocr 31.7 MB）
+未发现 torch / paddlepaddle / paddleocr / transformers
+正常  PP-OCRv6_det_small / ch_ppocr_mobile_v2.0_cls_mobile / PP-OCRv6_rec_small
+模型目录：D:\a\_temp\ocr-models\ocr
+加载 356 ms，识别 80 ms，1 行
+  [1.00] Suiyi offline OCR 2026
+```
+
+所有依赖在 PyPI 上都有 cp311 `win_amd64` 或 `py3-none-any` wheel。注意 numpy 2.5 起要求 Python ≥ 3.12，Python 3.11 下 pip 会解析到 numpy 2.4.x。Windows runner 的管道默认 cp1252，脚本输出中文需要 `PYTHONUTF8=1`（CI 已设；交互式 PowerShell 控制台不受影响，推测）。
 
 ### opencv-python 能否换成 headless
 
