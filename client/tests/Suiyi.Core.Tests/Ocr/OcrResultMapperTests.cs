@@ -200,6 +200,16 @@ public sealed class OcrResultMapperTests
     }
 
     [Fact]
+    public void Error_OcrUnavailable_ReadsReason()
+    {
+        var error = OcrResultMapper.MapError(OcrErrorCodes.OcrUnavailable, Json("""{ "reason": "models_invalid", "missing_models": [] }"""));
+
+        Assert.Equal("models_invalid", error.OcrReason);
+        Assert.Equal("OCR 模型文件不完整或已损坏", error.Message);
+        Assert.Null(OcrResultMapper.MapError(OcrErrorCodes.OcrUnavailable, Json("""{ "reason": 3 }""")).OcrReason);
+    }
+
+    [Fact]
     public void Error_OcrUnavailable_WithModels()
     {
         var error = OcrResultMapper.MapError(OcrErrorCodes.OcrUnavailable, Json("""{ "missing_models": ["det", "rec", 3] }"""));

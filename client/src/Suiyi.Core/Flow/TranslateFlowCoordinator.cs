@@ -565,7 +565,7 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
             return;
         }
 
-        ShowError(request, PopupErrorMapper.Map(ex));
+        ShowError(request, PopupErrorMapper.Map(ex, request is OcrRequest ? _ocr?.KnownOcrError : null));
     }
 
     private void LogFailure(FlowRequest request, EngineException ex)
@@ -591,6 +591,14 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         if (e.State is EngineState.Ready or EngineState.Failed or EngineState.Stopped)
         {
             _restartRequested = false;
+        }
+
+        if (e.State == EngineState.Ready && !_disposed && _ocr?.KnownOcrError is { } ocrError)
+        {
+            // 开启 engine.preloadOcr 时服务启动即尝试加载 OCR：缺模型在第一次框选前就能在日志里看到。只记原因与模型 id。
+            _logger.Warn(string.Create(
+                CultureInfo.InvariantCulture,
+                $"框选翻译：OCR 不可用 reason={ocrError.Reason ?? "-"} missing={(ocrError.MissingModels.Count > 0 ? string.Join(",", ocrError.MissingModels) : "-")}，框选时浮窗会提示下载命令"));
         }
 
         if (_disposed || _pending is not { } pending)

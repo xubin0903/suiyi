@@ -30,6 +30,21 @@ public sealed partial class EngineClient
         }
     }
 
+    /// <summary>
+    /// 客户端所知的 OCR 不可用原因：最近一次 <c>/health</c> 的 <c>ocr_error</c>；之后成功识别过、或 <see cref="Invalidate"/> 后为 <see langword="null"/>。
+    /// 开启 <c>--preload-ocr</c>（设置 <c>engine.preloadOcr</c>）时，服务启动就会尝试加载，缺模型在第一次框选前就能从这里知道。
+    /// </summary>
+    public OcrHealthError? KnownOcrError
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _ocrError;
+            }
+        }
+    }
+
     /// <summary>计算本次 <c>/ocr_translate</c> 将使用的超时（<see cref="TimeoutPolicy.ComputeOcrTranslateMilliseconds"/>），基于当前缓存，不发请求。</summary>
     /// <param name="source">原文语种或 <c>"auto"</c>。</param>
     /// <param name="target">目标语种。</param>
@@ -87,6 +102,7 @@ public sealed partial class EngineClient
         lock (_gate)
         {
             _ocrLoaded = true;
+            _ocrError = null; // 与服务端一致：加载成功后清空。
             foreach (var result in response.Translation?.Results ?? [])
             {
                 if (result?.Route is { Count: > 0 } route)
@@ -119,6 +135,7 @@ public sealed partial class EngineClient
         lock (_gate)
         {
             _ocrLoaded = true;
+            _ocrError = null; // 与服务端一致：加载成功后清空。
         }
 
         return response;

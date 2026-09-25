@@ -49,6 +49,12 @@ public sealed record PopupError(PopupErrorKind Kind)
     /// <summary>实际字符数（<see cref="PopupErrorKind.TextTooLong"/>）。</summary>
     public int? Length { get; init; }
 
+    /// <summary>
+    /// OCR 不可用的原因（<see cref="PopupErrorKind.OcrUnavailable"/>）：503 <c>details.reason</c>，没有时取 <c>/health.ocr_error.reason</c>。
+    /// 取值见 <see cref="OcrUnavailableReasons"/>；未知或为空时按模型缺失处理。
+    /// </summary>
+    public string? OcrReason { get; init; }
+
     /// <summary>补充说明（<see cref="PopupErrorKind.Other"/>、<see cref="PopupErrorKind.ServiceUnavailable"/> 时代替默认文案）。</summary>
     public string? Detail { get; init; }
 
@@ -67,12 +73,47 @@ public sealed record PopupError(PopupErrorKind Kind)
         PopupErrorKind.EngineStartTimeout => "翻译服务启动超时，点「重试」会重启翻译服务",
         PopupErrorKind.ImageTooLarge => "选区过大，请缩小选区后重新框选",
         PopupErrorKind.InvalidImage => "截图无法识别，请重新框选",
-        PopupErrorKind.OcrUnavailable => MissingModels.Count > 0
-            ? "OCR 模型未安装：" + string.Join("、", MissingModels)
-            : "OCR 模型未安装",
+        PopupErrorKind.OcrUnavailable => OcrReason switch
+        {
+            OcrUnavailableReasons.DependencyMissing => "OCR 组件未安装",
+            OcrUnavailableReasons.ModelsInvalid => "OCR 模型文件不完整或已损坏",
+            OcrUnavailableReasons.ManifestUnavailable => "OCR 模型清单不可用",
+            _ => MissingModels.Count > 0 ? "OCR 模型未安装：" + string.Join("、", MissingModels) : "OCR 模型未安装",
+        },
         _ => string.IsNullOrWhiteSpace(Detail) ? "翻译失败，请重试" : Detail.Trim(),
+    };
+
+    /// <summary>
+    /// 第二行：告诉用户怎么修（目前只有 <see cref="PopupErrorKind.OcrUnavailable"/>：下载模型或安装 OCR 依赖的命令）。没有时为 <see langword="null"/>。
+    /// </summary>
+    public string? Hint => Kind switch
+    {
+        PopupErrorKind.OcrUnavailable => OcrReason switch
+        {
+            OcrUnavailableReasons.DependencyMissing => $"请在随译仓库根目录运行 {PopupText.OcrInstallCommand}，然后在托盘点「重启翻译服务」",
+            OcrUnavailableReasons.ManifestUnavailable => "请更新随译源码（git pull）后重启随译，详情见日志",
+            OcrUnavailableReasons.ModelsInvalid => $"请在随译仓库根目录运行 {PopupText.OcrDownloadCommand} 重新下载，完成后点「重试」",
+            _ => $"请在随译仓库根目录运行 {PopupText.OcrDownloadCommand} 下载，完成后点「重试」",
+        },
+        _ => null,
     };
 
     /// <summary>是否显示「重试」。文本过长、选区过大重试也不会成功，不显示。</summary>
     public bool CanRetry => Kind is not (PopupErrorKind.TextTooLong or PopupErrorKind.ImageTooLarge);
+}
+
+/// <summary><c>ocr_unavailable</c> 的 <c>details.reason</c> / <c>/health.ocr_error.reason</c>（docs/engine/HTTP-API.md）。</summary>
+public static class OcrUnavailableReasons
+{
+    /// <summary>没装 <c>engine[ocr]</c>。</summary>
+    public const string DependencyMissing = "dependency_missing";
+
+    /// <summary>缺 OCR 模型文件。</summary>
+    public const string ModelsMissing = "models_missing";
+
+    /// <summary>模型文件字节数或 sha256 不符。</summary>
+    public const string ModelsInvalid = "models_invalid";
+
+    /// <summary>OCR 模型清单读不到。</summary>
+    public const string ManifestUnavailable = "manifest_unavailable";
 }

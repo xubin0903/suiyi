@@ -30,11 +30,37 @@ public sealed record HealthResponse
     public double UptimeSeconds { get; init; }
 
     /// <summary>
-    /// OCR 模型是否已加载（⚠ #53 草案新增字段）。旧版引擎没有该字段时为 <see langword="null"/>。
-    /// 只表示是否已预热，不表示 OCR 可用：模型缺失要到 <c>/ocr_translate</c> 返回 <c>ocr_unavailable</c> 才知道。
+    /// OCR 模型是否已加载（#53）。旧版引擎没有该字段时为 <see langword="null"/>。
+    /// 只表示是否已加载，不表示 OCR 可用；加载失败的原因见 <see cref="OcrError"/>。
     /// </summary>
     [JsonPropertyName("ocr_loaded")]
     public bool? OcrLoaded { get; init; }
+
+    /// <summary>
+    /// 最近一次加载 OCR 失败的原因（#53）：形状同 503 <c>ocr_unavailable</c> 的 <c>details</c> 再加 <c>message</c>。
+    /// 没有失败、还没尝试加载（未加 <c>--preload-ocr</c> 且没有 OCR 请求）或旧版引擎时为 <see langword="null"/>；加载成功后服务端清空。
+    /// </summary>
+    [JsonPropertyName("ocr_error")]
+    public OcrHealthError? OcrError { get; init; }
+}
+
+/// <summary><c>/health.ocr_error</c>：OCR 不可用的原因。</summary>
+public sealed record OcrHealthError
+{
+    /// <summary>
+    /// 原因：<c>dependency_missing</c>（没装 <c>engine[ocr]</c>）、<c>models_missing</c>、<c>models_invalid</c>、<c>manifest_unavailable</c>；
+    /// 以后可能新增，未知值按模型问题处理。
+    /// </summary>
+    [JsonPropertyName("reason")]
+    public string? Reason { get; init; }
+
+    /// <summary>缺失的 OCR 模型 id（可能为空）。</summary>
+    [JsonPropertyName("missing_models")]
+    public IReadOnlyList<string> MissingModels { get; init; } = [];
+
+    /// <summary>服务端的说明（含服务端路径与命令写法，只写日志，不直接显示）。</summary>
+    [JsonPropertyName("message")]
+    public string? Message { get; init; }
 }
 
 /// <summary><c>GET /languages</c> 的响应：当前模型目录实际能翻译的语向。</summary>

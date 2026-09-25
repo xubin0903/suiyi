@@ -62,6 +62,31 @@ public sealed class PopupErrorTests
         Assert.Equal("翻译服务未运行或已退出，点「重试」会重启翻译服务", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " " }.Message);
     }
 
+    [Theory]
+    [InlineData(null, "OCR 模型未安装：det", @"请在随译仓库根目录运行 python scripts\download_ocr_models.py download 下载，完成后点「重试」")]
+    [InlineData("models_missing", "OCR 模型未安装：det", @"请在随译仓库根目录运行 python scripts\download_ocr_models.py download 下载，完成后点「重试」")]
+    [InlineData("future_reason", "OCR 模型未安装：det", @"请在随译仓库根目录运行 python scripts\download_ocr_models.py download 下载，完成后点「重试」")]
+    [InlineData("models_invalid", "OCR 模型文件不完整或已损坏", @"请在随译仓库根目录运行 python scripts\download_ocr_models.py download 重新下载，完成后点「重试」")]
+    [InlineData("dependency_missing", "OCR 组件未安装", "请在随译仓库根目录运行 pip install -e \"engine[ocr]\"，然后在托盘点「重启翻译服务」")]
+    [InlineData("manifest_unavailable", "OCR 模型清单不可用", "请更新随译源码（git pull）后重启随译，详情见日志")]
+    public void OcrUnavailable_MessageAndHintByReason(string? reason, string message, string hint)
+    {
+        var error = new PopupError(PopupErrorKind.OcrUnavailable) { MissingModels = ["det"], OcrReason = reason };
+
+        Assert.Equal(message, error.Message);
+        Assert.Equal(hint, error.Hint);
+        Assert.True(error.CanRetry);
+    }
+
+    [Theory]
+    [InlineData(PopupErrorKind.Timeout)]
+    [InlineData(PopupErrorKind.MissingModels)]
+    [InlineData(PopupErrorKind.ImageTooLarge)]
+    public void NonOcrUnavailable_HasNoHint(PopupErrorKind kind)
+    {
+        Assert.Null(new PopupError(kind).Hint);
+    }
+
     [Fact]
     public void OcrUnavailable_ListsModels()
     {

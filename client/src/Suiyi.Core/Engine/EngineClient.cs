@@ -41,6 +41,7 @@ public sealed partial class EngineClient : IDisposable
     private LanguagesResponse? _languages;
     private HashSet<string>? _loadedModels;
     private bool? _ocrLoaded;
+    private OcrHealthError? _ocrError;
 
     /// <summary>连接 <c>http://127.0.0.1:{port}</c>。</summary>
     /// <param name="port">服务端口，默认 <see cref="DefaultPort"/>。</param>
@@ -110,6 +111,7 @@ public sealed partial class EngineClient : IDisposable
         {
             _loadedModels = new HashSet<string>(health.LoadedModels, StringComparer.Ordinal);
             _ocrLoaded = health.OcrLoaded;
+            _ocrError = health.OcrError;
         }
 
         return health;
@@ -144,6 +146,7 @@ public sealed partial class EngineClient : IDisposable
             _languages = null;
             _loadedModels = null;
             _ocrLoaded = null;
+            _ocrError = null;
         }
     }
 

@@ -167,7 +167,53 @@ public sealed class RegionTranslateFlowTests : IDisposable
         await SelectAsync();
         _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable", MissingModels = ["PP-OCRv6_det_small"] });
 
-        Assert.Equal("OCR 模型未安装：PP-OCRv6_det_small", _popup.ErrorMessage);
+        Assert.StartsWith("OCR 模型未安装：PP-OCRv6_det_small\n", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(@"python scripts\download_ocr_models.py download", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.True(_popup.CanRetry);
+    }
+
+    [Fact]
+    public async Task OcrUnavailable_WithoutDetails_UsesHealthOcrError()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "models_missing", MissingModels = ["PP-OCRv6_rec_small"], Message = "服务端说明" };
+        await SelectAsync();
+        _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable" });
+
+        Assert.StartsWith("OCR 模型未安装：PP-OCRv6_rec_small\n请在随译仓库根目录运行", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("服务端说明", _popup.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OcrUnavailable_DependencyMissing_ShowsPipInstall()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "dependency_missing" };
+        await SelectAsync();
+        _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable" });
+
+        Assert.Equal("OCR 组件未安装\n请在随译仓库根目录运行 pip install -e \"engine[ocr]\"，然后在托盘点「重启翻译服务」", _popup.ErrorMessage);
+    }
+
+    [Fact]
+    public void EngineReady_WithHealthOcrError_LogsReasonOnly()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "models_missing", MissingModels = ["PP-OCRv6_det_small"], Message = "目录 /secret/path" };
+
+        _engine.Raise(EngineState.Ready);
+
+        var line = Assert.Single(_logger.Messages, m => m.Contains("OCR 不可用", StringComparison.Ordinal));
+        Assert.Contains("reason=models_missing", line, StringComparison.Ordinal);
+        Assert.Contains("PP-OCRv6_det_small", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("/secret/path", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TextRequestFailure_IgnoresHealthOcrError()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "models_missing" };
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, Error(EngineErrorKind.Timeout));
+
+        Assert.Equal("翻译超时，请重试", _popup.ErrorMessage);
     }
 
     [Fact]

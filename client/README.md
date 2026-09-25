@@ -183,7 +183,8 @@ TranslateRegionAsync(trigger)
 - **关闭浮窗即取消**进行中或等待服务的框选请求。
 - **暂停监听不影响框选**（Issue 要求）。
 - **目标语言：** 与复制翻译一样读 `primaryTarget` / `secondaryTarget`，识别出的主要语种等于主目标时由 `OcrTranslationService` 改译为次目标。
-- **错误：** OCR 错误码经 `PopupErrorMapper` → `OcrResultMapper.MapError`：`image_too_large`「选区过大…」（不可重试）、`invalid_image` / `unsupported_media_type`「截图无法识别，请重新框选」、`ocr_unavailable`「OCR 模型未安装：…」（可重试，不触发重启）；`Unavailable` / 超时 / 服务 Failed 与复制翻译一致（催健康检查、30 s 就绪等待、重试重启）。
+- **错误：** OCR 错误码经 `PopupErrorMapper` → `OcrResultMapper.MapError`：`image_too_large`「选区过大…」（不可重试）、`invalid_image` / `unsupported_media_type`「截图无法识别，请重新框选」、`ocr_unavailable`「OCR 模型未安装：…」+ 第二行修复方法（可重试，不触发重启，见下）；`Unavailable` / 超时 / 服务 Failed 与复制翻译一致（催健康检查、30 s 就绪等待、重试重启）。
+- **OCR 不可用（`ocr_unavailable`）与 `/health.ocr_error`：** 原因取 503 `details.reason`，缺时取最近一次 `/health.ocr_error.reason`（`EngineClient.KnownOcrError`，由监管器就绪探测与看门狗的 `/health` 刷新，成功识别或 `Invalidate()` 后清空；缺失模型列表同理补齐）。浮窗第一行说明问题、第二行（`PopupError.Hint`）给命令：`models_missing` / 未知原因「OCR 模型未安装：…」+「请在随译仓库根目录运行 `python scripts\download_ocr_models.py download` 下载，完成后点「重试」」（服务端不缓存失败，补齐模型后重试即可，不用重启）；`models_invalid`「OCR 模型文件不完整或已损坏」+ 同一条命令重新下载（脚本会重下校验不过的文件）；`dependency_missing`「OCR 组件未安装」+「运行 `pip install -e "engine[ocr]"`，然后在托盘点「重启翻译服务」」；`manifest_unavailable`「OCR 模型清单不可用」+「请更新随译源码（git pull）后重启随译」。服务端 `message` 含服务端路径，只写日志不显示。服务就绪时若 `ocr_error` 非空，编排器写一行 Warning（只记 `reason` 与模型 id）。复制翻译的错误不受 `ocr_error` 影响。
 - **未翻译段落：** 服务某段 `translation` 为空时用原文代替，`PopupOcrResult.UntranslatedParagraphs` 记下标，浮窗译文下方显示灰色小字「第 2、3 段未能翻译，显示为原文」（全部未翻译时「未能翻译，以上为识别出的原文」），复制内容不含提示。
 - **隐私：** 日志不记识别出的原文和译文，也不记服务端错误说明；只记尺寸、字节数、段落数、语种、耗时、错误类别。
 
@@ -227,7 +228,7 @@ TranslateRegionAsync(trigger)
     "args": null,
     "modelsDir": null,
     "preload": "zh-en,en-zh",
-    "preloadOcr": false
+    "preloadOcr": true
   },
   "startWithWindows": false
 }
@@ -250,7 +251,7 @@ TranslateRegionAsync(trigger)
 | `engine.command` / `engine.args` | `null` | 高级：直接指定服务可执行文件与参数数组（为 M4 打包 exe 预留） |
 | `engine.modelsDir` | `null` | 不填则不传 `--models-dir` |
 | `engine.preload` | `"zh-en,en-zh"` | `""` 表示不预加载 |
-| `engine.preloadOcr` | `false` | 启动时预热 OCR 模型（#58），`true` 时追加 `--preload-ocr`（#53 草案）；环境变量 `SUIYI_ENGINE_PRELOAD_OCR=1/0` 可覆盖。**暂时默认关闭**：当前服务还不认这个参数，打开会导致启动失败；#53 定稿、服务支持后改为默认开启。关闭时首次框选多一次 OCR 冷加载（超时按 `TimeoutPolicy` 放宽到 30 s） |
+| `engine.preloadOcr` | `true` | 启动时预热 OCR 模型（#58），`true` 时追加 `--preload-ocr`（#53）；环境变量 `SUIYI_ENGINE_PRELOAD_OCR=1/0` 可覆盖。缺 OCR 依赖或模型时服务只告警、照常启动，文本翻译不受影响，`/health.ocr_error` 带上原因（见[框选翻译](#框选翻译)的错误说明）。关掉可省内存（OCR 模型加载后服务内存增加，见 #54），代价是首次框选多一次 OCR 冷加载（超时按 `TimeoutPolicy` 放宽到 30 s） |
 | `startWithWindows` | `false` | 预留，M2 不实现 |
 
 **读取规则：**
@@ -279,8 +280,8 @@ TranslateRegionAsync(trigger)
 | `PopupResult` | Core | `Translation`、`Source`、`Target`、`SourceDetected`、`Elapsed` |
 | `PopupOcrResult` | Core | 框选翻译结果（#57）：`SourceParagraphs` / `TranslationParagraphs`（一一对应）、`Source`、`Target`、`SourceDetected`、`Elapsed`；`SourceText` / `TranslationText`（段落间空一行）、`IsEmpty`、`Empty(target)` |
 | `PopupPlacement.CalculateAroundRect` | Core | 以选区为锚点：右下外侧 → 下方 → 上方 → 左侧 → 都放不下时压住选区（下 / 上空间大的一侧），最后夹紧到工作区；返回位置与 `RectPlacementSide` |
-| `OcrDraftContract` / `OcrTranslateResponse` / `OcrErrorCodes` | Core（`Ocr/`） | ⚠ 按 #53 **草案**的 `/ocr_translate` 响应 DTO、错误码与解析 |
-| `Flow/OcrResultMapper` | Core | 草案响应 → `PopupOcrResult`、草案错误码 → `PopupError`。与上一行、`Engine/EngineClient.Ocr.cs`、`HealthResponse.OcrLoaded` 是客户端里依赖草案的全部地方（见「OCR 调用」），#53 定稿后同步 |
+| `OcrDraftContract` / `OcrTranslateResponse` / `OcrErrorCodes` | Core（`Ocr/`） | 按 #53 草案实现、已与定稿核对一致的 `/ocr_translate` 响应 DTO、错误码与解析 |
+| `Flow/OcrResultMapper` | Core | 草案响应 → `PopupOcrResult`、草案错误码 → `PopupError`。与上一行、`Engine/EngineClient.Ocr.cs`、`HealthResponse.OcrLoaded` 是客户端里依赖草案的全部地方（见「OCR 调用」），接口变化时同步改这几处 |
 | `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）、`EngineStartTimeout`（等服务就绪超时）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 `Flow/PopupErrorMapper` 映射 |
 | `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
 | `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
@@ -451,9 +452,10 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
   - 结果 `TranslationOutcome`：译文、原文语种、是否自动检测、实际目标、是否改译、`route`、服务端 `elapsed_ms`（改译为两次之和）、客户端往返耗时、请求次数。
   - 不自动重试，重试由界面决定。
 
-### OCR 调用（#56，⚠ 按 #53 草案）
+### OCR 调用（#56，#53）
 
-`docs/engine/HTTP-API.md` 的 OCR 部分尚未定稿，客户端按 Issue #53 草案实现。依赖草案的代码集中在：`Ocr/OcrDraftContract.cs`（DTO、错误码、路径/参数名、上限常量）、`Engine/EngineClient.Ocr.cs`（请求构造、错误映射、预检）、`Flow/OcrResultMapper.cs`（→ 浮窗），外加 `HealthResponse.OcrLoaded` 一个字段。定稿后只改这几处。
+客户端最初按 Issue #53 草案实现，#53（PR #69）合入后的 `docs/engine/HTTP-API.md` 与草案的路径、参数、请求体、响应字段和错误码一致。相关代码集中在：`Ocr/OcrDraftContract.cs`（DTO、错误码、路径/参数名、上限常量）、`Engine/EngineClient.Ocr.cs`（请求构造、错误映射、预检）、`Flow/OcrResultMapper.cs`（→ 浮窗），外加 `HealthResponse.OcrLoaded`、`HealthResponse.OcrError`（`OcrHealthError`：`reason`、`missing_models`、`message`）两个字段。
+- **`EngineClient.KnownOcrError`**：最近一次 `/health.ocr_error`；成功识别或 `Invalidate()` 后为 `null`。`IOcrTranslationService.KnownOcrError` 转发它（默认接口实现返回 `null`），编排器用它补全 `ocr_unavailable` 的原因。
 
 - **`EngineClient.OcrTranslateAsync(png, source, target, fallbackTarget, ct)`** → `POST /ocr_translate?source=…&target=…[&fallback_target=…]`，请求体为**原始 PNG 字节**，`Content-Type: image/png`（草案不用 multipart / base64）。`fallbackTarget` 为空或与 `target` 同语种时不发。成功后记 OCR 已加载、各段 `route` 模型已加载。识别为空是正常结果（`paragraphs: []`）。
 - **`EngineClient.OcrAsync(png, lang = "auto", ct)`** → `POST /ocr?lang=…`，只识别。
@@ -495,7 +497,7 @@ OCR 请求（暂无 OCR 性能基线，等 #52 后按 P95 调整）：
 | `ImageTooLarge` | 413 `image_too_large`（带 `Limit`=`details.limit`、`Length`=`details.actual`），或客户端预检拦截（`IsClientPrecheck`） | 选区过大，请缩小后重试 |
 | `UnsupportedMediaType` | 415 `unsupported_media_type` | 截图格式不受支持 |
 | `InvalidImage` | 422 `invalid_image` | 截图无法解码 |
-| `OcrUnavailable` | 503 `ocr_unavailable`，带 `MissingModels` | OCR 模型未安装：ppocr-det（无列表时：OCR 模型未安装） |
+| `OcrUnavailable` | 503 `ocr_unavailable`，带 `MissingModels`（`details.reason` 由 `OcrResultMapper` 读取） | OCR 模型未安装：ppocr-det（无列表时：OCR 模型未安装）；浮窗另加修复命令，见[框选翻译](#框选翻译) |
 | `InvalidRequest` | `invalid_request` | 翻译请求无效 |
 | `Internal` | `internal_error`，或 5xx 且正文不是错误信封 / 错误码未知 | 翻译服务内部错误 |
 | `Unknown` | 框架 404 等非信封 4xx、未知 4xx 错误码、200 但 JSON 无法解析 | 翻译服务返回了无法识别的响应 |

@@ -319,7 +319,7 @@ public sealed class PopupOcrViewModelTests : IDisposable
         _popup.RequestRetry();
 
         Assert.Equal(1, retries);
-        Assert.Equal("OCR 模型未安装：det", _popup.ErrorMessage);
+        Assert.Equal("OCR 模型未安装：det\n请在随译仓库根目录运行 python scripts\\download_ocr_models.py download 下载，完成后点「重试」", _popup.ErrorMessage);
     }
 
     [Fact]

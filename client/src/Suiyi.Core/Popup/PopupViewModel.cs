@@ -122,7 +122,12 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>错误提示（Error）。</summary>
-    public string ErrorMessage => _error?.Message ?? string.Empty;
+    public string ErrorMessage => _error switch
+    {
+        null => string.Empty,
+        { Hint: { } hint } => _error.Message + "\n" + hint,
+        _ => _error.Message,
+    };
 
     /// <summary>是否显示「重试」：错误可重试，且集成方对当前 <see cref="Mode"/> 有可重发的请求（见 <see cref="SetRetryAvailability"/>）。</summary>
     public bool CanRetry =>

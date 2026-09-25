@@ -59,6 +59,8 @@ internal sealed class FakeOcrService : IOcrTranslationService
 
     public void CancelCurrent() => CancelCurrentCount++;
 
+    public OcrHealthError? KnownOcrError { get; set; }
+
     public void Complete(int index, string json = TwoParagraphs, string target = "en") =>
         FakeTranslationService.Inline(() => _calls[index].Completion.SetResult(new OcrTranslationOutcome
         {

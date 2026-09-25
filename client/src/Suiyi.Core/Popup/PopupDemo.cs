@@ -110,7 +110,7 @@ public static class PopupDemo
         p =>
         {
             p.ShowOcrLoading(DemoSelection);
-            p.ShowError(OcrResultMapper.MapError(OcrErrorCodes.OcrUnavailable, Details("""{ "missing_models": ["ch_PP-OCRv4_det", "ch_PP-OCRv4_rec"] }""")));
+            p.ShowError(OcrResultMapper.MapError(OcrErrorCodes.OcrUnavailable, Details("""{ "reason": "models_missing", "missing_models": ["PP-OCRv6_det_small", "PP-OCRv6_rec_small"] }""")));
         },
     ];
 

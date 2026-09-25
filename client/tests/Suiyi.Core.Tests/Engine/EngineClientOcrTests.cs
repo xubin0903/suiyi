@@ -336,6 +336,54 @@ public sealed class EngineClientOcrTests : IDisposable
         Assert.Null(_client.KnownOcrLoaded);
     }
 
+    private const string OcrMissingHealth = """
+        {"status":"ok","version":"0.0.2","models_dir":"/m","uptime_s":1.0,"loaded_models":[],"ocr_loaded":false,
+         "ocr_error":{"message":"缺少 OCR 模型：PP-OCRv6_det_small（目录 /m/ocr）。请执行 python scripts/download_ocr_models.py download 下载 OCR 模型",
+                      "reason":"models_missing","missing_models":["PP-OCRv6_det_small"]}}
+        """;
+
+    [Fact]
+    public async Task KnownOcrError_ParsedFromHealth_ClearedByInvalidate()
+    {
+        _handler.Health = OcrMissingHealth;
+
+        var health = await _client.GetHealthAsync();
+
+        Assert.False(health.OcrLoaded);
+        Assert.Equal("models_missing", health.OcrError!.Reason);
+        Assert.Equal(["PP-OCRv6_det_small"], health.OcrError.MissingModels);
+        Assert.Contains("download_ocr_models.py", health.OcrError.Message, StringComparison.Ordinal);
+        Assert.Same(health.OcrError, _client.KnownOcrError);
+
+        _client.Invalidate();
+        Assert.Null(_client.KnownOcrError);
+    }
+
+    [Fact]
+    public async Task KnownOcrError_NullWhenHealthHasNoError_OrOldEngine()
+    {
+        _handler.Health = OcrLoadedHealth;
+        await _client.GetHealthAsync();
+        Assert.Null(_client.KnownOcrError);
+
+        _handler.Health = """{"status":"ok","version":"0.0.2","models_dir":"/m","uptime_s":1.0,"loaded_models":[],"ocr_loaded":false,"ocr_error":null}""";
+        await _client.GetHealthAsync();
+        Assert.Null(_client.KnownOcrError);
+    }
+
+    [Fact]
+    public async Task KnownOcrError_ClearedAfterSuccessfulOcr()
+    {
+        _handler.Health = OcrMissingHealth;
+        await _client.GetHealthAsync();
+        _handler.OcrTranslate = (_, _) => Respond(200, SampleResponse);
+
+        await _client.OcrTranslateAsync(TestPng.Header(320, 80, totalLength: 200), "auto", "zh", "en");
+
+        Assert.Null(_client.KnownOcrError);
+        Assert.True(_client.KnownOcrLoaded);
+    }
+
     // ---- 取消与连接失败 ----
 
     [Fact]
