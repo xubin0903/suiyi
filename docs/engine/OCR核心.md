@@ -31,6 +31,7 @@ result.to_dict()                          # {"lines", "paragraphs", "text", "ima
 - 一个进程共用一个 `OcrEngine`。模型只加载一次，并发的首次调用会等同一次加载（双重检查锁）。
 - 推理串行（一把锁）。onnxruntime 内部已经多线程（`intra_op_num_threads` 默认 `min(4, CPU 核数)`，可用 `threads=` 调整；`inter_op_num_threads=1`），并发推理不会更快，还会多占内存；串行也避开了 RapidOCR 前后处理里的共享状态。框选翻译一次一张图，排队的影响可以忽略。
 - 检测参数沿用 #51：`limit_type=max`、`limit_side_len=960`、`use_cls=false`。
+  #54 实测发现 RapidOCR 3.9 在 `limit_type=max` 时忽略 `limit_side_len`（按原图长边选 960/1500/2000），≤ 2000 px 的截图检测时不缩小；影响与调优实验见 [OCR 评测](OCR评测.md#内存与调优实验)。
 - `OcrResult.stats` 给出 `load_decode_ms` / `ocr_ms` / `layout_ms`。段落合并是纯 Python，几十行的截图在 1 ms 以内。
 
 ## 数据结构

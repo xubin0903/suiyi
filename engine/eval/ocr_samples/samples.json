@@ -1,0 +1,618 @@
+{
+  "schema_version": 1,
+  "samples": [
+    {
+      "id": "zh_ui_small_01",
+      "file": "images/zh_ui_small_01.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 10711,
+      "paragraphs": [
+        "文件  编辑  视图  插入  格式  工具  帮助",
+        "自动保存已开启，上次保存于下午 3:42",
+        "共 1,284 字，选中 36 字，语言：简体中文（中国）"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "12px 菜单与状态栏，三行各自一段，行距与正文相同"
+    },
+    {
+      "id": "zh_ui_small_02",
+      "file": "images/zh_ui_small_02.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 8853,
+      "paragraphs": [
+        "启动时自动运行",
+        "关闭窗口时最小化到托盘",
+        "检查更新（每周一次）",
+        "显示翻译耗时"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "12px 设置项列表"
+    },
+    {
+      "id": "zh_ui_small_03",
+      "file": "images/zh_ui_small_03.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 10510,
+      "paragraphs": [
+        "网络连接已断开，正在使用本地模型翻译。",
+        "确定",
+        "取消",
+        "提示：可以在设置中关闭此通知。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "对话框：正文、两个按钮、底部提示"
+    },
+    {
+      "id": "en_ui_small_01",
+      "file": "images/en_ui_small_01.png",
+      "lang": "en",
+      "category": "英文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 6595,
+      "paragraphs": [
+        "File  Edit  View  Insert  Format  Tools  Help",
+        "Autosave is on. Last saved at 3:42 PM",
+        "1,284 words, 36 selected, English (United States)"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "12px 菜单与状态栏"
+    },
+    {
+      "id": "ja_ui_small_01",
+      "file": "images/ja_ui_small_01.png",
+      "lang": "ja",
+      "category": "日文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 10850,
+      "paragraphs": [
+        "ファイル  編集  表示  挿入  書式  ツール  ヘルプ",
+        "自動保存がオンです。最終保存：午後 3:42",
+        "1,284 文字、36 文字を選択、日本語"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "12px 菜单与状态栏"
+    },
+    {
+      "id": "zh_dark_small_01",
+      "file": "images/zh_dark_small_01.png",
+      "lang": "zh",
+      "category": "低对比/深色主题",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 10047,
+      "paragraphs": [
+        "深色主题下的提示",
+        "当前网络不可用，已切换到本地模型。翻译质量不受影响。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "深灰底浅灰字，约 4:1"
+    },
+    {
+      "id": "en_dark_small_01",
+      "file": "images/en_dark_small_01.png",
+      "lang": "en",
+      "category": "低对比/深色主题",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 4507,
+      "paragraphs": [
+        "Offline mode: translations use the local model. Glossary sync resumes when the connection is back."
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "深色 UI，对比度约 3.8:1"
+    },
+    {
+      "id": "zh_lowcontrast_small_01",
+      "file": "images/zh_lowcontrast_small_01.png",
+      "lang": "zh",
+      "category": "低对比/深色主题",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 11846,
+      "paragraphs": [
+        "离线并不意味着慢。经过量化的小模型在普通笔记本上翻译一句话通常只需要几十毫秒，比等待网络往返还要快。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "浅灰底浅灰字，约 2.3:1（低于无障碍标准）"
+    },
+    {
+      "id": "zh_web_small_01",
+      "file": "images/zh_web_small_01.png",
+      "lang": "zh",
+      "category": "中文网页正文",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 15142,
+      "paragraphs": [
+        "如果选区里没有文字，浮窗会提示未识别到内容，而不是显示一段空白。识别结果和译文可以一起复制，方便粘贴到笔记里。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "小选区里的一段正文"
+    },
+    {
+      "id": "en_doc_small_01",
+      "file": "images/en_doc_small_01.png",
+      "lang": "en",
+      "category": "英文文档",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 7988,
+      "paragraphs": [
+        "Because nothing leaves the computer, the tool keeps working on a plane, in a hotel with unreliable Wi-Fi, or inside a company network that blocks cloud services."
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "mixed_small_01",
+      "file": "images/mixed_small_01.png",
+      "lang": "zh",
+      "category": "中英混排",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 11393,
+      "paragraphs": [
+        "在 Windows 11 上按 Ctrl+Alt+T 即可调出翻译窗口；快捷键冲突时请在 Settings 里修改。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "en_code_small_01",
+      "file": "images/en_code_small_01.png",
+      "lang": "en",
+      "category": "英文代码/等宽",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 3435,
+      "paragraphs": [
+        "for pair in registry.pairs():",
+        "print(pair.src, pair.tgt)"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "zh_web_720_01",
+      "file": "images/zh_web_720_01.png",
+      "lang": "zh",
+      "category": "中文网页正文",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 72188,
+      "paragraphs": [
+        "本地翻译为什么要离线运行",
+        "很多人在阅读外文资料时会顺手复制一段文字去翻译。如果翻译服务在云端，这段文字就会离开你的电脑。随译把模型放在本机，复制、翻译、显示都在同一台机器上完成，断网时也能照常使用。",
+        "离线并不意味着慢。经过量化的小模型在普通笔记本上翻译一句话通常只需要几十毫秒，比等待网络往返还要快。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "zh_web_720_02",
+      "file": "images/zh_web_720_02.png",
+      "lang": "zh",
+      "category": "中文网页正文",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 62088,
+      "paragraphs": [
+        "三步完成框选翻译",
+        "第一步，按下快捷键进入框选模式，屏幕会稍微变暗。第二步，用鼠标拖出一个矩形，把想看的文字圈起来。第三步，松开鼠标，译文会出现在选区旁边的浮窗里。",
+        "如果选区里没有文字，浮窗会提示未识别到内容，而不是显示一段空白。识别结果和译文可以一起复制，方便粘贴到笔记里。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "宋体，行高 1.8"
+    },
+    {
+      "id": "zh_web_720_03",
+      "file": "images/zh_web_720_03.png",
+      "lang": "zh",
+      "category": "中文网页正文",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 64856,
+      "paragraphs": [
+        "图书馆的旧报纸已经全部扫描成电子版，读者可以在阅览室的电脑上按日期检索。部分版面因为年代久远，字迹比较模糊，识别时需要人工校对。",
+        "周末的市集从早上八点开始，摊位沿着河边一字排开。卖菜的阿姨会把刚摘的青菜码得整整齐齐，旁边的面包店总是最早卖完。",
+        "模型文件放在用户目录下的模型文件夹中，升级程序时不会被删除。需要更换语向时，只要下载对应的模型包，重启服务即可生效。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "行高 2.0（中文网站常见），段间距仅略大于行距"
+    },
+    {
+      "id": "en_doc_720_01",
+      "file": "images/en_doc_720_01.png",
+      "lang": "en",
+      "category": "英文文档",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 34382,
+      "paragraphs": [
+        "Offline translation in practice",
+        "Suiyi keeps every step on your own machine. When you copy a sentence, the text is sent to a small local service instead of a remote server, translated by a compact neural model, and shown in a floating window next to your cursor.",
+        "Because nothing leaves the computer, the tool keeps working on a plane, in a hotel with unreliable Wi-Fi, or inside a company network that blocks cloud services."
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "en_doc_720_02",
+      "file": "images/en_doc_720_02.png",
+      "lang": "en",
+      "category": "英文文档",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 38499,
+      "paragraphs": [
+        "To translate part of the screen, press the shortcut, drag a rectangle around the text, and release the mouse. The recognized text and its translation appear together, so you can check both at a glance.",
+        "Models are stored in a folder under your user profile and survive upgrades. Adding a new language pair only requires downloading the matching model package and restarting the service.",
+        "Short sentences are translated almost instantly, while long documents are split into sentences first and then joined back together in the original order."
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "ja_web_720_01",
+      "file": "images/ja_web_720_01.png",
+      "lang": "ja",
+      "category": "日文网页横排",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 57556,
+      "paragraphs": [
+        "オフライン翻訳のしくみ",
+        "随訳はすべての処理を手元のパソコンで行います。文章をコピーすると、小さな翻訳サービスがそれを受け取り、軽量なモデルで訳してから、カーソルの近くに結果を表示します。",
+        "インターネットに接続していなくても使えるので、移動中や社内ネットワークでも安心です。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "ja_web_720_02",
+      "file": "images/ja_web_720_02.png",
+      "lang": "ja",
+      "category": "日文网页横排",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 48963,
+      "paragraphs": [
+        "設定画面では、翻訳先の言語とショートカットキーを変更できます。変更はすぐに反映され、アプリを再起動する必要はありません。",
+        "画面の一部を翻訳するときは、ショートカットを押して文字を四角で囲み、マウスを離します。認識した文章と訳文が並んで表示されます。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "明朝体"
+    },
+    {
+      "id": "zh_twocol_720_01",
+      "file": "images/zh_twocol_720_01.png",
+      "lang": "zh",
+      "category": "双栏",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 88183,
+      "paragraphs": [
+        "图书馆与市集",
+        "图书馆的旧报纸已经全部扫描成电子版，读者可以在阅览室的电脑上按日期检索。部分版面因为年代久远，字迹比较模糊，识别时需要人工校对。",
+        "为了减少耗电，笔记本在使用电池时会自动降低处理器频率。这时翻译和识别都会变慢一些，插上电源后就会恢复正常速度。",
+        "周末的市集从早上八点开始，摊位沿着河边一字排开。卖菜的阿姨会把刚摘的青菜码得整整齐齐，旁边的面包店总是最早卖完。",
+        "模型文件放在用户目录下的模型文件夹中，升级程序时不会被删除。需要更换语向时，只要下载对应的模型包，重启服务即可生效。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "横贯标题 + 双栏"
+    },
+    {
+      "id": "en_code_720_01",
+      "file": "images/en_code_720_01.png",
+      "lang": "en",
+      "category": "英文代码/等宽",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 18750,
+      "paragraphs": [
+        "def translate(text: str, target: str = \"en\") -> str:",
+        "if not text.strip():",
+        "return \"\"",
+        "pairs = registry.route(detect(text), target)",
+        "return engine.run(pairs, text, beam_size=2)"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "zh_dark_720_01",
+      "file": "images/zh_dark_720_01.png",
+      "lang": "zh",
+      "category": "低对比/深色主题",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 44895,
+      "paragraphs": [
+        "离线模式",
+        "模型文件放在用户目录下的模型文件夹中，升级程序时不会被删除。需要更换语向时，只要下载对应的模型包，重启服务即可生效。",
+        "为了减少耗电，笔记本在使用电池时会自动降低处理器频率。这时翻译和识别都会变慢一些，插上电源后就会恢复正常速度。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "mixed_720_01",
+      "file": "images/mixed_720_01.png",
+      "lang": "zh",
+      "category": "中英混排",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 45425,
+      "paragraphs": [
+        "在 Windows 11 上按 Ctrl+Alt+T 即可调出翻译窗口；如果快捷键被其他程序占用，请在 Settings 里修改。",
+        "模型使用 CTranslate2 的 int8 量化版本，首次加载约 1.2 秒，之后每句翻译通常在 100 ms 以内。",
+        "OCR 基于 RapidOCR 与 PP-OCRv6，支持中文、English 和日本語。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "ja_vertical_720_01",
+      "file": "images/ja_vertical_720_01.png",
+      "lang": "ja",
+      "category": "日文竖排",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 48771,
+      "paragraphs": [
+        "春の朝は空気がやわらかく、窓を開けると鳥の声が聞こえる。",
+        "小さな町の本屋には、古い地図と新しい物語が並んでいる。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "ja_vertical_720_02",
+      "file": "images/ja_vertical_720_02.png",
+      "lang": "ja",
+      "category": "日文竖排",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 51350,
+      "paragraphs": [
+        "今日は雨なので、家で静かに本を読むことにした。",
+        "駅前の喫茶店では、毎朝同じ席に同じ人が座っている。",
+        "夏休みの宿題は、最後の三日間でまとめて片づけた。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "三段，字号 26"
+    },
+    {
+      "id": "zh_dense_1080_01",
+      "file": "images/zh_dense_1080_01.png",
+      "lang": "zh",
+      "category": "密集文字",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 188142,
+      "paragraphs": [
+        "离线翻译常见问题",
+        "很多人在阅读外文资料时会顺手复制一段文字去翻译。如果翻译服务在云端，这段文字就会离开你的电脑。随译把模型放在本机，复制、翻译、显示都在同一台机器上完成，断网时也能照常使用。",
+        "离线并不意味着慢。经过量化的小模型在普通笔记本上翻译一句话通常只需要几十毫秒，比等待网络往返还要快。",
+        "第一步，按下快捷键进入框选模式，屏幕会稍微变暗。第二步，用鼠标拖出一个矩形，把想看的文字圈起来。第三步，松开鼠标，译文会出现在选区旁边的浮窗里。",
+        "如果选区里没有文字，浮窗会提示未识别到内容，而不是显示一段空白。识别结果和译文可以一起复制，方便粘贴到笔记里。",
+        "模型文件放在用户目录下的模型文件夹中，升级程序时不会被删除。需要更换语向时，只要下载对应的模型包，重启服务即可生效。",
+        "图书馆的旧报纸已经全部扫描成电子版，读者可以在阅览室的电脑上按日期检索。部分版面因为年代久远，字迹比较模糊，识别时需要人工校对。",
+        "周末的市集从早上八点开始，摊位沿着河边一字排开。卖菜的阿姨会把刚摘的青菜码得整整齐齐，旁边的面包店总是最早卖完。",
+        "为了减少耗电，笔记本在使用电池时会自动降低处理器频率。这时翻译和识别都会变慢一些，插上电源后就会恢复正常速度。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "整屏中文正文，8 段"
+    },
+    {
+      "id": "en_dense_1080_01",
+      "file": "images/en_dense_1080_01.png",
+      "lang": "en",
+      "category": "密集文字",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 75668,
+      "paragraphs": [
+        "Frequently asked questions",
+        "Suiyi keeps every step on your own machine. When you copy a sentence, the text is sent to a small local service instead of a remote server, translated by a compact neural model, and shown in a floating window next to your cursor.",
+        "Because nothing leaves the computer, the tool keeps working on a plane, in a hotel with unreliable Wi-Fi, or inside a company network that blocks cloud services.",
+        "To translate part of the screen, press the shortcut, drag a rectangle around the text, and release the mouse. The recognized text and its translation appear together, so you can check both at a glance.",
+        "Models are stored in a folder under your user profile and survive upgrades. Adding a new language pair only requires downloading the matching model package and restarting the service.",
+        "The river market opens at eight on Saturday mornings. Farmers arrive before sunrise to stack crates of greens, and the bakery at the corner usually sells out of bread before ten.",
+        "Battery saver lowers the processor clock when the laptop is unplugged. Recognition and translation become slightly slower in that mode and return to full speed once power is connected.",
+        "Old newspapers in the archive have been scanned and can be searched by date from any reading room terminal. Some pages are faded, so the recognized text may need a manual check.",
+        "Short sentences are translated almost instantly, while long documents are split into sentences first and then joined back together in the original order."
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "ja_dense_1080_01",
+      "file": "images/ja_dense_1080_01.png",
+      "lang": "ja",
+      "category": "日文网页横排",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 134723,
+      "paragraphs": [
+        "よくある質問",
+        "随訳はすべての処理を手元のパソコンで行います。文章をコピーすると、小さな翻訳サービスがそれを受け取り、軽量なモデルで訳してから、カーソルの近くに結果を表示します。",
+        "インターネットに接続していなくても使えるので、移動中や社内ネットワークでも安心です。",
+        "設定画面では、翻訳先の言語とショートカットキーを変更できます。変更はすぐに反映され、アプリを再起動する必要はありません。",
+        "画面の一部を翻訳するときは、ショートカットを押して文字を四角で囲み、マウスを離します。認識した文章と訳文が並んで表示されます。",
+        "土曜日の朝市は八時に始まります。川沿いに屋台が並び、角のパン屋はいつも十時前に売り切れてしまいます。",
+        "電池で動いているときは、消費電力を抑えるために処理が少し遅くなります。電源につなぐと元の速さに戻ります。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "整屏日文"
+    },
+    {
+      "id": "en_twocol_1080_01",
+      "file": "images/en_twocol_1080_01.png",
+      "lang": "en",
+      "category": "双栏",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 76583,
+      "paragraphs": [
+        "Notes from the archive and the market",
+        "Old newspapers in the archive have been scanned and can be searched by date from any reading room terminal. Some pages are faded, so the recognized text may need a manual check.",
+        "Battery saver lowers the processor clock when the laptop is unplugged. Recognition and translation become slightly slower in that mode and return to full speed once power is connected.",
+        "Suiyi keeps every step on your own machine. When you copy a sentence, the text is sent to a small local service instead of a remote server, translated by a compact neural model, and shown in a floating window next to your cursor.",
+        "The river market opens at eight on Saturday mornings. Farmers arrive before sunrise to stack crates of greens, and the bakery at the corner usually sells out of bread before ten.",
+        "Models are stored in a folder under your user profile and survive upgrades. Adding a new language pair only requires downloading the matching model package and restarting the service.",
+        "To translate part of the screen, press the shortcut, drag a rectangle around the text, and release the mouse. The recognized text and its translation appear together, so you can check both at a glance."
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "zh_ui_1080_01",
+      "file": "images/zh_ui_1080_01.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 45230,
+      "paragraphs": [
+        "文件  编辑  视图  插入  格式  工具  帮助",
+        "设置",
+        "常规",
+        "翻译",
+        "框选翻译",
+        "快捷键",
+        "模型",
+        "关于",
+        "翻译",
+        "目标语言：简体中文。检测到原文已经是中文时，改译为英文。",
+        "复制后自动翻译：开启。连续复制相同内容时不会重复翻译。",
+        "浮窗位置：跟随鼠标。按 Esc 关闭浮窗。",
+        "就绪",
+        "模型：opus-mt-zh-en",
+        "内存 312 MB"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "整屏设置窗口：菜单、侧栏列表、正文、状态栏"
+    },
+    {
+      "id": "en_code_1080_01",
+      "file": "images/en_code_1080_01.png",
+      "lang": "en",
+      "category": "英文代码/等宽",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 49019,
+      "paragraphs": [
+        "def translate(text: str, target: str = \"en\") -> str:",
+        "if not text.strip():",
+        "return \"\"",
+        "pairs = registry.route(detect(text), target)",
+        "return engine.run(pairs, text, beam_size=2)",
+        "class OcrEngine:",
+        "def __init__(self, models_dir: Path) -> None:",
+        "self.models_dir = models_dir",
+        "self._backend = None",
+        "def recognize(self, image: bytes) -> OcrResult:",
+        "backend = self.load()",
+        "lines = backend(decode_image(image))",
+        "return OcrResult(lines, merge_paragraphs(lines))"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": ""
+    },
+    {
+      "id": "ja_vertical_1080_01",
+      "file": "images/ja_vertical_1080_01.png",
+      "lang": "ja",
+      "category": "日文竖排",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 141602,
+      "paragraphs": [
+        "春の朝は空気がやわらかく、窓を開けると鳥の声が聞こえる。",
+        "小さな町の本屋には、古い地図と新しい物語が並んでいる。",
+        "今日は雨なので、家で静かに本を読むことにした。",
+        "駅前の喫茶店では、毎朝同じ席に同じ人が座っている。",
+        "夏休みの宿題は、最後の三日間でまとめて片づけた。",
+        "山の上から見る夕焼けは、町の灯りと同じ色をしていた。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "六段，字号 34"
+    }
+  ]
+}

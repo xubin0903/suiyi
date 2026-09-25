@@ -20,5 +20,6 @@
 - [性能基线](性能基线.md)：冷启动、热路径延迟、内存目标与实测
 - [OCR 选型与许可证](OCR选型与许可证.md)：RapidOCR + PP-OCR ONNX 的模型对比、许可证、依赖体积与离线加载
 - [OCR 核心](OCR核心.md)：`suiyi_engine.ocr` 的加载、线程、置信度、行 → 段落合并与竖排阅读顺序
+- [OCR 评测](OCR评测.md)：32 张 CC0 样例、CER / 段落切分 / P50·P95 / 内存，det small 与 tiny 对比，Windows 补测步骤
 
 后续 Issue 继续把设计说明加在本目录。规格仍以 [MVP 范围冻结](../research/MVP范围冻结-v0.1.md) 和 [引擎验收标准](../research/引擎验收标准-v0.1.md) 为准。
