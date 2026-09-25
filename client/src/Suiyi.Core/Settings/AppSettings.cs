@@ -119,10 +119,10 @@ public sealed record EngineSettings
     public string Preload { get; init; } = EngineOptions.DefaultPreload;
 
     /// <summary>
-    /// 启动时预热 OCR 模型（#58，对应服务参数 <c>--preload-ocr</c>）；关闭可省内存，代价是首次框选多等一次冷加载。
-    /// 默认关闭：服务端参数随 #53 定稿，当前服务不认识该参数会启动失败。
+    /// 启动时预热 OCR 模型（#58，对应服务参数 <c>--preload-ocr</c>，#53）；关闭可省内存，代价是首次框选多等一次冷加载。
+    /// 默认开启：缺 OCR 模型或依赖时服务只告警、照常启动（<c>/health.ocr_error</c> 带原因），不影响文本翻译。
     /// </summary>
-    public bool PreloadOcr { get; init; }
+    public bool PreloadOcr { get; init; } = true;
 
     /// <summary>映射为进程管理（#32）的 <see cref="EngineOptions"/>；环境变量覆盖由 <c>EngineOptionsOverrides</c> 在其后应用。</summary>
     public EngineOptions ToEngineOptions() => new()

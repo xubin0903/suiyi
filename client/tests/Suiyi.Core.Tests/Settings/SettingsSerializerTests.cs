@@ -30,7 +30,7 @@ public sealed class SettingsSerializerTests
             "args": null,
             "modelsDir": null,
             "preload": "zh-en,en-zh",
-            "preloadOcr": false
+            "preloadOcr": true
           },
           "startWithWindows": false
         }
@@ -150,22 +150,22 @@ public sealed class SettingsSerializerTests
     [Fact]
     public void PreloadOcr_ReadsAndMapsToEngineOptions()
     {
-        var result = Parse("""{ "engine": { "preloadOcr": true } }""");
+        var result = Parse("""{ "engine": { "preloadOcr": false } }""");
 
-        Assert.True(result.Settings.Engine.PreloadOcr);
-        Assert.True(result.Settings.Engine.ToEngineOptions().PreloadOcr);
-        Assert.False(AppSettings.Default.Engine.ToEngineOptions().PreloadOcr);
+        Assert.False(result.Settings.Engine.PreloadOcr);
+        Assert.False(result.Settings.Engine.ToEngineOptions().PreloadOcr);
+        Assert.True(AppSettings.Default.Engine.ToEngineOptions().PreloadOcr);
         Assert.NotEqual(AppSettings.Default, result.Settings);
         Assert.Equal(result.Settings, Parse(SettingsSerializer.Serialize(result.Settings)).Settings);
         Assert.Empty(_warnings);
     }
 
     [Fact]
-    public void PreloadOcr_WrongType_FallsBackToOff()
+    public void PreloadOcr_WrongType_FallsBackToOn()
     {
-        var result = Parse("""{ "engine": { "preloadOcr": "yes" } }""");
+        var result = Parse("""{ "engine": { "preloadOcr": "no" } }""");
 
-        Assert.False(result.Settings.Engine.PreloadOcr);
+        Assert.True(result.Settings.Engine.PreloadOcr);
         Assert.Single(_warnings);
     }
 

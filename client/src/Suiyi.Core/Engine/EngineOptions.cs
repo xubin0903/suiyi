@@ -26,8 +26,8 @@ public sealed record EngineOptions
     /// <summary>启动时预热的语向（<c>engine.preload</c>），逗号分隔；空表示不预热。</summary>
     public string Preload { get; init; } = DefaultPreload;
 
-    /// <summary>启动时预热 OCR 模型（<c>engine.preloadOcr</c>），为 true 时追加 <c>--preload-ocr</c>。</summary>
-    public bool PreloadOcr { get; init; }
+    /// <summary>启动时预热 OCR 模型（<c>engine.preloadOcr</c>），为 true（默认）时追加 <c>--preload-ocr</c>。</summary>
+    public bool PreloadOcr { get; init; } = true;
 
     /// <summary>模型目录（<c>engine.modelsDir</c>）；为空时由服务使用默认目录。</summary>
     public string? ModelsDir { get; init; }
