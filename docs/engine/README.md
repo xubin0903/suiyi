@@ -18,5 +18,6 @@
 - [HTTP API](HTTP-API.md)：本机回环上的 `/health`、`/languages`、`/translate`
 - [评测](评测.md)：固定样例集的 chrF / BLEU、专名保留率、延迟与基线报告
 - [性能基线](性能基线.md)：冷启动、热路径延迟、内存目标与实测
+- [OCR 选型与许可证](OCR选型与许可证.md)：RapidOCR + PP-OCR ONNX 的模型对比、许可证、依赖体积与离线加载
 
 后续 Issue 继续把设计说明加在本目录。规格仍以 [MVP 范围冻结](../research/MVP范围冻结-v0.1.md) 和 [引擎验收标准](../research/引擎验收标准-v0.1.md) 为准。

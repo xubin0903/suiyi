@@ -43,6 +43,14 @@ eval = [
   "sacrebleu>=2.4,<3",
   "psutil>=5.9",
 ]
+# 框选翻译的 OCR（#51 选型，见 docs/engine/OCR选型与许可证.md）。M3 期间放可选组，
+# 是否进默认运行时等 #52/#53 接入后再定。rapidocr 3.x 声明依赖 opencv-python（非 headless），
+# 打包时可改装 opencv-python-headless 并对 rapidocr 用 --no-deps（已实测可用）。
+# 不会带进 torch / paddlepaddle / transformers。模型不从网络自动下载，见 scripts/download_ocr_models.py。
+ocr = [
+  "rapidocr>=3.9.2,<3.10",
+  "onnxruntime>=1.20",
+]
 # 只用于 scripts/bench_service.py。不进运行时。CI 不安装这个组，也不跑基准。
 bench = [
   "psutil>=5.9",
