@@ -1,5 +1,7 @@
 # 随译（Suiyi）
 
+[![CI](https://github.com/xubin0903/suiyi/actions/workflows/ci.yml/badge.svg)](https://github.com/xubin0903/suiyi/actions/workflows/ci.yml)
+
 随意用、快捷、不收费、开源的翻译工具。
 
 ## 定位
