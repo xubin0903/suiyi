@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -335,6 +336,7 @@ def test_peak_meter_sees_allocation_inside_request() -> None:
     meter.start()
     block = bytearray(64 * 2**20)
     block[::4096] = b"x" * len(block[::4096])  # 触碰每一页，让它计入 RSS
+    time.sleep(0.05)  # 采样法（非 Linux）需要尖峰持续几个采样周期；Windows 计时精度约 15 ms
     del block
     peak = meter.stop()
     assert peak is not None and before is not None

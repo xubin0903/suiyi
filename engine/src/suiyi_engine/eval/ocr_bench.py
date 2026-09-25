@@ -551,7 +551,9 @@ class PeakMeter:
 
     - Linux：请求前向 ``/proc/self/clear_refs`` 写 ``5`` 把 ``VmHWM`` 重置为当前 RSS，
       请求后读 ``VmHWM``（精确）；
-    - 其他平台：后台线程每 2 ms 用 psutil 采样 RSS 取最大值（近似，可能漏掉极短的尖峰）；
+    - 其他平台：后台线程每 2 ms 用 psutil 采样 RSS 取最大值（近似，可能漏掉极短的尖峰；
+      Windows 的计时精度约 15 ms）。Windows 另读进程峰值工作集 ``peak_wset``：请求期间它涨了，
+      说明请求峰值就是新的进程峰值，取这个精确值；``peak_wset`` 不能重置，没涨时只能靠采样；
     - 两者都不可用时返回 ``None``。
     """
 
@@ -563,6 +565,7 @@ class PeakMeter:
         self._stop = threading.Event()
         self._peak = 0
         self._process: Any = None
+        self._lifetime_peak: int | None = None
         if sys.platform.startswith("linux") and self._reset_hwm():
             self.method = "linux-vmhwm"
             return
@@ -579,7 +582,9 @@ class PeakMeter:
             self._reset_hwm()
         elif self._process is not None:
             self._stop.clear()
-            self._peak = int(self._process.memory_info().rss)
+            info = self._process.memory_info()
+            self._peak = int(info.rss)
+            self._lifetime_peak = getattr(info, "peak_wset", None)
             self._thread = threading.Thread(target=self._sample, daemon=True)
             self._thread.start()
 
@@ -591,7 +596,16 @@ class PeakMeter:
         self._stop.set()
         self._thread.join()
         self._thread = None
-        return max(self._peak, int(self._process.memory_info().rss))
+        info = self._process.memory_info()
+        peak = max(self._peak, int(info.rss))
+        lifetime = getattr(info, "peak_wset", None)
+        if (
+            lifetime is not None
+            and self._lifetime_peak is not None
+            and lifetime > self._lifetime_peak
+        ):
+            peak = max(peak, int(lifetime))  # 请求期间刷新了进程峰值：这就是请求峰值
+        return peak
 
     def _sample(self) -> None:
         while not self._stop.wait(0.002):
