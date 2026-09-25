@@ -176,20 +176,158 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public void NotReady_TimesOutAfter5Seconds_KeepsPreparingAndDropsRequest()
+    public void NotReady_ReadyJustBeforeLimit_TranslatesLastRequest_PopupStaysVisible()
     {
         _engine.State = EngineState.Starting;
         _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
 
-        _time.Advance(TimeSpan.FromSeconds(4.9));
+        _time.Advance(TimeSpan.FromSeconds(29.9)); // 超过浮窗 8 s 自动消失，「正在准备」仍在
+        Assert.True(_popup.IsVisible);
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
         Assert.True(_flow.IsWaitingForEngine);
-        _time.Advance(TimeSpan.FromSeconds(0.1));
+
+        _engine.Raise(EngineState.Ready);
+        _translator.Complete(0);
+
+        Assert.Equal("Hello", Assert.Single(_translator.Calls).Text);
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+    }
+
+    [Fact]
+    public void NotReady_TimesOutAfter30Seconds_ShowsStartTimeoutError()
+    {
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
+
+        _time.Advance(TimeSpan.FromSeconds(29.999));
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        _time.Advance(TimeSpan.FromMilliseconds(1));
 
         Assert.False(_flow.IsWaitingForEngine);
+        Assert.Equal(PopupKind.Error, _popup.Kind);
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+        Assert.Equal("翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」", _popup.ErrorMessage);
+        Assert.True(_popup.CanRetry);
+
+        _engine.Raise(EngineState.Ready); // 超时后才就绪：不再自动翻译，等用户重试
+        Assert.Empty(_translator.Calls);
+    }
+
+    [Fact]
+    public void StartTimeout_Retry_WaitsAgain_ThenTranslates()
+    {
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _time.Advance(TimeSpan.FromSeconds(30));
+
+        _popup.RequestRetry();
+
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        Assert.True(_flow.IsWaitingForEngine);
+        _time.Advance(TimeSpan.FromSeconds(29)); // 重试重新计满 30 s
+        Assert.True(_flow.IsWaitingForEngine);
+
+        _engine.Raise(EngineState.Ready);
+        _translator.Complete(0);
+
+        Assert.Equal("Hello", Assert.Single(_translator.Calls).Text);
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+    }
+
+    [Fact]
+    public void StartTimeout_RetryTimesOutAgain()
+    {
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _time.Advance(TimeSpan.FromSeconds(30));
+        _popup.RequestRetry();
+
+        _time.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+        Assert.Empty(_translator.Calls);
+    }
+
+    [Fact]
+    public void ReadyWaitTimeout_IsConfigurable()
+    {
+        using var popup = new PopupViewModel(timeProvider: _time);
+        using var flow = new TranslateFlowCoordinator(
+            _translator, _engine, popup, _tray, timeProvider: _time, options: new TranslateFlowOptions { ReadyWaitTimeout = TimeSpan.FromSeconds(10) });
+        _engine.State = EngineState.Restarting;
+
+        flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _time.Advance(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, popup.Error!.Kind);
+    }
+
+    [Fact]
+    public void Default_ReadyWaitTimeoutIs30Seconds() =>
+        Assert.Equal(TimeSpan.FromSeconds(30), new TranslateFlowOptions().ReadyWaitTimeout);
+
+    [Fact]
+    public void RepeatedUnavailable_SharesOneDeadline_NeverStuckInPreparing()
+    {
+        // 服务反复「就绪 → 连接被拒」：同一请求的多次等待共用 30 s 时限，不会一直停在「正在准备」。
+        _engine.OnHealthCheck = () => _engine.Raise(EngineState.Restarting);
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+
+        _time.Advance(TimeSpan.FromSeconds(20));
+        _engine.Raise(EngineState.Ready);
+        _translator.Fail(1, new EngineException(EngineErrorKind.Unavailable, "refused"));
         Assert.Equal(PopupKind.Preparing, _popup.Kind);
 
-        _engine.Raise(EngineState.Ready); // 超时后才就绪：不再自动翻译
-        Assert.Empty(_translator.Calls);
+        _time.Advance(TimeSpan.FromSeconds(10)); // 从第一次等待算起满 30 s
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+        Assert.False(_flow.IsWaitingForEngine);
+    }
+
+    [Fact]
+    public void UnavailableAfterDeadlinePassed_ErrorsImmediately()
+    {
+        _engine.State = EngineState.Starting;
+        _engine.OnHealthCheck = () => _engine.State = EngineState.Restarting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _time.Advance(TimeSpan.FromSeconds(29));
+        _engine.Raise(EngineState.Ready);
+        _time.Advance(TimeSpan.FromSeconds(2)); // 请求在路上时越过了时限
+
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+        Assert.False(_flow.IsWaitingForEngine);
+    }
+
+    [Fact]
+    public void NewRequestWhileWaiting_RestartsDeadlineForLatestRequest()
+    {
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("first", ClipboardTrigger.Monitor);
+        _time.Advance(TimeSpan.FromSeconds(20));
+        _flow.OnTextCaptured("second", ClipboardTrigger.Monitor);
+
+        _time.Advance(TimeSpan.FromSeconds(20)); // 距第一次 40 s，距第二次 20 s
+        Assert.True(_flow.IsWaitingForEngine);
+        _engine.Raise(EngineState.Ready);
+
+        Assert.Equal("second", Assert.Single(_translator.Calls).Text);
+    }
+
+    [Fact]
+    public void WaitingThenFailed_ShowsRestartHintImmediately_NoLaterTimeout()
+    {
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
+        _time.Advance(TimeSpan.FromSeconds(12));
+
+        _engine.Raise(EngineState.Failed);
+        Assert.Equal(PopupErrorMapper.EngineFailedMessage, _popup.ErrorMessage);
+
+        _time.Advance(TimeSpan.FromSeconds(30));
+        Assert.Equal(PopupErrorMapper.EngineFailedMessage, _popup.ErrorMessage);
     }
 
     [Fact]
@@ -216,6 +354,30 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
         Assert.Equal(PopupErrorMapper.EngineFailedMessage, _popup.ErrorMessage);
         Assert.False(_flow.IsWaitingForEngine);
         Assert.Empty(_translator.Calls);
+    }
+
+    [Fact]
+    public void Waiting_EngineStartupTimesOut_ShowsStartTimeoutError()
+    {
+        // 监管器自己的 30 s 启动超时通常先于编排器的等待上限到达：同样显示「翻译服务启动超时」。
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
+
+        _engine.Raise(EngineState.Failed, new EngineFailure(EngineFailureReason.StartupTimeout, "启动超时"));
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+        Assert.True(_popup.CanRetry);
+    }
+
+    [Fact]
+    public void Failed_ByStartupTimeout_NewRequestShowsStartTimeoutError()
+    {
+        _engine.State = EngineState.Failed;
+        _engine.Failure = new EngineFailure(EngineFailureReason.StartupTimeout, "启动超时");
+
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
     }
 
     [Fact]
@@ -255,7 +417,7 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
         _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
         Assert.Equal(PopupKind.Preparing, _popup.Kind);
 
-        _time.Advance(TimeSpan.FromSeconds(5));
+        _time.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(PopupKind.Error, _popup.Kind);
         Assert.Equal(PopupErrorKind.ServiceUnavailable, _popup.Error!.Kind);
