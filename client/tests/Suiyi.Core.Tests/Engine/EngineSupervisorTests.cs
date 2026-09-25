@@ -16,6 +16,7 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
     private readonly FakeLauncher _launcher = new();
     private readonly FakeEndpoint _endpoint = new();
     private readonly ListLogger _outputLog = new();
+    private readonly ListLogger _logger = new();
     private readonly List<EngineStateChangedEventArgs> _events = [];
     private readonly EngineSupervisor _supervisor;
 
@@ -27,6 +28,7 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
             _endpoint,
             () => Command,
             _time,
+            logger: _logger,
             outputLogger: _outputLog);
         _supervisor.StateChanged += (_, e) =>
         {
@@ -438,6 +440,83 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
         var e = await ready;
 
         Assert.Equal(EngineOwnership.External, e.Ownership);
+    }
+
+    [Fact]
+    public async Task Restart_RepeatedWhileInProgress_RestartsOnce()
+    {
+        await StartReadyAsync();
+        var before = _launcher.Started.Count;
+        _endpoint.Script(false); // 重启后的外部检查：端口上没有别的服务
+        _endpoint.Healthy = false; // 新进程迟迟不就绪：重启一直「进行中」
+
+        await _supervisor.RestartAsync();
+        await Task.Run(() => SpinWait.SpinUntil(() => _launcher.Started.Count == before + 1, TimeSpan.FromSeconds(5)));
+        Assert.True(_supervisor.IsRestarting);
+        Assert.Equal(EngineState.Starting, _supervisor.State);
+
+        await _supervisor.RestartAsync(); // 浮窗「重试」
+        await _supervisor.RestartAsync(); // 托盘「重启翻译服务」
+
+        Assert.Equal(before + 1, _launcher.Started.Count);
+        Assert.Contains(_logger.Lines, l => l.Contains("重启已在进行", StringComparison.Ordinal));
+
+        var ready = WaitForState(EngineState.Ready);
+        _endpoint.Healthy = true;
+        await _time.AdvanceAndSettleAsync(TimeSpan.FromMilliseconds(200));
+        await ready;
+        Assert.False(_supervisor.IsRestarting);
+    }
+
+    [Fact]
+    public async Task Restart_ConcurrentCalls_DoNotStack()
+    {
+        await StartReadyAsync();
+        var before = _launcher.Started.Count;
+        _endpoint.Script(false);
+        _endpoint.Healthy = false; // 推进时钟前不会就绪，保证所有调用都落在同一次重启里
+
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => Task.Run(_supervisor.RestartAsync)));
+        await Task.Run(() => SpinWait.SpinUntil(() => _launcher.Started.Count == before + 1, TimeSpan.FromSeconds(5)));
+
+        var ready = WaitForState(EngineState.Ready);
+        _endpoint.Healthy = true;
+        await _time.AdvanceAndSettleAsync(TimeSpan.FromMilliseconds(200));
+        await ready;
+
+        Assert.Equal(before + 1, _launcher.Started.Count);
+        Assert.False(_supervisor.IsRestarting);
+    }
+
+    [Fact]
+    public async Task Restart_AfterSettled_CanRestartAgain()
+    {
+        await StartReadyAsync();
+        var before = _launcher.Started.Count;
+
+        for (var i = 0; i < 2; i++)
+        {
+            _endpoint.Script(false);
+            var ready = WaitForState(EngineState.Ready);
+            await _supervisor.RestartAsync();
+            await ready;
+        }
+
+        Assert.Equal(before + 2, _launcher.Started.Count);
+    }
+
+    [Fact]
+    public async Task Restart_ThenStop_ClearsInProgress()
+    {
+        await StartReadyAsync();
+        _endpoint.Script(false);
+        _endpoint.Healthy = false;
+        await _supervisor.RestartAsync();
+        Assert.True(_supervisor.IsRestarting);
+
+        await _supervisor.StopAsync();
+
+        Assert.False(_supervisor.IsRestarting);
     }
 
     // ---- 看门狗 ----

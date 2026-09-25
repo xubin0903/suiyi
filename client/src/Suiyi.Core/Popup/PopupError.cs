@@ -55,7 +55,7 @@ public sealed record PopupError(PopupErrorKind Kind)
         PopupErrorKind.TextTooLong => Limit is { } limit && Length is { } length
             ? string.Create(CultureInfo.InvariantCulture, $"文本过长：{length} 字，上限 {limit} 字")
             : "文本过长",
-        PopupErrorKind.EngineStartTimeout => "翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」",
+        PopupErrorKind.EngineStartTimeout => "翻译服务启动超时，点「重试」会重启翻译服务",
         _ => string.IsNullOrWhiteSpace(Detail) ? "翻译失败，请重试" : Detail.Trim(),
     };
 

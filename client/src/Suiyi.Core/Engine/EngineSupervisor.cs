@@ -33,6 +33,8 @@ public sealed class EngineSupervisor : IEngineStatus, IAsyncDisposable
     private EngineFailure? _failure;
     private EngineCommand? _lastCommand;
     private TaskCompletionSource _wakeUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _restarting;
+    private bool _restartArmed;
 
     /// <summary>创建监管器。</summary>
     /// <param name="options">配置。</param>
@@ -147,17 +149,49 @@ public sealed class EngineSupervisor : IEngineStatus, IAsyncDisposable
         }
     }
 
-    /// <summary>重启服务（托盘「重启翻译服务」）：结束托管进程、清零崩溃计数后重新开始。外部服务不会被结束。</summary>
-    public async Task RestartAsync()
+    /// <summary>
+    /// 重启服务（托盘「重启翻译服务」、浮窗「重试」）：结束托管进程、清零崩溃计数后重新开始。外部服务不会被结束。
+    /// 一次重启从调用开始，到服务再次进入 Ready / Failed / Stopped 为止；期间重复调用被忽略，不会叠加。
+    /// </summary>
+    public Task RestartAsync()
     {
-        _logger.Info("翻译服务：手动重启");
-        await StopCoreAsync(raiseStopped: false).ConfigureAwait(false);
-        lock (_gate)
+        if (Interlocked.CompareExchange(ref _restarting, 1, 0) != 0)
         {
-            _crashes.Clear();
+            _logger.Info("翻译服务：重启已在进行，忽略重复请求");
+            return Task.CompletedTask;
         }
 
-        Start();
+        return RestartCoreAsync();
+    }
+
+    /// <summary>是否有重启在进行（见 <see cref="RestartAsync"/>）。</summary>
+    public bool IsRestarting => Volatile.Read(ref _restarting) != 0;
+
+    private async Task RestartCoreAsync()
+    {
+        try
+        {
+            _logger.Info("翻译服务：手动重启");
+            await StopCoreAsync(raiseStopped: false).ConfigureAwait(false);
+            lock (_gate)
+            {
+                _crashes.Clear();
+            }
+
+            Volatile.Write(ref _restartArmed, true);
+            Start();
+        }
+        catch
+        {
+            EndRestart();
+            throw;
+        }
+    }
+
+    private void EndRestart()
+    {
+        Volatile.Write(ref _restartArmed, false);
+        Volatile.Write(ref _restarting, 0);
     }
 
     /// <summary>
@@ -217,6 +251,11 @@ public sealed class EngineSupervisor : IEngineStatus, IAsyncDisposable
         if (raiseStopped && State != EngineState.Stopped)
         {
             SetState(EngineState.Stopped, EngineOwnership.None, "翻译服务已停止");
+        }
+
+        if (raiseStopped)
+        {
+            EndRestart();
         }
     }
 
@@ -559,6 +598,11 @@ public sealed class EngineSupervisor : IEngineStatus, IAsyncDisposable
             {
                 _failure = null;
             }
+        }
+
+        if ((state is EngineState.Ready or EngineState.Failed or EngineState.Stopped) && Volatile.Read(ref _restartArmed))
+        {
+            EndRestart();
         }
 
         _logger.Info("翻译服务状态：" + args);
