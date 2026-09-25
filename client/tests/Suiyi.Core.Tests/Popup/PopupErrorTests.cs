@@ -12,6 +12,9 @@ public sealed class PopupErrorTests
     [InlineData(PopupErrorKind.TextTooLong, "文本过长")]
     [InlineData(PopupErrorKind.Other, "翻译失败，请重试")]
     [InlineData(PopupErrorKind.EngineStartTimeout, "翻译服务启动超时，点「重试」会重启翻译服务")]
+    [InlineData(PopupErrorKind.ImageTooLarge, "选区过大，请缩小选区后重新框选")]
+    [InlineData(PopupErrorKind.InvalidImage, "截图无法识别，请重新框选")]
+    [InlineData(PopupErrorKind.OcrUnavailable, "OCR 模型未安装")]
     public void DefaultMessages(PopupErrorKind kind, string expected)
     {
         Assert.Equal(expected, new PopupError(kind).Message);
@@ -57,5 +60,21 @@ public sealed class PopupErrorTests
     {
         Assert.Equal("正在重启", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " 正在重启 " }.Message);
         Assert.Equal("翻译服务未运行或已退出，点「重试」会重启翻译服务", new PopupError(PopupErrorKind.ServiceUnavailable) { Detail = " " }.Message);
+    }
+
+    [Fact]
+    public void OcrUnavailable_ListsModels()
+    {
+        Assert.Equal("OCR 模型未安装：det、rec", new PopupError(PopupErrorKind.OcrUnavailable) { MissingModels = ["det", "rec"] }.Message);
+    }
+
+    [Theory]
+    [InlineData(PopupErrorKind.ImageTooLarge, false)]
+    [InlineData(PopupErrorKind.TextTooLong, false)]
+    [InlineData(PopupErrorKind.InvalidImage, true)]
+    [InlineData(PopupErrorKind.OcrUnavailable, true)]
+    public void OcrErrors_CanRetry(PopupErrorKind kind, bool expected)
+    {
+        Assert.Equal(expected, new PopupError(kind).CanRetry);
     }
 }

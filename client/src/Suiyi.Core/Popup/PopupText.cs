@@ -10,6 +10,18 @@ public static class PopupText
     /// <summary>Preparing 状态文字。</summary>
     public const string PreparingText = "正在准备翻译服务…";
 
+    /// <summary>框选翻译加载文字（#57）。</summary>
+    public const string OcrLoadingText = "正在识别并翻译…";
+
+    /// <summary>框选翻译空结果文字（#57）。</summary>
+    public const string OcrEmptyText = "未识别到文字";
+
+    /// <summary>原文区折叠时的按钮文字。</summary>
+    public const string ShowOriginalText = "原文 ▸";
+
+    /// <summary>原文区展开时的按钮文字。</summary>
+    public const string HideOriginalText = "原文 ▾";
+
     /// <summary>原文摘要的最大字符数。</summary>
     public const int SourcePreviewLength = 80;
 

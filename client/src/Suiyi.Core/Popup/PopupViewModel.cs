@@ -29,6 +29,12 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     private string? _elapsedText;
     private PopupError? _error;
     private string _translationFontFamily = PopupText.FontFamilyFor(null);
+    private PopupContentMode _mode;
+    private PopupRect? _anchorRect;
+    private string _originalText = string.Empty;
+    private bool _isOriginalExpanded;
+    private bool _showOriginalCopiedFeedback;
+    private string _originalFontFamily = PopupText.FontFamilyFor(null);
 
     /// <summary>创建浮窗 ViewModel。</summary>
     /// <param name="options">参数；默认 <see cref="PopupOptions"/>。</param>
@@ -55,6 +61,9 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>用户点击「复制」。集成方用 <c>ClipboardWriter.SetText</c> 写入，避免自触发。</summary>
     public event EventHandler<PopupCopyEventArgs>? CopyTranslationRequested;
+
+    /// <summary>用户点击「复制原文」（框选翻译）。集成方同样用 <c>ClipboardWriter.SetText</c> 写入，避免自触发。</summary>
+    public event EventHandler<PopupCopyEventArgs>? CopyOriginalRequested;
 
     /// <summary>用户点击「重试」。</summary>
     public event EventHandler? RetryRequested;
@@ -118,13 +127,64 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>是否可以复制（有译文）。</summary>
     public bool CanCopy => _kind == PopupKind.Result && _translation.Length > 0;
 
+    /// <summary>内容来源（复制翻译 / 框选翻译）。<see cref="ShowError"/> 沿用当前来源，集成方据此决定重试走哪条流程。</summary>
+    public PopupContentMode Mode
+    {
+        get => _mode;
+        private set
+        {
+            if (Set(ref _mode, value))
+            {
+                OnPropertyChanged(nameof(CanOverrideSource));
+            }
+        }
+    }
+
+    /// <summary>定位锚点：框选翻译时为选区（物理像素），窗口放在其旁边；<see langword="null"/> 时放在光标旁。</summary>
+    public PopupRect? AnchorRect { get => _anchorRect; private set => Set(ref _anchorRect, value); }
+
+    /// <summary>OCR 识别的原文（框选翻译 Result），段落间空一行；其他情况为空。</summary>
+    public string OriginalText
+    {
+        get => _originalText;
+        private set
+        {
+            if (Set(ref _originalText, value))
+            {
+                OnPropertyChanged(nameof(HasOriginal));
+                OnPropertyChanged(nameof(CanCopyOriginal));
+            }
+        }
+    }
+
+    /// <summary>是否有可展开的原文区（框选翻译 Result）。</summary>
+    public bool HasOriginal => _originalText.Length > 0;
+
+    /// <summary>原文区是否展开。默认折叠；本次浮窗内保持（复制、悬停、钉住都不改变），新一次翻译重新折叠。</summary>
+    public bool IsOriginalExpanded { get => _isOriginalExpanded; private set => Set(ref _isOriginalExpanded, value); }
+
+    /// <summary>是否可以复制原文。</summary>
+    public bool CanCopyOriginal => _kind == PopupKind.Result && HasOriginal;
+
+    /// <summary>是否显示「已复制」反馈（复制原文按钮）。</summary>
+    public bool ShowOriginalCopiedFeedback { get => _showOriginalCopiedFeedback; private set => Set(ref _showOriginalCopiedFeedback, value); }
+
+    /// <summary>原文字体回退链（按原文语种）。</summary>
+    public string OriginalFontFamily { get => _originalFontFamily; private set => Set(ref _originalFontFamily, value); }
+
+    /// <summary>语种标签是否可点击改原文语种。框选翻译暂不支持（需要重新识别，#58 之后再定）。</summary>
+    public bool CanOverrideSource => _mode == PopupContentMode.Text;
+
     /// <summary>译文字体回退链（按目标语种）。</summary>
     public string TranslationFontFamily { get => _translationFontFamily; private set => Set(ref _translationFontFamily, value); }
 
     /// <summary>服务未就绪时触发了翻译：立即显示「正在准备翻译服务…」。</summary>
-    public void ShowPreparing()
+    /// <param name="anchor">框选翻译时传选区（窗口放在选区旁，来源记为框选翻译）；复制翻译不传。</param>
+    public void ShowPreparing(PopupRect? anchor = null)
     {
         BeginSession();
+        Mode = anchor is null ? PopupContentMode.Text : PopupContentMode.Ocr;
+        AnchorRect = anchor;
         SetKind(PopupKind.Preparing);
         Present();
     }
@@ -137,8 +197,80 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     {
         ArgumentNullException.ThrowIfNull(sourceText);
         BeginSession();
+        Mode = PopupContentMode.Text;
+        AnchorRect = null;
+        StartLoading(PopupText.SourcePreview(sourceText));
+    }
+
+    /// <summary>
+    /// 框选翻译开始识别（#57）：显示「正在识别并翻译…」，窗口放在选区旁。加载指示与窗口的延迟显示同 <see cref="ShowLoading"/>。
+    /// </summary>
+    /// <param name="anchor">选区（物理像素）；<see langword="null"/> 时放在光标旁。</param>
+    public void ShowOcrLoading(PopupRect? anchor = null)
+    {
+        BeginSession();
+        Mode = PopupContentMode.Ocr;
+        AnchorRect = anchor;
+        StartLoading(PopupText.OcrLoadingText);
+    }
+
+    /// <summary>
+    /// 显示框选翻译结果（#57）：译文为主体，原文区默认折叠；空结果显示「未识别到文字」（<see cref="PopupKind.Empty"/>，非错误样式）。
+    /// </summary>
+    /// <param name="result">结果。</param>
+    /// <param name="anchor">选区；<see langword="null"/> 时沿用 <see cref="ShowOcrLoading"/> 传入的选区。</param>
+    public void ShowOcrResult(PopupOcrResult result, PopupRect? anchor = null)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var continuing = Kind is PopupKind.Loading && Mode == PopupContentMode.Ocr;
+        ContinueOrBeginSession();
+        Mode = PopupContentMode.Ocr;
+        AnchorRect = anchor ?? (continuing ? AnchorRect : null);
+        ElapsedText = result.Elapsed is { } elapsed ? PopupText.FormatElapsed(elapsed) : null;
+        if (result.IsEmpty)
+        {
+            LanguageLabel = string.Empty;
+            SetKind(PopupKind.Empty);
+            Present();
+            return;
+        }
+
+        LanguageLabel = PopupText.LanguageLabel(result.Source, result.Target, result.SourceDetected);
+        TranslationFontFamily = PopupText.FontFamilyFor(result.Target);
+        OriginalFontFamily = PopupText.FontFamilyFor(result.Source);
+        Translation = result.TranslationText;
+        OriginalText = result.SourceText;
+        SetKind(PopupKind.Result);
+        Present();
+    }
+
+    /// <summary>展开 / 收起原文区（框选翻译 Result）。</summary>
+    public void ToggleOriginal()
+    {
+        if (CanCopyOriginal)
+        {
+            IsOriginalExpanded = !IsOriginalExpanded;
+        }
+    }
+
+    /// <summary>点击「复制原文」：发 <see cref="CopyOriginalRequested"/> 并在该按钮上显示「已复制」。</summary>
+    public void RequestCopyOriginal()
+    {
+        if (!CanCopyOriginal)
+        {
+            return;
+        }
+
+        CopyOriginalRequested?.Invoke(this, new PopupCopyEventArgs(OriginalText));
+        ShowCopiedFeedback = false;
+        ShowOriginalCopiedFeedback = true;
+        _copiedTimer.Start(Options.CopiedFeedbackDuration, ClearCopiedFeedback);
+    }
+
+    private void StartLoading(string preview)
+    {
         SetKind(PopupKind.Loading);
-        SourcePreview = PopupText.SourcePreview(sourceText);
+        SourcePreview = preview;
         ShowLoadingIndicator = false;
         _autoHideTimer.Stop();
         _loadingTimer.Start(Options.LoadingIndicatorDelay, () =>
@@ -158,6 +290,9 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     {
         ArgumentNullException.ThrowIfNull(result);
         ContinueOrBeginSession();
+        Mode = PopupContentMode.Text;
+        AnchorRect = null;
+        OriginalText = string.Empty;
         LanguageLabel = PopupText.LanguageLabel(result.Source, result.Target, result.SourceDetected);
         ElapsedText = result.Elapsed is { } elapsed ? PopupText.FormatElapsed(elapsed) : null;
         TranslationFontFamily = PopupText.FontFamilyFor(result.Target);
@@ -204,7 +339,7 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
         _loadingTimer.Stop();
         _autoHideTimer.Stop();
         _copiedTimer.Stop();
-        ShowCopiedFeedback = false;
+        ClearCopiedFeedback();
         IsHovered = false;
         IsPinned = false;
         if (!IsVisible)
@@ -244,8 +379,9 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
         }
 
         CopyTranslationRequested?.Invoke(this, new PopupCopyEventArgs(Translation));
+        ShowOriginalCopiedFeedback = false;
         ShowCopiedFeedback = true;
-        _copiedTimer.Start(Options.CopiedFeedbackDuration, () => ShowCopiedFeedback = false);
+        _copiedTimer.Start(Options.CopiedFeedbackDuration, ClearCopiedFeedback);
     }
 
     /// <summary>点击「重试」。</summary>
@@ -281,7 +417,14 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
         _positioned = false;
         _loadingTimer.Stop();
         _copiedTimer.Stop();
+        ClearCopiedFeedback();
+        IsOriginalExpanded = false;
+    }
+
+    private void ClearCopiedFeedback()
+    {
         ShowCopiedFeedback = false;
+        ShowOriginalCopiedFeedback = false;
     }
 
     private void ContinueOrBeginSession()
@@ -302,6 +445,8 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
         if (kind != PopupKind.Result)
         {
             Translation = string.Empty;
+            OriginalText = string.Empty;
+            IsOriginalExpanded = false;
         }
 
         if (kind != PopupKind.Error)
@@ -311,6 +456,7 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
 
         OnPropertyChanged(nameof(CanRetry));
         OnPropertyChanged(nameof(CanCopy));
+        OnPropertyChanged(nameof(CanCopyOriginal));
     }
 
     private void Present()

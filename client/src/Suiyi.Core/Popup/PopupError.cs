@@ -25,13 +25,22 @@ public enum PopupErrorKind
 
     /// <summary>等待翻译服务就绪超时（#50）。</summary>
     EngineStartTimeout,
+
+    /// <summary>框选区域过大（#53 草案 <c>image_too_large</c>）。重试同一选区不会成功，不显示重试。</summary>
+    ImageTooLarge,
+
+    /// <summary>截图无法识别（#53 草案 <c>unsupported_media_type</c> / <c>invalid_image</c>）。</summary>
+    InvalidImage,
+
+    /// <summary>OCR 模型未安装（#53 草案 <c>ocr_unavailable</c>）。</summary>
+    OcrUnavailable,
 }
 
 /// <summary>浮窗错误内容。</summary>
 /// <param name="Kind">类别。</param>
 public sealed record PopupError(PopupErrorKind Kind)
 {
-    /// <summary>缺失的模型 id（<see cref="PopupErrorKind.MissingModels"/>）。</summary>
+    /// <summary>缺失的模型 id（<see cref="PopupErrorKind.MissingModels"/>、<see cref="PopupErrorKind.OcrUnavailable"/>）。</summary>
     public IReadOnlyList<string> MissingModels { get; init; } = [];
 
     /// <summary>字符上限（<see cref="PopupErrorKind.TextTooLong"/>）。</summary>
@@ -56,9 +65,14 @@ public sealed record PopupError(PopupErrorKind Kind)
             ? string.Create(CultureInfo.InvariantCulture, $"文本过长：{length} 字，上限 {limit} 字")
             : "文本过长",
         PopupErrorKind.EngineStartTimeout => "翻译服务启动超时，点「重试」会重启翻译服务",
+        PopupErrorKind.ImageTooLarge => "选区过大，请缩小选区后重新框选",
+        PopupErrorKind.InvalidImage => "截图无法识别，请重新框选",
+        PopupErrorKind.OcrUnavailable => MissingModels.Count > 0
+            ? "OCR 模型未安装：" + string.Join("、", MissingModels)
+            : "OCR 模型未安装",
         _ => string.IsNullOrWhiteSpace(Detail) ? "翻译失败，请重试" : Detail.Trim(),
     };
 
-    /// <summary>是否显示「重试」。文本过长重试也不会成功，不显示。</summary>
-    public bool CanRetry => Kind != PopupErrorKind.TextTooLong;
+    /// <summary>是否显示「重试」。文本过长、选区过大重试也不会成功，不显示。</summary>
+    public bool CanRetry => Kind is not (PopupErrorKind.TextTooLong or PopupErrorKind.ImageTooLarge);
 }
