@@ -280,14 +280,12 @@ def bind_listen_socket(host: str, port: int) -> socket.socket:
       报 ``EADDRINUSE``，服务无法立即重启。这些平台上 ``SO_REUSEADDR`` 不允许与正在监听的
       套接字共用同一地址，真实占用仍然报错。uvicorn 自己建监听套接字时也设这个选项。
     - Windows：不设 ``SO_REUSEADDR``，它在 Windows 上允许抢占别人正在使用的端口。
-      监听套接字也不设 ``SO_EXCLUSIVEADDRUSE``：按微软文档，设了之后它接受过的连接在完全
-      结束前会挡住下一次独占绑定，崩溃后同样无法立即重启。Windows 默认绑定会放过「别人监听
-      通配地址、我们绑回环地址」的情况，所以先用一个 ``SO_EXCLUSIVEADDRUSE`` 的探测套接字
-      试绑一次再关掉：已有监听者（包括通配地址上的）时报占用。
+      也不设 ``SO_EXCLUSIVEADDRUSE``：按微软文档，设了之后它接受过的连接在完全结束前会挡住
+      下一次独占绑定，崩溃后同样无法立即重启。默认绑定不受残留连接影响，同一地址上已有
+      监听者时仍报 ``WSAEADDRINUSE``。同一用户下「别人监听 ``0.0.0.0``、我们绑 ``127.0.0.1``」
+      是 Windows 允许的（独占探测也发现不了，CI 实测），与修复前相同，由客户端的 ``/health``
+      身份检查区分是不是随译。
     """
-
-    if os.name == "nt":
-        _probe_exclusive(host, port)
 
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
@@ -313,27 +311,6 @@ def bind_listen_socket(host: str, port: int) -> socket.socket:
             code=1,
         ) from exc
     return sock
-
-
-def _probe_exclusive(host: str, port: int) -> None:
-    """Windows：用 ``SO_EXCLUSIVEADDRUSE`` 试绑一次，端口上已有任何绑定（含通配地址）时报占用。"""
-
-    try:
-        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise ServeError(f"无法解析监听地址 {host}：{exc}") from exc
-    if not infos:
-        raise ServeError(f"无法解析监听地址 {host}")
-    family, socktype, proto, _canon, sockaddr = infos[0]
-    with socket.socket(family, socktype, proto) as probe:
-        try:
-            probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # type: ignore[attr-defined]
-            probe.bind(sockaddr)
-        except OSError as exc:
-            raise ServeError(
-                f"端口 {port} 已被占用或无法在 {host} 上监听：{exc}",
-                code=1,
-            ) from exc
 
 
 def _require_port(value: object, label: str) -> int:

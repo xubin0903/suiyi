@@ -45,7 +45,9 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | 平台 | 选项 | 原因 |
 |------|------|------|
 | Linux / macOS | `SO_REUSEADDR` | 服务被强杀后，调用方连接池里的 keep-alive 连接会让服务端一侧停在 FIN-WAIT / TIME_WAIT（Linux 最长约 60 秒）。不设这个选项时绑定报 `EADDRINUSE`，服务无法立即重启。这些平台上它不允许和正在监听的套接字共用同一地址，所以真实占用仍然报错 |
-| Windows | 不设 `SO_REUSEADDR`；先用 `SO_EXCLUSIVEADDRUSE` 探测一次再关掉，监听套接字用默认选项 | Windows 上的 `SO_REUSEADDR` 允许抢占别人正在用的端口。监听套接字如果设 `SO_EXCLUSIVEADDRUSE`，它接受过的连接在完全结束前会挡住下一次独占绑定。默认绑定不受残留连接影响，但会放过「别人监听 `0.0.0.0`、我们绑 `127.0.0.1`」，所以用独占探测补上 |
+| Windows | 不设 `SO_REUSEADDR`，也不设 `SO_EXCLUSIVEADDRUSE`，用默认选项 | Windows 上的 `SO_REUSEADDR` 允许抢占别人正在用的端口。监听套接字如果设 `SO_EXCLUSIVEADDRUSE`，它接受过的连接在完全结束前会挡住下一次独占绑定，同样无法立即重启。默认绑定不受残留连接影响；同一地址上已有监听者时仍报 `WSAEADDRINUSE` |
+
+已知差异：同一用户下，别人监听 `0.0.0.0`、随译绑定 `127.0.0.1` 时，Windows 与 macOS 允许两者共存（CI 实测 Windows 上用 `SO_EXCLUSIVEADDRUSE` 探测也发现不了）。这与修复前相同。客户端用 `/health` 判断端口上是不是随译
 
 两个实例同时启动时，在 POSIX 上可能都绑定成功，但后调用 `listen` 的那个会失败，打印「无法在 … 启动服务」并以状态 1 退出。
 

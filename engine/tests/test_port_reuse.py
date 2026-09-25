@@ -170,8 +170,8 @@ def _occupy(kind: str) -> socket.socket:
         pytest.param(
             "wildcard",
             marks=pytest.mark.skipif(
-                sys.platform == "darwin",
-                reason="BSD 语义允许特定地址与通配地址共存，uvicorn 本身也能绑上",
+                sys.platform == "darwin" or IS_WINDOWS,
+                reason="BSD 与 Windows（同一用户）允许特定地址与通配地址共存，与修复前相同",
             ),
         ),
     ],
