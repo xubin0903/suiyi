@@ -23,6 +23,12 @@ public sealed record TrayState
     /// <summary>目标语言代码。</summary>
     public string Target { get; init; } = "zh";
 
+    /// <summary>当前实际生效的框选快捷键（如 <c>Ctrl+Alt+S</c>）；禁用、冲突或注册失败时为 <see langword="null"/>。</summary>
+    public string? RegionHotkey { get; init; }
+
+    /// <summary>托盘「框选翻译」菜单文字：有快捷键时带上，例如「框选翻译（Ctrl+Alt+S）」。</summary>
+    public string RegionMenuText => string.IsNullOrWhiteSpace(RegionHotkey) ? "框选翻译" : $"框选翻译（{RegionHotkey.Trim()}）";
+
     /// <summary>
     /// 实际显示的状态：异常与准备中优先；否则暂停监听显示为 <see cref="TrayStatus.Paused"/>，再否则就绪。
     /// </summary>

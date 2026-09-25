@@ -322,10 +322,28 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>显示错误。</summary>
-    public void ShowError(PopupError error)
+    /// <param name="error">错误。</param>
+    /// <param name="mode">
+    /// 错误属于哪条流程；<see langword="null"/> 时沿用当前 <see cref="Mode"/>（#57 行为）。
+    /// 主流程（#58）总是传入，保证「重试」按 <see cref="Mode"/> 分流到正确的流程。
+    /// </param>
+    /// <param name="anchor">框选翻译时的选区；<see langword="null"/> 时沿用当前选区。复制翻译忽略。</param>
+    public void ShowError(PopupError error, PopupContentMode? mode = null, PopupRect? anchor = null)
     {
         ArgumentNullException.ThrowIfNull(error);
         ContinueOrBeginSession();
+        if (mode is { } m)
+        {
+            var nextAnchor = m == PopupContentMode.Ocr ? anchor ?? AnchorRect : null;
+            if (m != Mode || nextAnchor != AnchorRect)
+            {
+                _positioned = false; // 换了流程或选区：重新定位。
+            }
+
+            Mode = m;
+            AnchorRect = nextAnchor;
+        }
+
         Error = error;
         SetKind(PopupKind.Error);
         Present();

@@ -9,6 +9,9 @@ public enum TrayCommand
     /// <summary>翻译剪贴板（手动触发一次）。</summary>
     TranslateClipboard,
 
+    /// <summary>框选翻译（#58）：打开框选遮罩，识别并翻译选区。</summary>
+    TranslateRegion,
+
     /// <summary>暂停 / 恢复监听。</summary>
     TogglePause,
 
@@ -82,6 +85,7 @@ public static class TrayMenuBuilder
             new TrayMenuItem { Text = state.StatusText, IsEnabled = false },
             TrayMenuItem.Separator,
             new TrayMenuItem { Text = "翻译剪贴板", Command = TrayCommand.TranslateClipboard },
+            new TrayMenuItem { Text = state.RegionMenuText, Command = TrayCommand.TranslateRegion },
             new TrayMenuItem { Text = "暂停监听", Command = TrayCommand.TogglePause, IsChecked = state.Paused },
             new TrayMenuItem { Text = "目标语言", Children = targets },
             TrayMenuItem.Separator,

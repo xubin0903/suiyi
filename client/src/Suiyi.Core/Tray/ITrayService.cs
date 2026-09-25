@@ -33,6 +33,9 @@ public interface ITrayService
     /// <summary>「翻译剪贴板」。</summary>
     event EventHandler? TranslateClipboardRequested;
 
+    /// <summary>「框选翻译」（#58）。</summary>
+    event EventHandler? TranslateRegionRequested;
+
     /// <summary>「暂停监听」勾选变化。</summary>
     event EventHandler<TrayPauseToggledEventArgs>? PauseToggled;
 
@@ -65,6 +68,9 @@ public interface ITrayService
 
     /// <summary>同步「暂停监听」勾选（不触发 <see cref="PauseToggled"/>）。</summary>
     void SetPaused(bool paused);
+
+    /// <summary>同步「框选翻译」菜单上显示的快捷键（实际注册成功的那个；<see langword="null"/> 表示没有）。</summary>
+    void SetRegionHotkey(string? hotkey);
 
     /// <summary>同步目标语言（不触发 <see cref="TargetChanged"/>）。</summary>
     void SetTarget(string language);
