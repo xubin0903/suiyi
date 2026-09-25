@@ -158,7 +158,7 @@ Windows 控制台不会因为中文输出报 `UnicodeEncodeError`。
 但段落切分明显更差（完全正确 −4 张、误合并 +6、误拆分 +4，竖排行尾单字列会被拆成「。」「る」独立成段），
 而段落切分直接决定译文质量（见下节）；tiny 也解决不了内存超标。
 
-**切换作为可选项交负责人拍板**，触发条件建议：Windows 笔记本补测 1080p P95 > 1500 ms。切换只需改一行并多下载一个模型：
+**切换作为可选项交负责人拍板**，触发条件建议：Windows 笔记本补测 720p P95 > 800 ms 或 1080p P95 > 1500 ms。切换只需改一行并多下载一个模型：
 
 ```diff
  // engine/ocr_model_manifest.json
@@ -170,9 +170,10 @@ Windows 控制台不会因为中文输出报 `UnicodeEncodeError`。
 python scripts/download_ocr_models.py download --model PP-OCRv6_det_tiny
 ```
 
-**Windows 推测（未实测）**：同代 4 核笔记本的单核性能通常不低于这台虚拟机，onnxruntime 在 Windows 的 CPU 算子与 Linux 相同，
-预计 small 的 1080p P95 在 1.2–2.0 s 之间，**处于目标边缘**；插电/电池模式、杀毒软件都会放大波动。
-所以 small 是否守得住 1500 ms 必须以笔记本实测为准。
+**Windows 推测（未在笔记本实测）**：CI 的 Windows runner（4 vCPU）跑快速子集时，det small 比同批 Linux runner 慢约 2 倍，
+720p P95 已到 860 ms（略超 800 ms），1080p 单张 1365 ms（见 [CI 环境数据](#ci-环境数据)）。据此推测普通 4 核笔记本上
+small 的 720p / 1080p P95 **处于目标边缘甚至超标**，插电/电池模式、杀毒软件会放大波动；tiny 在 Linux 上快约 1.6 倍，
+预计能把 Windows 拉回目标内。small 是否守得住必须以笔记本实测为准——这正是建议的切换触发条件。
 
 ## 行距阈值（line_gap）与 UI 小字误合并
 
@@ -258,7 +259,28 @@ wheel 自带的 det small + 一个调优变体），报告写进该 job 的 Summ
 **这些耗时是 GitHub 托管 runner 的数据，只用于确认脚本在 Windows / Linux 上可用，不作为性能基线。**
 CI 不下载 det tiny，完整对比需要本地跑。
 
-<!-- CI_DATA -->
+PR #73 首次运行（2026-09-25，run 36147474920）的快速子集（6 张：400×150 ×3、720p ×2、1080p ×1；每张预热 1 次、计时 2 次，
+n 很小，P95 基本等于最大值）：
+
+| 项 | windows-latest | ubuntu-latest |
+|---|---|---|
+| CPU / 核数 / 内存 | Intel Xeon Platinum 8573C / 4 / 16 GB | AMD EPYC 9V45 / 4 / 15.6 GB |
+| 系统 / Python | Windows Server（10.0.26100）/ 3.11.9 | Linux 6.17（Azure）/ 3.11.16 |
+
+| 指标 | 目标 | Windows small | Windows small@960+rb1+nomp | Linux small | Linux small@960+rb1+nomp |
+|---|---|---:|---:|---:|---:|
+| P95 400×150 | ≤ 800 ms | 314 ms | 402 ms | 142 ms | 109 ms |
+| P95 1280×720 | ≤ 800 ms | **860 ms** | **826 ms** | 338 ms | 249 ms |
+| P95 1920×1080 | ≤ 1500 ms | 1365 ms | 822 ms | 523 ms | 254 ms |
+| 冷加载 | — | 719 ms | 712 ms | 387 ms | 377 ms |
+| 峰值 RSS 增量 | ≤ 300 MB | 467 MB | 167 MB | 551 MB | 228 MB |
+| CER（6 张合计） | — | 与 Linux 相同 | 与 Linux 相同 | — | — |
+
+- 脚本在 Windows 上一条命令跑通，中文输出与 UTF-8 报告正常，`peak_wset` 正常取到。
+- Windows runner 比同批 Linux runner 慢约 2 倍（CPU 型号不同，不能全归因于系统），**720p P95 已略超 800 ms**：
+  这是「small 在 Windows 上耗时处于目标边缘」的第一个旁证，但样本太少、机器是共享虚拟机，仍以笔记本实测为准。
+- 调优变体在 Windows 上同样把 1080p 耗时和峰值内存压低（1365 → 822 ms，467 → 167 MB）。
+
 
 ## Windows 笔记本补测
 
