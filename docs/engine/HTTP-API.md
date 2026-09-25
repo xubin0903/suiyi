@@ -30,8 +30,11 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--preload` | 不预热 | 逗号分隔的语向，如 `zh-en,en-zh`。缺模型时非零退出，不会开始监听 |
 | `--max-text-chars` | `SUIYI_MAX_TEXT_CHARS`，否则 `10000` | 单条文本的字符上限 |
 | `--dev` | 关闭 | 才挂载 `/docs` 与 `/openapi.json` |
+| `--intra-threads` | `min(2, CPU 数)` | 单个模型内部的计算线程。不传则用翻译核心的默认 |
+| `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
+| `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
 
-进程起来后，标准输出有三行：监听 URL、模型目录、可用语向数量。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。
+进程起来后，标准输出有四行：监听 URL、模型目录、可用语向数量，以及实际使用的 `intra_threads`、`beam_size`、`max_batch_size`。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
 
 ## 安全
 

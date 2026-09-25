@@ -151,3 +151,14 @@ python scripts/convert_models.py --manifest engine/model_manifest.example.json -
 ```
 
 正式清单 `engine/model_manifest.json` 由模型选型提供。该文件合并前，用 `--manifest` 指向示例清单。权重写入仓库根 `models/`，不要提交。
+
+## 性能基准
+
+`scripts/bench_service.py` 用子进程启动 `python -m suiyi_engine serve`，测量冷启动、热路径延迟和 RSS。依赖在可选组 `bench`（`psutil`），不进运行时，CI 不安装、不运行。方法、目标和实测见 [性能基线](../docs/engine/性能基线.md)。
+
+```bash
+pip install -e "engine[bench]"
+python scripts/bench_service.py --models-dir models
+```
+
+PowerShell 里同样要给 `engine[bench]` 加引号。报告写到 `reports/bench-<日期>/`，该目录不进 git。

@@ -76,10 +76,21 @@ def normalize_lang(code: str) -> str:
     return primary
 
 
-def default_intra_threads() -> int:
-    """单模型 intra 线程数：不超过 4，也不超过 CPU 数。"""
+# 与 Translator / CTranslate2 后端共用，避免基准脚本和运行时各写一套默认值。
+DEFAULT_INTER_THREADS = 1
+DEFAULT_BEAM_SIZE = 2
+DEFAULT_MAX_BATCH_SIZE = 32
+DEFAULT_MAX_DECODING_LENGTH = 512
 
-    return min(4, os.cpu_count() or 1)
+
+def default_intra_threads() -> int:
+    """单模型 intra 线程数：不超过 2，也不超过 CPU 数。
+
+    短句网格里 ``beam_size=2`` 时，2 线程比 4 线程更快，并且把其余核心留给客户端。
+    数据见 ``docs/engine/性能基线.md``。
+    """
+
+    return min(2, os.cpu_count() or 1)
 
 
 @dataclass(frozen=True, slots=True)

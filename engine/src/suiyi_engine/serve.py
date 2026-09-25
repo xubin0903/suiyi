@@ -14,7 +14,12 @@ from pathlib import Path
 
 from suiyi_engine.api import ApiSettings, create_app
 from suiyi_engine.errors import UnsupportedPairError
-from suiyi_engine.registry import normalize_lang
+from suiyi_engine.registry import (
+    DEFAULT_BEAM_SIZE,
+    DEFAULT_MAX_BATCH_SIZE,
+    default_intra_threads,
+    normalize_lang,
+)
 from suiyi_engine.translator import Translator
 
 DEFAULT_HOST = "127.0.0.1"
@@ -119,6 +124,9 @@ def serve_from_args(args: argparse.Namespace) -> int:
         preload_pairs=preload_pairs,
         max_text_chars=max_text_chars,
         dev=bool(args.dev),
+        intra_threads=args.intra_threads,
+        beam_size=args.beam_size,
+        max_batch_size=args.max_batch_size,
     )
 
 
@@ -130,19 +138,30 @@ def run_server(
     preload_pairs: list[tuple[str, str]],
     max_text_chars: int,
     dev: bool,
+    intra_threads: int | None = None,
+    beam_size: int | None = None,
+    max_batch_size: int | None = None,
 ) -> int:
-    """构建翻译器并阻塞运行，直到进程收到停止信号。"""
+    """构建翻译器并阻塞运行，直到进程收到停止信号。
+
+    ``intra_threads``、``beam_size``、``max_batch_size`` 为 ``None`` 时用翻译核心的默认值。
+    """
 
     try:
         host = validate_host(host)
         port = _require_port(port, "端口")
         max_text_chars = _require_limit(max_text_chars, "max_text_chars")
+        decode = resolve_decode_options(
+            intra_threads=intra_threads,
+            beam_size=beam_size,
+            max_batch_size=max_batch_size,
+        )
     except ServeError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
 
     try:
-        translator = Translator(models_dir)
+        translator = Translator(models_dir, **decode)
         if preload_pairs:
             translator.preload(preload_pairs)
     except UnsupportedPairError as exc:
@@ -163,7 +182,7 @@ def run_server(
         None,
         ApiSettings(max_text_chars=max_text_chars, dev=dev),
     )
-    _print_startup(host, port, translator)
+    _print_startup(host, port, translator, decode)
     try:
         _serve_uvicorn(app, host, port)
     except OSError as exc:
@@ -178,10 +197,45 @@ def _serve_uvicorn(app: object, host: str, port: int) -> None:
     uvicorn.run(app, host=host, port=port, log_level="info", access_log=True)
 
 
-def _print_startup(host: str, port: int, translator: Translator) -> None:
+def resolve_decode_options(
+    *,
+    intra_threads: int | None,
+    beam_size: int | None,
+    max_batch_size: int | None,
+) -> dict[str, int]:
+    """把可选的解码参数收成传给 ``Translator`` 的关键字。
+
+    ``None`` 表示沿用默认：``intra_threads`` 为 ``min(2, CPU 数)``，
+    ``beam_size`` 为 2，``max_batch_size`` 为 32。传入的整数必须 >= 1。
+    """
+
+    resolved = {
+        "intra_threads": default_intra_threads() if intra_threads is None else intra_threads,
+        "beam_size": DEFAULT_BEAM_SIZE if beam_size is None else beam_size,
+        "max_batch_size": DEFAULT_MAX_BATCH_SIZE if max_batch_size is None else max_batch_size,
+    }
+    for name, value in resolved.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ServeError(f"{name} 必须是 >= 1 的整数，收到 {value!r}")
+    return resolved
+
+
+def _print_startup(
+    host: str,
+    port: int,
+    translator: Translator,
+    decode: dict[str, int],
+) -> None:
     print(f"监听 {_listen_url(host, port)}", flush=True)
     print(f"模型目录 {translator.registry.models_dir}", flush=True)
     print(f"可用语向 {len(translator.available_pairs())}", flush=True)
+    print(
+        "解码 "
+        f"intra_threads={decode['intra_threads']} "
+        f"beam_size={decode['beam_size']} "
+        f"max_batch_size={decode['max_batch_size']}",
+        flush=True,
+    )
 
 
 def _listen_url(host: str, port: int) -> str:

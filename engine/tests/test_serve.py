@@ -14,9 +14,11 @@ from pathlib import Path
 import pytest
 
 from suiyi_engine.__main__ import main
+from suiyi_engine.registry import DEFAULT_BEAM_SIZE, DEFAULT_MAX_BATCH_SIZE, default_intra_threads
 from suiyi_engine.serve import (
     ServeError,
     parse_preload,
+    resolve_decode_options,
     resolve_max_text_chars,
     resolve_port,
     run_server,
@@ -191,6 +193,9 @@ def test_startup_log_and_loopback_binding(
     assert f"127.0.0.1:{port}" in out
     assert str(tmp_path) in out
     assert "可用语向 0" in out
+    assert f"intra_threads={default_intra_threads()}" in out
+    assert f"beam_size={DEFAULT_BEAM_SIZE}" in out
+    assert f"max_batch_size={DEFAULT_MAX_BATCH_SIZE}" in out
     assert seen == {"host": "127.0.0.1", "port": port, "docs": None}
 
 
@@ -244,6 +249,65 @@ def test_cli_bad_port_and_preload(
     assert main(["serve"]) == 2
     assert "SUIYI_PORT" in capsys.readouterr().err
     assert main(["serve", "--preload", "zh", "--port", "18780"]) == 2
+
+
+def test_resolve_decode_options_defaults_and_overrides() -> None:
+    defaults = resolve_decode_options(intra_threads=None, beam_size=None, max_batch_size=None)
+    assert defaults == {
+        "intra_threads": default_intra_threads(),
+        "beam_size": DEFAULT_BEAM_SIZE,
+        "max_batch_size": DEFAULT_MAX_BATCH_SIZE,
+    }
+    assert resolve_decode_options(intra_threads=2, beam_size=1, max_batch_size=8) == {
+        "intra_threads": 2,
+        "beam_size": 1,
+        "max_batch_size": 8,
+    }
+    with pytest.raises(ServeError, match="beam_size"):
+        resolve_decode_options(intra_threads=None, beam_size=0, max_batch_size=None)
+
+
+def test_cli_passes_decode_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    seen: dict[str, object] = {}
+
+    class FakeTranslator:
+        def __init__(self, models_dir: object, **kwargs: int) -> None:
+            seen["kwargs"] = kwargs
+            self.registry = type("Registry", (), {"models_dir": models_dir})()
+
+        def available_pairs(self) -> list[tuple[str, str, str]]:
+            return []
+
+        def preload(self, pairs: object) -> None:
+            seen["preload"] = pairs
+
+    monkeypatch.setattr("suiyi_engine.serve.Translator", FakeTranslator)
+    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", lambda *_args, **_kwargs: None)
+    code = main(
+        [
+            "serve",
+            "--models-dir",
+            str(tmp_path),
+            "--port",
+            str(_free_port()),
+            "--intra-threads",
+            "2",
+            "--beam-size",
+            "4",
+            "--max-batch-size",
+            "8",
+            "--preload",
+            "zh-en",
+        ]
+    )
+    assert code == 0
+    assert seen["kwargs"] == {"intra_threads": 2, "beam_size": 4, "max_batch_size": 8}
+    assert seen["preload"] == [("zh", "en")]
+    assert "intra_threads=2 beam_size=4 max_batch_size=8" in capsys.readouterr().out
 
 
 def test_serve_help_mentions_loopback() -> None:

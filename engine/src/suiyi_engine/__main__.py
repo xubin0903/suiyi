@@ -55,6 +55,24 @@ def main(argv: list[str] | None = None) -> int:
         help="单条文本字符上限，默认环境变量 SUIYI_MAX_TEXT_CHARS 或 10000",
     )
     serve.add_argument("--dev", action="store_true", help="开启 /docs 与 /openapi.json")
+    serve.add_argument(
+        "--intra-threads",
+        type=int,
+        default=None,
+        help="单模型 intra 线程数，默认 min(2, CPU 数)",
+    )
+    serve.add_argument(
+        "--beam-size",
+        type=int,
+        default=None,
+        help="束搜索宽度，默认 2",
+    )
+    serve.add_argument(
+        "--max-batch-size",
+        type=int,
+        default=None,
+        help="单次解码的句批上限，默认 32",
+    )
 
     args = parser.parse_args(argv)
     if args.version:

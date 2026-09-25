@@ -21,6 +21,9 @@ obj/
 .env.*
 *.pem
 
+# 本地生成的报告（评测、基准等）。摘要写入 docs/engine/，不要提交 reports/。
+/reports/
+
 # Python
 __pycache__/
 .venv/
