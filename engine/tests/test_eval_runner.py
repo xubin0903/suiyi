@@ -401,3 +401,14 @@ def _report(evaluation, models_dir: Path) -> EvalReport:
         models_dir=str(models_dir),
         evaluated_at="2026-09-25T00:00:00+00:00",
     )
+
+
+def test_read_model_meta_uses_zip_sha_when_no_hf_revision(tmp_path: Path) -> None:
+    from suiyi_engine.eval.report import read_model_meta
+
+    model_dir = tmp_path / "zip-model"
+    model_dir.mkdir()
+    meta = {"id": "zip-model", "hf_revision": None, "weights_source": {"sha256": "b" * 64}}
+    (model_dir / "suiyi-model.json").write_text(json.dumps(meta), encoding="utf-8")
+    (found,) = read_model_meta(tmp_path, ["zip-model"])
+    assert found.hf_revision == "zip sha256:" + "b" * 64

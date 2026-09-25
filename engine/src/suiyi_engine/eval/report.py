@@ -123,7 +123,7 @@ def render_markdown(report: EvalReport) -> str:
         "",
         "## 模型",
         "",
-        "| 模型 id | hf_revision | 量化 | 转换时 ctranslate2 | 转换时间 |",
+        "| 模型 id | hf_revision（或上游 zip sha256） | 量化 | 转换时 ctranslate2 | 转换时间 |",
         "| --- | --- | --- | --- | --- |",
     ]
     if report.models:
@@ -532,13 +532,23 @@ def read_model_meta(models_dir: Path, model_ids: Sequence[str]) -> tuple[ModelMe
         metas.append(
             ModelMeta(
                 id=model_id,
-                hf_revision=_optional_str(data.get("hf_revision")),
+                hf_revision=_optional_str(data.get("hf_revision")) or _zip_revision(data),
                 quantization=_optional_str(data.get("quantization")),
                 ctranslate2_version=_optional_str(data.get("ctranslate2_version")),
                 converted_at=_optional_str(data.get("converted_at")),
             )
         )
     return tuple(metas)
+
+
+def _zip_revision(data: Mapping[str, object]) -> str | None:
+    """上游 Marian zip 来源的模型没有 hf_revision，用 ``zip sha256:<hex>`` 代替。"""
+    source = data.get("weights_source")
+    if isinstance(source, Mapping):
+        sha = _optional_str(source.get("sha256"))
+        if sha:
+            return f"zip sha256:{sha}"
+    return None
 
 
 def _optional_str(value: object) -> str | None:

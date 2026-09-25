@@ -3,7 +3,7 @@
   "checked_on": "2026-09-25",
   "language_codes": "ISO-639-1",
   "weight_note": "weight_bytes 是所钉修订上 pytorch_model.bin 的字节数，不是 CTranslate2 int8 体积。同一仓库里的 tf/flax/rust 文件是另一份权重，不要相加。",
-  "license_policy": "纳入模型的 license 一律写 CC-BY-4.0：OPUS-MT-train models/README.md 将预训练权重声明为 CC BY 4.0。hf_card_license 保留 Hugging Face 模型卡 YAML，二者不一致时仍按 CC-BY-4.0 署名。禁止 NC。",
+  "license_policy": "纳入模型的 license 一律写 CC-BY-4.0：OPUS-MT-train models/README.md 将预训练权重声明为 CC BY 4.0；weights_source 为上游 Marian zip 的条目，zip 内自带 CC BY 4.0 全文 LICENSE。hf_card_license 保留 Hugging Face 模型卡 YAML，二者不一致时仍按 CC-BY-4.0 署名。禁止 NC。",
   "models": [
     {
       "id": "opus-mt-zh-en",
@@ -44,23 +44,42 @@
       "notes": "直连 en→zh，多目标中文。模型卡要求源文本句首加 >>id<<。本修订 vocab.json 中 >>cmn_Hans<< 的 id 为 5（保留号段）；同时存在 >>cmn<<（361）与 >>cmn_Hant<<（21）。简体默认用 >>cmn_Hans<<，与原文之间加一个空格，字段本身不含空格。模型卡列出的 gan/lzh/cjy 在该词表中没有对应 >>id<<。YAML 为 apache-2.0，正文未再写许可证，仓库内无 LICENSE 文件；权重发布说明见 upstream_license。Tatoeba-test.eng.zho BLEU 31.4、chrF 0.268（模型卡）。Marian base，d_model 512，6+6 层，8 头，FFN 2048。"
     },
     {
-      "id": "opus-mt-tc-big-zh-ja",
+      "id": "opus-mt-zho-jpn-tc-big-2022-07-28",
       "src": "zh",
       "tgt": "ja",
-      "hf_repo": "Helsinki-NLP/opus-mt-tc-big-zh-ja",
-      "hf_revision": "d621a8794dc9f9477b6e74e2fead2746a39ea999",
+      "hf_repo": null,
+      "hf_revision": null,
+      "weights_source": {
+        "type": "opus-mt-zip",
+        "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/zho-jpn/opusTCv20210807-sepvoc_transformer-big_2022-07-28.zip",
+        "sha256": "bee6b96f9ab1abe50808374d926c2211798a2437ed684d700fc37f5da4d7d1da",
+        "bytes": 776428705,
+        "model_file": "opusTCv20210807-sepvoc.spm32k-spm32k.transformer-big.model1.npz.best-perplexity.npz",
+        "vocab_files": [
+          "opusTCv20210807-sepvoc.spm32k-spm32k.src.vocab",
+          "opusTCv20210807-sepvoc.spm32k-spm32k.trg.vocab"
+        ],
+        "copy_files": [
+          "source.spm",
+          "target.spm",
+          "LICENSE",
+          "README.md"
+        ]
+      },
+      "model_card": "https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-zh-ja",
+      "upstream_readme_url": "https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/master/models/zho-jpn/README.md",
       "license": "CC-BY-4.0",
       "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
       "hf_card_license": "CC-BY-4.0",
       "upstream_license": "CC-BY-4.0",
-      "upstream_license_url": "https://github.com/Helsinki-NLP/OPUS-MT-train/blob/master/models/README.md",
-      "attribution": "Helsinki-NLP OPUS-MT opus-mt-tc-big-zh-ja (revision d621a8794dc9f9477b6e74e2fead2746a39ea999); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
+      "upstream_license_url": "https://object.pouta.csc.fi/Tatoeba-MT-models/zho-jpn/opusTCv20210807-sepvoc_transformer-big_2022-07-28.zip",
+      "attribution": "Helsinki-NLP Tatoeba-MT zho-jpn opusTCv20210807-sepvoc_transformer-big_2022-07-28 (zip sha256 bee6b96f9ab1abe50808374d926c2211798a2437ed684d700fc37f5da4d7d1da); Tiedemann & Thottingal, EAMT 2020; Tiedemann, WMT 2020; CC-BY-4.0",
       "src_prefix_token": null,
       "tier": "mvp",
-      "architecture": "marian-big",
-      "weight_file": "pytorch_model.bin",
-      "weight_bytes": 418403333,
-      "notes": "直连 zh→ja。transformer-big：d_model 1024，6+6 层，16 头，FFN 4096，词表 32001。模型卡示例不加目标语标记；vocab.json 没有 >>jpn<<。HF benchmark_results.txt：tatoeba-test-v2021-08-07 BLEU 24.6、chrF 0.27790。上游 zho-jpn README 对同一 zip 名写 BLEU 26.3，以本修订仓库内 benchmark_results.txt 为准。模型卡正文与 YAML 均为 CC-BY-4.0。另请引用 Tiedemann, WMT 2020（Tatoeba Translation Challenge）。"
+      "architecture": "marian-big-sepvoc",
+      "weight_file": "opusTCv20210807-sepvoc.spm32k-spm32k.transformer-big.model1.npz.best-perplexity.npz",
+      "weight_bytes": 836682990,
+      "notes": "直连 zh→ja，替换 opus-mt-tc-big-zh-ja 的 HF 转换版（Issue #25）。与 HF 仓库是同一次发布，但 HF 版把分离词表（sepvoc）错并成一张共享词表：vocab.json 只含日文目标词表，config 为 share_encoder_decoder_embeddings=true、只有一个 model.shared.weight，源侧中文 piece 约 45% 映射成 <unk>，输出乱码。这里直接转换上游 Marian npz 与两张词表。zip 内 LICENSE 为 CC BY 4.0 全文。transformer-big：d_model 1024，6+6 层，16 头，FFN 4096，源/目标词表各 32000。不加语言标记，不做 preprocess.sh 的标点归一（实测归一后 chrF 30.55 < 不归一 31.32）。上游 README：Tatoeba-test-v2021-08-07.zho-jpn BLEU 26.3、chrF 0.29117。"
     },
     {
       "id": "opus-mt-ja-en",
@@ -82,23 +101,41 @@
       "notes": "直连 ja→en，亦是 ja→zh 中转的第一跳。模型卡：transformer-align，源 ja、目标 en，无目标语标记。Tatoeba.ja.en BLEU 41.7、chrF 0.589。YAML 为 apache-2.0，正文未写许可证，仓库内无 LICENSE 文件。Marian base 尺寸：d_model 512，6+6 层，8 头，FFN 2048，词表 60716。"
     },
     {
-      "id": "opus-tatoeba-en-ja",
+      "id": "opus-mt-eng-jpn-2021-02-18",
       "src": "en",
       "tgt": "ja",
-      "hf_repo": "Helsinki-NLP/opus-tatoeba-en-ja",
-      "hf_revision": "3a282648cb991174f3c423e376aff3a13e5edaaf",
+      "hf_repo": null,
+      "hf_revision": null,
+      "weights_source": {
+        "type": "opus-mt-zip",
+        "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-jpn/opus-2021-02-18.zip",
+        "sha256": "921cbab703a5ed7b2df1c35b72c0e260aefca698ce2bd6c077833f8dd2af8fce",
+        "bytes": 289140267,
+        "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+        "vocab_files": [
+          "opus.spm32k-spm32k.vocab.yml"
+        ],
+        "copy_files": [
+          "source.spm",
+          "target.spm",
+          "LICENSE",
+          "README.md"
+        ]
+      },
+      "model_card": null,
+      "upstream_readme_url": "https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/master/models/eng-jpn/README.md",
       "license": "CC-BY-4.0",
       "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
-      "hf_card_license": "Apache-2.0",
+      "hf_card_license": null,
       "upstream_license": "CC-BY-4.0",
-      "upstream_license_url": "https://github.com/Helsinki-NLP/OPUS-MT-train/blob/master/models/README.md",
-      "attribution": "Helsinki-NLP OPUS-MT opus-tatoeba-en-ja (revision 3a282648cb991174f3c423e376aff3a13e5edaaf); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
+      "upstream_license_url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-jpn/opus-2021-02-18.zip",
+      "attribution": "Helsinki-NLP Tatoeba-MT eng-jpn opus-2021-02-18 (zip sha256 921cbab703a5ed7b2df1c35b72c0e260aefca698ce2bd6c077833f8dd2af8fce); Tiedemann & Thottingal, EAMT 2020; Tiedemann, WMT 2020; CC-BY-4.0",
       "src_prefix_token": null,
       "tier": "mvp",
-      "architecture": "marian-base-align",
-      "weight_file": "pytorch_model.bin",
-      "weight_bytes": 155052933,
-      "notes": "直连 en→ja。目标语言在模型卡中写明为 jpn（日语），不是 jap。无目标语标记。Tatoeba-test.eng-jpn BLEU 15.2、chrF 0.258（10000 句）。原始权重 opus+bt-2021-04-10。同目录另有 opus-2021-02-18（上游 README BLEU 15.7），不是本 HF 修订。pytorch_model.bin 155,052,933 字节，同仓库 tf_model.h5 为 312,580,600 字节，原因模型卡未说明。YAML apache-2.0，正文未写许可证，仓库内无 LICENSE 文件。config：d_model 512，6+6 层，8 头，FFN 2048，词表 65001。"
+      "architecture": "marian-base",
+      "weight_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+      "weight_bytes": 309987327,
+      "notes": "直连 en→ja，替换 opus-tatoeba-en-ja（Issue #25）。Tatoeba-Challenge eng-jpn 的另一次发布（HF 上没有），transformer（base），共享词表 32000，无语言标记。zip 内 LICENSE 为 CC BY 4.0 全文。上游 README：Tatoeba-test.eng-jpn BLEU 15.7、chrF 0.266。实测：随译样例 chrF 17.04（原 15.93）、FLORES-200 devtest 前 200 句 28.59（原 26.49）、Tatoeba v2021-08-07 前 300 句 23.63（原 23.02），三组都没有 URL 幻觉（原模型分别出现 1/2/1 次）。仍有偏短、专名音译不稳（Yuki→雄基）的问题。"
     },
     {
       "id": "opus-mt-ko-en",
@@ -362,6 +399,35 @@
   ],
   "rejected": [
     {
+      "hf_repo": "Helsinki-NLP/opus-mt-tc-big-zh-ja",
+      "hf_revision": "d621a8794dc9f9477b6e74e2fead2746a39ea999",
+      "hf_card_license": "CC-BY-4.0",
+      "reason": "HF 转换有缺陷，任何修订都不可用（Issue #25）。上游是分离词表（sepvoc）模型，HF 版只保留了目标（日文）词表并共享嵌入：vocab.json 与上游 trg.vocab 重合 31999/32001，与 src.vocab 仅 9666；源侧中文 SentencePiece piece 约 45% 查不到而变 <unk>。当前 main 修订 d621a879 就是 discussions/3『Update checkpoint for transformers>=4.29』合入后的版本，PR 自带的测试输出已是乱码；更早的 1499b2f1、0f67cf7f 用 transformers 5.17 直接生成同样是乱码。加 >>jpn<< / >>jpn_Hani<< 无效（词表里没有这些 token）。改用同一次发布的上游 Marian zip：opus-mt-zho-jpn-tc-big-2022-07-28。"
+    },
+    {
+      "hf_repo": "Helsinki-NLP/opus-tatoeba-en-ja",
+      "hf_revision": "3a282648cb991174f3c423e376aff3a13e5edaaf",
+      "hf_card_license": "Apache-2.0",
+      "reason": "被 opus-mt-eng-jpn-2021-02-18 取代（Issue #25）。随译样例 chrF 15.93，把 'The shop opens at 10:30 in Shibuya.' 译成带 oricon URL 的长串；FLORES-200 前 200 句出现 2 次 URL 幻觉。许可证本身没有问题：同一发布的 zip（eng-jpn/opus+bt-2021-04-10.zip）内 LICENSE 为 CC BY 4.0 全文。"
+    },
+    {
+      "hf_repo": "Helsinki-NLP/opus-mt-tc-bible-big-deu_eng_fra_por_spa-mul",
+      "hf_revision": "160f64269da14c836871f8acf97553b23c63b979",
+      "hf_card_license": "Apache-2.0",
+      "reason": "en→ja 备选，需 >>jpn<<。随译样例 chrF 35.41，但 FLORES-200 前 200 句 21.50、Tatoeba 前 300 句 17.46，均低于 opus-mt-eng-jpn-2021-02-18；词汇错误多（糖尿病→癌酸/病酸，receipt→レビュー，Yuki→昨日），偶发坏字符。int8 目录 249 MB，单句约慢 3–4 倍。"
+    },
+    {
+      "hf_repo": "facebook/m2m100_418M",
+      "hf_revision": "55c2e61bbf05dfb8d7abccdc3fae6fc8512fd636",
+      "hf_card_license": "MIT",
+      "reason": "许可证可用（MIT），未采用。快测（未经 Translator 分句）zh→ja chrF 31.82、en→ja 21.93，与所选模型相当或更差；单句延迟约为所选模型的 5–7 倍，需另写 target_prefix 后端。"
+    },
+    {
+      "upstream_zip": "https://object.pouta.csc.fi/Tatoeba-MT-models/zho-jpn/opusTCv20210807_transformer-big_2022-07-29.zip",
+      "sha256": "e16176d25b7eba2c176ae272669b8698b2834c1028de5a027863ad708e5cffec",
+      "reason": "zho-jpn 共享词表版。随译样例 chrF 8.08，大量截断或空串，原因未深究。"
+    },
+    {
       "hf_repo": "Helsinki-NLP/opus-mt-en-jap",
       "hf_revision": "a863894cdd2b80f3bc1c5966734aee9ffec207d1",
       "hf_card_license": "Apache-2.0",
@@ -387,5 +453,6 @@
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/legalcode",
       "reason": "官方权重 CC-BY-NC-4.0。随译不做语音翻译，且 NC 不能进默认分发。"
     }
-  ]
+  ],
+  "weights_source_note": "weights_source.type=opus-mt-zip 时，scripts/convert_models.py 从 object.pouta.csc.fi 下载 Helsinki-NLP 原始 Marian 发布包，按 sha256 校验后用 CTranslate2 Marian 转换器转换；hf_repo / hf_revision 为 null，model_card 只作参考。见 Issue #25。"
 }

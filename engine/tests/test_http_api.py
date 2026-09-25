@@ -508,9 +508,9 @@ def test_model_languages_and_auto_translate() -> None:
     required = (
         "opus-mt-zh-en",
         "opus-mt-en-zh",
-        "opus-mt-tc-big-zh-ja",
+        "opus-mt-zho-jpn-tc-big-2022-07-28",
         "opus-mt-ja-en",
-        "opus-tatoeba-en-ja",
+        "opus-mt-eng-jpn-2021-02-18",
     )
     root = Path(os.environ["SUIYI_MODELS_DIR"])
     missing = [
@@ -522,9 +522,9 @@ def test_model_languages_and_auto_translate() -> None:
     expected = {
         ("zh", "en"): ("direct", ["opus-mt-zh-en"]),
         ("en", "zh"): ("direct", ["opus-mt-en-zh"]),
-        ("zh", "ja"): ("direct", ["opus-mt-tc-big-zh-ja"]),
+        ("zh", "ja"): ("direct", ["opus-mt-zho-jpn-tc-big-2022-07-28"]),
         ("ja", "zh"): ("pivot", ["opus-mt-ja-en", "opus-mt-en-zh"]),
-        ("en", "ja"): ("direct", ["opus-tatoeba-en-ja"]),
+        ("en", "ja"): ("direct", ["opus-mt-eng-jpn-2021-02-18"]),
         ("ja", "en"): ("direct", ["opus-mt-ja-en"]),
     }
     samples = [
