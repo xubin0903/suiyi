@@ -5,9 +5,37 @@ using Suiyi.Core.Engine;
 namespace Suiyi.Core.Ocr;
 
 // ⚠ 按 Issue #53 的接口草案实现（docs/engine/HTTP-API.md 的 OCR 部分尚未定稿合入）。
-// 客户端里依赖草案字段名、错误码的地方只有本文件与 Flow/OcrResultMapper.cs；
-// #53 定稿或 #56 接入 EngineClient 时，按定稿同步这两处（及对应单测），其余代码只用 PopupOcrResult / PopupError。
+// 客户端里依赖草案的地方集中在：
+//   本文件（DTO、错误码、路径/查询参数名、上限常量）、
+//   Engine/EngineClient.Ocr.cs（请求构造、错误码 → EngineException、客户端预检）、
+//   Flow/OcrResultMapper.cs（响应 / 错误码 → 浮窗），
+//   以及 EngineDtos 里 HealthResponse.OcrLoaded 一个字段。
+// #53 定稿后按定稿同步这几处（及对应单测），其余代码只用 EngineException / PopupOcrResult / PopupError。
 // 与 EngineDtos 一样忽略未知字段，不要打开 UnmappedMemberHandling.Disallow。
+
+/// <summary><c>POST /ocr</c> 的响应（#53 草案）：只识别不翻译。</summary>
+public sealed record OcrResponse
+{
+    /// <summary>识别出的文本行（带框与置信度）。</summary>
+    [JsonPropertyName("lines")]
+    public IReadOnlyList<OcrLine> Lines { get; init; } = [];
+
+    /// <summary>合并后的段落，顺序即阅读顺序；识别为空时为空数组。</summary>
+    [JsonPropertyName("paragraphs")]
+    public IReadOnlyList<OcrParagraph> Paragraphs { get; init; } = [];
+
+    /// <summary>段落以 <c>\n</c> 连接的全文；识别为空时为 <c>""</c>。</summary>
+    [JsonPropertyName("text")]
+    public string Text { get; init; } = string.Empty;
+
+    /// <summary>服务端解码出的图片尺寸（像素）。</summary>
+    [JsonPropertyName("image")]
+    public OcrImageInfo? Image { get; init; }
+
+    /// <summary>服务端 OCR 耗时（毫秒）。草案里 <c>/ocr</c> 的 <c>elapsed_ms</c> 是数字，<c>/ocr_translate</c> 的是对象。</summary>
+    [JsonPropertyName("elapsed_ms")]
+    public double ElapsedMs { get; init; }
+}
 
 /// <summary><c>POST /ocr_translate</c> 的响应（#53 草案）：<c>/ocr</c> 的全部字段 + <c>translation</c> + 分段耗时。</summary>
 public sealed record OcrTranslateResponse
@@ -126,9 +154,48 @@ public static class OcrErrorCodes
     public const string DetectFailed = "detect_failed";
 }
 
-/// <summary>草案 JSON 的解析（演示数据与单测用；#56 的 <c>EngineClient</c> 可复用同一组 DTO）。</summary>
+/// <summary>草案里的路径、查询参数、上限，以及 JSON 解析（<see cref="EngineClient"/> 与演示数据共用）。</summary>
 public static class OcrDraftContract
 {
+    /// <summary>只识别：<c>POST /ocr</c>。</summary>
+    public const string OcrPath = "ocr";
+
+    /// <summary>识别并翻译：<c>POST /ocr_translate</c>。</summary>
+    public const string OcrTranslatePath = "ocr_translate";
+
+    /// <summary>请求体的媒体类型：原始 PNG 字节（草案明确不用 multipart / base64）。</summary>
+    public const string PngMediaType = "image/png";
+
+    /// <summary><c>/ocr</c> 的识别语种参数（<c>auto</c>，可选 <c>zh</c>/<c>en</c>/<c>ja</c>）。</summary>
+    public const string LangParameter = "lang";
+
+    /// <summary><c>/ocr_translate</c> 的原文语种参数（默认 <c>auto</c>）。</summary>
+    public const string SourceParameter = "source";
+
+    /// <summary><c>/ocr_translate</c> 的目标语种参数（必填）。</summary>
+    public const string TargetParameter = "target";
+
+    /// <summary><c>/ocr_translate</c> 的次目标参数（可选：检测到的原文语种等于 <c>target</c> 时改译为它）。</summary>
+    public const string FallbackTargetParameter = "fallback_target";
+
+    /// <summary>请求体字节上限，与服务端 <c>--max-image-bytes</c> 默认值一致（8 MiB）。</summary>
+    public const int MaxImageBytes = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// 总像素上限（4096×4096 = 16 777 216，即草案的「16.7 MP」）。草案同时写了「4096×4096 以内」，
+    /// 客户端预检只按总像素判断（更宽松），细长图是否超限交给服务端。
+    /// </summary>
+    public const long MaxImagePixels = 4096L * 4096L;
+
+    /// <summary><c>/ocr_translate</c> 的 413 <c>details</c>：<c>limit</c>、<c>actual</c>。</summary>
+    public const string LimitDetail = "limit";
+
+    /// <summary>见 <see cref="LimitDetail"/>。</summary>
+    public const string ActualDetail = "actual";
+
+    /// <summary><c>ocr_unavailable</c> / <c>unsupported_pair</c> 的 <c>details.missing_models</c>。</summary>
+    public const string MissingModelsDetail = "missing_models";
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>解析 <c>/ocr_translate</c> 响应正文。</summary>

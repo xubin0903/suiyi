@@ -8,6 +8,7 @@ namespace Suiyi.Core.Engine;
 
 /// <summary>
 /// 本机翻译服务（<c>python -m suiyi_engine serve</c>）的 HTTP 客户端。契约见 <c>docs/engine/HTTP-API.md</c>。
+/// OCR 部分（<c>/ocr</c>、<c>/ocr_translate</c>）按 Issue #53 草案实现，集中在 <c>EngineClient.Ocr.cs</c>。
 /// </summary>
 /// <remarks>
 /// <para>整个进程共用一个实例：内部只有一个长寿命 <see cref="HttpClient"/>，
@@ -18,7 +19,7 @@ namespace Suiyi.Core.Engine;
 /// <see cref="OperationCanceledException"/>，不算错误。</para>
 /// <para>线程安全。</para>
 /// </remarks>
-public sealed class EngineClient : IDisposable
+public sealed partial class EngineClient : IDisposable
 {
     /// <summary>服务默认端口（与引擎 <c>SUIYI_PORT</c> 默认一致）。</summary>
     public const int DefaultPort = 18780;
@@ -39,6 +40,7 @@ public sealed class EngineClient : IDisposable
     private readonly object _gate = new();
     private LanguagesResponse? _languages;
     private HashSet<string>? _loadedModels;
+    private bool? _ocrLoaded;
 
     /// <summary>连接 <c>http://127.0.0.1:{port}</c>。</summary>
     /// <param name="port">服务端口，默认 <see cref="DefaultPort"/>。</param>
@@ -107,6 +109,7 @@ public sealed class EngineClient : IDisposable
         lock (_gate)
         {
             _loadedModels = new HashSet<string>(health.LoadedModels, StringComparer.Ordinal);
+            _ocrLoaded = health.OcrLoaded;
         }
 
         return health;
@@ -140,6 +143,7 @@ public sealed class EngineClient : IDisposable
         {
             _languages = null;
             _loadedModels = null;
+            _ocrLoaded = null;
         }
     }
 
@@ -187,7 +191,7 @@ public sealed class EngineClient : IDisposable
         await WarmCachesAsync(cancellationToken).ConfigureAwait(false);
         var timeout = GetTimeout(text, source, target);
         var request = new TranslateRequest { Text = text, Source = source, Target = target };
-        var response = await SendAsync<TranslateResponse>(HttpMethod.Post, "translate", request, timeout, cancellationToken)
+        var response = await SendAsync<TranslateResponse>(HttpMethod.Post, "translate", JsonContent(request), timeout, cancellationToken)
             .ConfigureAwait(false);
         if (response.Route.Count > 0)
         {
@@ -238,21 +242,27 @@ public sealed class EngineClient : IDisposable
         }
     }
 
+    private static StringContent JsonContent(object body) =>
+        new(JsonSerializer.Serialize(body, body.GetType(), JsonOptions), new UTF8Encoding(false), "application/json");
+
+    /// <param name="method">HTTP 方法。</param>
+    /// <param name="pathAndQuery">相对路径（可带查询串）。错误信息里只写不带查询串的路径。</param>
+    /// <param name="content">请求体，随请求释放；没有时为 <see langword="null"/>。</param>
+    /// <param name="timeout">本次请求的超时。</param>
+    /// <param name="cancellationToken">调用方取消令牌。</param>
     private async Task<T> SendAsync<T>(
         HttpMethod method,
-        string path,
-        object? body,
+        string pathAndQuery,
+        HttpContent? content,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        var query = pathAndQuery.IndexOf('?', StringComparison.Ordinal);
+        var path = query < 0 ? pathAndQuery : pathAndQuery[..query];
         using var timeoutCts = new CancellationTokenSource(timeout, _timeProvider);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-        using var request = new HttpRequestMessage(method, path);
-        if (body is not null)
-        {
-            var json = JsonSerializer.Serialize(body, body.GetType(), JsonOptions);
-            request.Content = new StringContent(json, new UTF8Encoding(false), "application/json");
-        }
+        using var request = new HttpRequestMessage(method, pathAndQuery);
+        request.Content = content;
 
         try
         {
@@ -328,12 +338,18 @@ public sealed class EngineClient : IDisposable
 
         var details = body.Details;
         var message = string.Create(CultureInfo.InvariantCulture, $"{path} 返回 HTTP {status} {body.Code}：{body.Message}");
+        if (MapOcrError(status, body, message) is { } ocrError)
+        {
+            return ocrError;
+        }
+
         return body.Code switch
         {
             "unsupported_pair" => new EngineException(EngineErrorKind.UnsupportedPair, message)
             {
                 StatusCode = status,
                 ErrorCode = body.Code,
+                Details = details,
                 MissingModels = GetStringArray(details, "missing_models"),
                 SourceLanguage = GetString(details, "source"),
                 TargetLanguage = GetString(details, "target"),
@@ -342,6 +358,7 @@ public sealed class EngineClient : IDisposable
             {
                 StatusCode = status,
                 ErrorCode = body.Code,
+                Details = details,
                 Limit = GetInt(details, "limit"),
                 Length = GetInt(details, "length"),
             },
@@ -355,6 +372,7 @@ public sealed class EngineClient : IDisposable
         {
             StatusCode = status,
             ErrorCode = body.Code,
+            Details = details,
         };
     }
 

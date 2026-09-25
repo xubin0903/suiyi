@@ -229,7 +229,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `PopupOcrResult` | Core | 框选翻译结果（#57）：`SourceParagraphs` / `TranslationParagraphs`（一一对应）、`Source`、`Target`、`SourceDetected`、`Elapsed`；`SourceText` / `TranslationText`（段落间空一行）、`IsEmpty`、`Empty(target)` |
 | `PopupPlacement.CalculateAroundRect` | Core | 以选区为锚点：右下外侧 → 下方 → 上方 → 左侧 → 都放不下时压住选区（下 / 上空间大的一侧），最后夹紧到工作区；返回位置与 `RectPlacementSide` |
 | `OcrDraftContract` / `OcrTranslateResponse` / `OcrErrorCodes` | Core（`Ocr/`） | ⚠ 按 #53 **草案**的 `/ocr_translate` 响应 DTO、错误码与解析 |
-| `Flow/OcrResultMapper` | Core | 草案响应 → `PopupOcrResult`、草案错误码 → `PopupError`。与上一行是客户端里仅有的两处依赖草案字段的地方，#53 定稿后同步 |
+| `Flow/OcrResultMapper` | Core | 草案响应 → `PopupOcrResult`、草案错误码 → `PopupError`。与上一行、`Engine/EngineClient.Ocr.cs`、`HealthResponse.OcrLoaded` 是客户端里依赖草案的全部地方（见「OCR 调用」），#53 定稿后同步 |
 | `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）、`EngineStartTimeout`（等服务就绪超时）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 `Flow/PopupErrorMapper` 映射 |
 | `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
 | `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
@@ -400,6 +400,16 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
   - 结果 `TranslationOutcome`：译文、原文语种、是否自动检测、实际目标、是否改译、`route`、服务端 `elapsed_ms`（改译为两次之和）、客户端往返耗时、请求次数。
   - 不自动重试，重试由界面决定。
 
+### OCR 调用（#56，⚠ 按 #53 草案）
+
+`docs/engine/HTTP-API.md` 的 OCR 部分尚未定稿，客户端按 Issue #53 草案实现。依赖草案的代码集中在：`Ocr/OcrDraftContract.cs`（DTO、错误码、路径/参数名、上限常量）、`Engine/EngineClient.Ocr.cs`（请求构造、错误映射、预检）、`Flow/OcrResultMapper.cs`（→ 浮窗），外加 `HealthResponse.OcrLoaded` 一个字段。定稿后只改这几处。
+
+- **`EngineClient.OcrTranslateAsync(png, source, target, fallbackTarget, ct)`** → `POST /ocr_translate?source=…&target=…[&fallback_target=…]`，请求体为**原始 PNG 字节**，`Content-Type: image/png`（草案不用 multipart / base64）。`fallbackTarget` 为空或与 `target` 同语种时不发。成功后记 OCR 已加载、各段 `route` 模型已加载。识别为空是正常结果（`paragraphs: []`）。
+- **`EngineClient.OcrAsync(png, lang = "auto", ct)`** → `POST /ocr?lang=…`，只识别。
+- **客户端预检**（`EngineClient.PrecheckImage`）：超过 8 MiB，或 PNG 头的宽×高超过 4096×4096 = 16 777 216 像素时，直接抛 `ImageTooLarge`（`IsClientPrecheck = true`，`Details` 与服务端 413 同形 `limit`/`actual`），不发请求。读不出 PNG 头时不判像素，交给服务端。
+- **超时**：OCR 与候选翻译模型都已加载（`/health.ocr_loaded == true`）时 15000 ms，否则 30000 ms（旧引擎没有 `ocr_loaded` 也按 30000 ms）。见下文表格。
+- **`OcrTranslationService`**（`IOcrTranslationService`）：`source=auto`、`target=主目标`、`fallback_target=次目标`，一次往返完成主/次目标规则；最新请求优先、`CancelCurrent()`；结果 `OcrTranslationOutcome`（响应、目标、次目标、是否改译、字节数、宽高、客户端耗时）。日志只记尺寸、字节数、段落数、耗时、错误码/状态码，不记识别文本和服务端错误说明。浮窗内容用 `OcrResultMapper.Map(outcome.Response, outcome.Target)`。主流程串接见 #58。
+
 ### 超时（`TimeoutPolicy`，纯函数）
 
 候选路线：`source` 明确时为该语向；`auto` 时为 {zh, en, ja} 去掉 `target` 后到 `target` 的全部**可用**语向。按顺序取第一条命中的规则：
@@ -412,9 +422,17 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
 
 字符数按 Unicode 码位计（与服务端 Python `len` 一致）。`/health`、`/languages` 固定 2000 ms。
 
+OCR 请求（暂无 OCR 性能基线，等 #52 后按 P95 调整）：
+
+| 条件 | 超时 |
+|------|------|
+| `/ocr_translate`：`ocr_loaded == true`，且 `source→target` 候选路线与 `target→fallback_target` 路线的模型都已加载 | 15000 ms（#56 建议值） |
+| 其他（OCR 或翻译模型可能冷加载、`/health` / `/languages` 未知、旧引擎无 `ocr_loaded`） | 30000 ms（15000 + OCR 冷加载余量 + 翻译懒加载 10000） |
+| `/ocr`：`ocr_loaded == true` / 其他 | 15000 / 30000 ms |
+
 ### 错误
 
-失败统一抛 `EngineException`，按 `Kind`（`EngineErrorKind`）处理，界面显示 `UserMessage`；技术细节在 `Message`，只写日志。调用方自己取消时抛 `OperationCanceledException`，不是 `EngineException`。
+失败统一抛 `EngineException`，按 `Kind`（`EngineErrorKind`）处理，界面显示 `UserMessage`；技术细节在 `Message`，只写日志；错误信封的 `details` 原样保留在 `Details`。浮窗侧 `PopupErrorMapper.Map` 对四个 OCR 错误类别转交 `OcrResultMapper.MapError(ErrorCode, Details)`，文案只维护一处。调用方自己取消时抛 `OperationCanceledException`，不是 `EngineException`。
 
 | Kind | 来源 | UserMessage |
 |------|------|-------------|
@@ -423,6 +441,10 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
 | `UnsupportedPair` | `unsupported_pair`，带 `MissingModels`、`SourceLanguage`、`TargetLanguage` | 未安装语向模型：opus-mt-en-zh（无缺失模型时：不支持该语向：ko→zh） |
 | `TextTooLong` | `text_too_long`，带 `Limit`、`Length` | 文本过长：N 字，上限 M 字 |
 | `DetectFailed` | `detect_failed` | 无法识别原文语种，请手动指定 |
+| `ImageTooLarge` | 413 `image_too_large`（带 `Limit`=`details.limit`、`Length`=`details.actual`），或客户端预检拦截（`IsClientPrecheck`） | 选区过大，请缩小后重试 |
+| `UnsupportedMediaType` | 415 `unsupported_media_type` | 截图格式不受支持 |
+| `InvalidImage` | 422 `invalid_image` | 截图无法解码 |
+| `OcrUnavailable` | 503 `ocr_unavailable`，带 `MissingModels` | OCR 模型未安装：ppocr-det（无列表时：OCR 模型未安装） |
 | `InvalidRequest` | `invalid_request` | 翻译请求无效 |
 | `Internal` | `internal_error`，或 5xx 且正文不是错误信封 / 错误码未知 | 翻译服务内部错误 |
 | `Unknown` | 框架 404 等非信封 4xx、未知 4xx 错误码、200 但 JSON 无法解析 | 翻译服务返回了无法识别的响应 |
@@ -435,6 +457,8 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
 python -m suiyi_engine serve --preload zh-en,en-zh
 SUIYI_ENGINE_PORT=18780 dotnet test client/Suiyi.sln -c Release --filter Category=Engine
 ```
+
+OCR 联调（`EngineOcrLiveTests`，需 #53 服务端实现）另需 `SUIYI_ENGINE_OCR_PNG=<含中文的 PNG 路径>`，未设置时跳过。
 
 ## 开发模式下的翻译服务
 

@@ -21,6 +21,18 @@ public enum EngineErrorKind
     /// <summary><c>invalid_request</c>：请求字段非法。</summary>
     InvalidRequest,
 
+    /// <summary><c>image_too_large</c>（413）：截图超过字节或像素上限；客户端预检拦截时也是此类（无状态码）。⚠ #53 草案。</summary>
+    ImageTooLarge,
+
+    /// <summary><c>unsupported_media_type</c>（415）：请求体不是 PNG（服务端按魔数判定）。⚠ #53 草案。</summary>
+    UnsupportedMediaType,
+
+    /// <summary><c>invalid_image</c>（422）：PNG 无法解码。⚠ #53 草案。</summary>
+    InvalidImage,
+
+    /// <summary><c>ocr_unavailable</c>（503）：OCR 模型缺失。⚠ #53 草案。</summary>
+    OcrUnavailable,
+
     /// <summary><c>internal_error</c>，或 5xx 且正文不是错误信封。</summary>
     Internal,
 

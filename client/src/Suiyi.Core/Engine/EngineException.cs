@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 
 namespace Suiyi.Core.Engine;
 
@@ -24,7 +25,7 @@ public sealed class EngineException : Exception
     /// <summary>服务端 <c>error.code</c>；不是错误信封时为 <see langword="null"/>。</summary>
     public string? ErrorCode { get; init; }
 
-    /// <summary><see cref="EngineErrorKind.UnsupportedPair"/> 时缺失的模型 id（可能为空）。</summary>
+    /// <summary><see cref="EngineErrorKind.UnsupportedPair"/>、<see cref="EngineErrorKind.OcrUnavailable"/> 时缺失的模型 id（可能为空）。</summary>
     public IReadOnlyList<string> MissingModels { get; init; } = [];
 
     /// <summary><see cref="EngineErrorKind.UnsupportedPair"/> 时请求的原文语种。</summary>
@@ -33,11 +34,17 @@ public sealed class EngineException : Exception
     /// <summary><see cref="EngineErrorKind.UnsupportedPair"/> 时请求的目标语种。</summary>
     public string? TargetLanguage { get; init; }
 
-    /// <summary><see cref="EngineErrorKind.TextTooLong"/> 时服务的字符上限。</summary>
+    /// <summary><see cref="EngineErrorKind.TextTooLong"/> 时服务的字符上限；<see cref="EngineErrorKind.ImageTooLarge"/> 时为 <c>details.limit</c>。</summary>
     public int? Limit { get; init; }
 
-    /// <summary><see cref="EngineErrorKind.TextTooLong"/> 时文本长度。</summary>
+    /// <summary><see cref="EngineErrorKind.TextTooLong"/> 时文本长度；<see cref="EngineErrorKind.ImageTooLarge"/> 时为 <c>details.actual</c>。</summary>
     public int? Length { get; init; }
+
+    /// <summary>错误信封的 <c>details</c> 原样（独立副本，可跨线程保留）；没有信封时为 <c>default</c>。</summary>
+    public JsonElement Details { get; init; }
+
+    /// <summary>是否由客户端预检拦截、没有发出请求（目前只有 <see cref="EngineErrorKind.ImageTooLarge"/>）。</summary>
+    public bool IsClientPrecheck { get; init; }
 
     /// <summary><see cref="EngineErrorKind.Timeout"/> 时生效的超时。</summary>
     public TimeSpan? Timeout { get; init; }
@@ -56,6 +63,12 @@ public sealed class EngineException : Exception
             ? string.Create(CultureInfo.InvariantCulture, $"文本过长：{length} 字，上限 {limit} 字")
             : "文本过长",
         EngineErrorKind.DetectFailed => "无法识别原文语种，请手动指定",
+        EngineErrorKind.ImageTooLarge => "选区过大，请缩小后重试",
+        EngineErrorKind.UnsupportedMediaType => "截图格式不受支持",
+        EngineErrorKind.InvalidImage => "截图无法解码",
+        EngineErrorKind.OcrUnavailable => MissingModels.Count > 0
+            ? "OCR 模型未安装：" + string.Join("、", MissingModels)
+            : "OCR 模型未安装",
         EngineErrorKind.InvalidRequest => "翻译请求无效",
         EngineErrorKind.Internal => "翻译服务内部错误",
         _ => "翻译服务返回了无法识别的响应",

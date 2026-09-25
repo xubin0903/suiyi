@@ -23,6 +23,9 @@ public static class PopupErrorMapper
             },
             EngineErrorKind.TextTooLong => new PopupError(PopupErrorKind.TextTooLong) { Limit = exception.Limit, Length = exception.Length },
             EngineErrorKind.DetectFailed => new PopupError(PopupErrorKind.DetectFailed),
+            // OCR 错误码（#53 草案）统一走 OcrResultMapper，文案只维护一处；客户端预检拦截的 ImageTooLarge 也带同形 Details。
+            EngineErrorKind.ImageTooLarge or EngineErrorKind.UnsupportedMediaType or EngineErrorKind.InvalidImage or EngineErrorKind.OcrUnavailable =>
+                OcrResultMapper.MapError(exception.ErrorCode, exception.Details),
             _ => new PopupError(PopupErrorKind.Other) { Detail = exception.UserMessage },
         };
     }
