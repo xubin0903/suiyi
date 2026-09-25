@@ -8,7 +8,9 @@ obj/
 .DS_Store
 
 # Models (download on demand)
-models/
+# 只忽略仓库根目录的模型缓存，避免误伤源码包
+# （例如 engine/src/suiyi_engine/models/）。
+/models/
 *.bin
 *.onnx
 *.gguf
@@ -23,6 +25,12 @@ models/
 __pycache__/
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.coverage
 
 # Node
 node_modules/
