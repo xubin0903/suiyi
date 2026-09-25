@@ -29,10 +29,13 @@ client/
 
   | 目录 | 内容 |
   |------|------|
-  | `Engine/` | HTTP 客户端与服务进程管理逻辑 |
+  | `Engine/` | HTTP 客户端（已有）与服务进程管理逻辑 |
   | `Settings/` | 设置模型与读写 |
   | `Clipboard/` | 剪贴板监听、过滤规则、自身写入抑制（已有） |
   | `Popup/` | 浮窗 ViewModel 与状态机 |
+  | `Hotkeys/` | 快捷键解析、注册管理、取词流程（已有） |
+  | `Tray/` | 托盘状态、菜单模型、托盘控制器（已有） |
+  | `Lifecycle/` | 单实例等进程生命周期逻辑（已有） |
   | `Logging/` | 文件日志（已有） |
 
 - 测试放 `tests/Suiyi.Core.Tests/`，目录结构与 `Suiyi.Core` 对应。
@@ -52,6 +55,46 @@ client/
 - 路径：`%LOCALAPPDATA%\suiyi\logs\client-YYYYMMDD.log`
 - 环境变量 `SUIYI_LOG_DIR` 可覆盖目录（测试、便携模式）
 - **不记录剪贴板正文等用户内容**，只记录长度、原因、耗时
+
+## 托盘
+
+常驻托盘，无主窗口（#29）。纯逻辑在 `Suiyi.Core/Tray`、`Suiyi.Core/Lifecycle`，WinForms `NotifyIcon` 渲染在 `Suiyi.App/Tray`（框架自带，不引入第三方包）。
+
+| 类型 | 位置 | 作用 |
+|------|------|------|
+| `TrayStatus` | Core | `Preparing` / `Ready` / `Paused` / `Error` |
+| `TrayState` | Core | 不可变记录：`Status`、`Detail`、`Paused`、`Target`；推导 `Effective`（异常、准备中优先于暂停）、`StatusText`、`ToolTip`（≤127 字符） |
+| `TrayMenuBuilder` / `TrayMenuItem` / `TrayCommand` | Core | 按状态生成菜单模型（纯函数），含勾选与禁用 |
+| `ITrayService` / `TrayController` | Core | 对外接口：`SetStatus(status, detail)`、`SetPaused`、`SetTarget`、`ShowNotification(title, message)`、`State`；事件 `TranslateClipboardRequested`、`PauseToggled`、`TargetChanged`、`RestartEngineRequested`、`OpenSettingsRequested`、`OpenLogsRequested`、`AboutRequested`、`ExitRequested`、`ShowLastPopupRequested` |
+| `TrayLanguages` | Core | 菜单里的目标语言：`zh` 中文、`en` English、`ja` 日本語 |
+| `TrayDemo` | Core | `--tray-demo` 的轮换序列 |
+| `SingleInstanceGuard` | Core | 命名 Mutex `Local\Suiyi.Client` |
+| `NotifyIconTrayView` / `TrayIconRenderer` | App | 图标与菜单渲染；图标运行时绘制（状态色方块 + 白色「译」字，多尺寸） |
+| `InstanceActivation` | App | 命名事件 `Local\Suiyi.Client.Activate`：第二个实例通知第一个实例弹「随译已在运行」 |
+
+**状态与悬停提示：**
+
+| 状态 | 图标底色 | 悬停提示 |
+|------|----------|----------|
+| 正在准备 | 橙 | `随译 · 正在准备…` |
+| 就绪 | 蓝 | `随译 · 就绪（中文）` |
+| 已暂停监听 | 灰 | `随译 · 已暂停监听` |
+| 服务异常 | 红 | `随译 · 翻译服务异常：<原因>` |
+
+**菜单：** 状态行（灰）、翻译剪贴板、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。
+
+**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言只存在托盘状态里（设置 #27 持久化，#34 翻译时读取 `State.Target`）；翻译剪贴板与左键单击暂时只写日志（#34 接线）。打开设置文件：`%APPDATA%\suiyi\settings.json`（`SUIYI_CONFIG_DIR` 可覆盖），不存在时打开目录。
+
+**手测：**
+
+```powershell
+dotnet run --project client/src/Suiyi.App -- --tray-demo   # 每 2 秒轮换四种状态
+dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
+```
+
+再启动一次会看到「随译已在运行」气泡，第二个进程立即退出。
+
+**DPI：** `Suiyi.App/app.manifest` 声明 PerMonitorV2（回退 `true/pm`）。WinForms 分析器的 WFAC010 建议改用 `Application.SetHighDpiMode`，但这是 WPF 应用，只能用 manifest，已在 csproj 中忽略。
 
 ## 剪贴板监听
 
@@ -98,7 +141,7 @@ WM_CLIPBOARDUPDATE → 去抖（默认 150 ms，只处理最后一次）→ 序�
 
 读取阶段的原因：`NoText`（图片、文件列表等）、`PrivateContent`、`ClipboardBusy`。
 
-**手测：** 目前 `Suiyi.App` 启动即开始监听，结果写日志（`剪贴板：接受 N 字` / `剪贴板：跳过（原因，N 字）` / `剪贴板：忽略自身写入`）。占位窗口上有「暂停剪贴板监听」勾选框和「写入测试文本（不应触发）」按钮，托盘（#29）替换占位窗口时一并移除。翻译与浮窗由 #34 接到 `TextCaptured` 上。
+**手测：** 目前 `Suiyi.App` 启动即开始监听，结果写日志（`剪贴板：接受 N 字` / `剪贴板：跳过（原因，N 字）` / `剪贴板：忽略自身写入`）。暂停 / 恢复用托盘菜单「暂停监听」（设置 `ClipboardMonitor.Paused`）。翻译与浮窗由 #34 接到 `TextCaptured` 上。
 
 ## 全局快捷键
 
@@ -125,9 +168,9 @@ WM_HOTKEY（RegisterHotKey + MOD_NOREPEAT，长按不连发）
 
 **快捷键写法：** 修饰键 `Ctrl`（`Control`）、`Alt`、`Shift`、`Win`（`Windows`）加一个按键，用 `+` 连接，大小写与空格不敏感，例如 `Ctrl+Alt+T`、`Ctrl+Shift+F1`、`Win+Alt+Y`。按键可以是 `A`–`Z`、`0`–`9`、`F1`–`F24`、`NumPad0`–`NumPad9`、`Space`、`Enter`、`Tab`、`Esc`、`Backspace`、`Insert`、`Delete`、`Home`、`End`、`PageUp`、`PageDown`、方向键、`Pause`、`PrintScreen`。除 `F1`–`F24` 外必须带 `Ctrl`、`Alt` 或 `Win`（`Shift+T` 会打出大写字母，不允许）。空字符串表示禁用。
 
-**修改：** 设置（#27）接入前，用命令行 `dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"` 指定，或在占位窗口的输入框里改后点「应用快捷键」（调用 `HotkeyManager.Update`）。接入设置后改 `settings.json` 的 `hotkey.translate`。
+**修改：** 设置（#27）接入前，用命令行 `dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"` 指定（启动时调用 `HotkeyManager.Update`）。接入设置后改 `settings.json` 的 `hotkey.translate`。
 
-**被占用：** 注册失败时发 `RegistrationFailed`，提示「快捷键 Ctrl+Alt+T 已被其他程序占用，请在设置中修改」，程序继续运行；集成（#34）用托盘气泡显示，目前显示在占位窗口上并写日志。
+**被占用：** 注册失败时发 `RegistrationFailed`，提示「快捷键 Ctrl+Alt+T 已被其他程序占用，请在设置中修改」，程序继续运行；托盘弹气泡显示该提示并写日志。
 
 **已知行为：**
 
@@ -265,7 +308,7 @@ dotnet restore client/Suiyi.sln
 dotnet format client/Suiyi.sln --verify-no-changes
 dotnet build client/Suiyi.sln -c Release
 dotnet test client/Suiyi.sln -c Release
-dotnet run --project client/src/Suiyi.App            # 弹出「随译」占位窗口，关闭即退出
+dotnet run --project client/src/Suiyi.App            # 常驻托盘，右键菜单「退出」结束
 ```
 
 生成的可执行文件是 `client/src/Suiyi.App/bin/<配置>/net8.0-windows/Suiyi.exe`。
