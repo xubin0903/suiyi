@@ -1,6 +1,6 @@
 # 本机 HTTP API
 
-`python -m suiyi_engine serve` 在本机回环地址上提供翻译服务。复制翻译和框选翻译的客户端都调用这一套接口。翻译本身由 [翻译核心](翻译核心.md) 完成；`source: "auto"` 先走 [语种检测](语种检测.md)，再把具体语种交给翻译器。
+`python -m suiyi_engine serve` 在本机回环地址上提供翻译服务。复制翻译和框选翻译的客户端都调用这一套接口。框选翻译用 `POST /ocr_translate`：上传 PNG，一次往返拿到识别结果和译文（OCR 部分见 [OCR 核心](OCR核心.md)）。翻译本身由 [翻译核心](翻译核心.md) 完成；`source: "auto"` 先走 [语种检测](语种检测.md)，再把具体语种交给翻译器。
 
 服务不开启 CORS，不做鉴权，也不提供 WebSocket。默认关闭 `/docs`。
 
@@ -29,10 +29,14 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--models-dir` | `SUIYI_MODELS_DIR`，否则仓库根 `models/` | 传给 `Translator` |
 | `--preload` | 不预热 | 逗号分隔的语向，如 `zh-en,en-zh`。缺模型时非零退出，不会开始监听 |
 | `--max-text-chars` | `SUIYI_MAX_TEXT_CHARS`，否则 `10000` | 单条文本的字符上限 |
+| `--max-image-bytes` | `SUIYI_MAX_IMAGE_BYTES`，否则 `8388608`（8 MiB） | OCR 请求体的字节上限 |
+| `--preload-ocr` | 关闭 | 开始监听前加载并预热 OCR 模型（启动日志「OCR 已预热 N ms」），之后 `/health` 的 `ocr_loaded` 为 `true`。**与 `--preload` 不同，失败不退出**：OCR 依赖未装或模型缺失/损坏时只在 stderr 打一行警告（含缺失的 OCR 模型 id 和下载命令），服务照常启动，文本翻译不受影响；`/health` 的 `ocr_error` 带上原因，OCR 接口返回 503。客户端设置 `engine.preloadOcr`（#58）为 `true` 时追加这个参数，可以安全地默认开启 |
 | `--dev` | 关闭 | 才挂载 `/docs` 与 `/openapi.json` |
 | `--intra-threads` | `min(2, CPU 数)` | 单个模型内部的计算线程。不传则用翻译核心的默认 |
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
+
+OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
 
 进程起来后，标准输出有四行：监听 URL、模型目录、可用语向数量，以及实际使用的 `intra_threads`、`beam_size`、`max_batch_size`。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
 
@@ -101,7 +105,13 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "version": "0.0.1",
   "models_dir": "/path/to/models",
   "loaded_models": ["opus-mt-zh-en"],
-  "uptime_s": 12.3
+  "uptime_s": 12.3,
+  "ocr_loaded": false,
+  "ocr_error": {
+    "message": "缺少 OCR 模型：PP-OCRv6_det_small、ch_ppocr_mobile_v2.0_cls_mobile、PP-OCRv6_rec_small（目录 /path/to/models/ocr）。请执行 python scripts/download_ocr_models.py download 下载 OCR 模型",
+    "reason": "models_missing",
+    "missing_models": ["PP-OCRv6_det_small", "ch_ppocr_mobile_v2.0_cls_mobile", "PP-OCRv6_rec_small"]
+  }
 }
 ```
 
@@ -112,8 +122,10 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `models_dir` | 本次进程使用的模型目录 |
 | `loaded_models` | 已经加载进内存的模型 id，字典序。`--preload` 成功后这里能看到它们 |
 | `uptime_s` | 自开始监听起的秒数，保留 1 位小数 |
+| `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增 |
+| `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增 |
 
-翻译在线程池里执行，并且进程内同时只跑一路翻译。`/health` 不进入这把锁，长文本翻译时它仍应在 200 毫秒内返回。
+翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 也在线程池里执行，有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。
 
 ## `GET /languages`
 
@@ -215,6 +227,101 @@ Invoke-RestMethod http://127.0.0.1:18780/translate -Method Post `
 
 批量响应只有 `results`，每一项与单条对象相同。英文中转时 `route` 长度为 2，例如 `["opus-mt-ja-en", "opus-mt-en-zh"]`。
 
+## `POST /ocr_translate`
+
+框选翻译：请求体是**原始 PNG 字节**（不用 multipart，也不用 base64），一次往返返回识别结果与按段落对应的译文（#53）。
+
+| 查询参数 | 必填 | 说明 |
+|----------|------|------|
+| `target` | 是 | 目标语种，不能是 `auto` |
+| `source` | 否，默认 `auto` | 原文语种或 `auto` |
+| `fallback_target` | 否 | 次目标：原文语种等于 `target` 时改译为它（客户端的主/次目标规则）。与 `target` 相同或为空时忽略 |
+
+处理顺序与对应错误：
+
+1. 查询参数不合法（缺 `target`、`target=auto`、语种代码非法）→ 422 `invalid_request`，不读请求体。
+2. 字节上限：先看 `Content-Length`，超过 `--max-image-bytes` 直接 413，**不读请求体**；没有 `Content-Length`（分块上传）时边读边计数，超限立即停止读取 → 413 `image_too_large`。
+3. 按文件头魔数判断是不是 PNG，**不看 `Content-Type`**（`application/octet-stream` 也行）。不是 PNG 或请求体为空 → 415 `unsupported_media_type`。
+4. 从 IHDR 读宽高（不解码像素）。头部不完整或尺寸为 0 → 422 `invalid_image`；宽 × 高超过 16,777,216（4096 × 4096）→ 413 `image_too_large`。只限总像素，不限单边，细长截图可以超过 4096。
+5. OCR 不可用（依赖未装、模型缺失或损坏）→ 503 `ocr_unavailable`。
+6. 解码失败（数据损坏、截断）→ 422 `invalid_image`。
+7. 识别，合并成段落，再逐段翻译。翻译侧错误与 `/translate` 相同：`unsupported_pair`、`text_too_long`、`detect_failed`，`details.index` 是段落序号。任一段失败则整次请求失败。
+
+语种与次目标（`source=auto` 时）：
+
+- 每个段落各自做语种检测，结果就是该段的 `source`，`detected: true`。
+- 检测不出的段落（`und`，例如只有数字、时间、符号）用整张图的语种。整张图的语种先对全文检测，检测不出再取各段结果里最多的；全部检测不出时 422 `detect_failed`。
+- 次目标**按整张图决定**：整张图的语种等于 `target` 且给了 `fallback_target` 时，所有段落都译成 `fallback_target`。这样浮窗里的译文语种一致。显式给 `source` 时，用它与 `target` 比较。
+- 段落语种与实际目标相同时原样返回，`route` 为空数组（与 `/translate` 一致）。
+
+识别为空（没有段落）时返回 200：`paragraphs: []`、`text: ""`、`translation.results: []`。低置信度的行保留在 `lines` 里（`low_confidence: true`），但不进段落和译文。
+
+#### bash
+
+```bash
+curl -sS 'http://127.0.0.1:18780/ocr_translate?source=auto&target=en&fallback_target=zh' \
+  -H 'Content-Type: image/png' --data-binary @shot.png
+```
+
+#### Windows PowerShell
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:18780/ocr_translate?source=auto&target=en&fallback_target=zh' `
+  -Method Post -InFile .\shot.png -ContentType image/png
+```
+
+```json
+{
+  "lines": [
+    {"text": "本地翻译", "box": [[10.0, 10.0], [200.0, 10.0], [200.0, 44.0], [10.0, 44.0]], "score": 0.9962, "low_confidence": false},
+    {"text": "随译把模型放在本机，复制、翻译、显示都在同", "box": [[10.0, 60.0], [600.0, 60.0], [600.0, 84.0], [10.0, 84.0]], "score": 0.9981, "low_confidence": false},
+    {"text": "一台机器上完成。", "box": [[10.0, 90.0], [250.0, 90.0], [250.0, 114.0], [10.0, 114.0]], "score": 0.9975, "low_confidence": false}
+  ],
+  "paragraphs": [
+    {"text": "本地翻译", "box": [10.0, 10.0, 200.0, 44.0], "line_indices": [0], "vertical": false},
+    {"text": "随译把模型放在本机，复制、翻译、显示都在同一台机器上完成。", "box": [10.0, 60.0, 600.0, 114.0], "line_indices": [1, 2], "vertical": false}
+  ],
+  "text": "本地翻译\n随译把模型放在本机，复制、翻译、显示都在同一台机器上完成。",
+  "image": {"width": 640, "height": 200},
+  "translation": {
+    "results": [
+      {"text": "Local translation", "source": "zh", "detected": true, "target": "en", "route": ["opus-mt-zh-en"], "elapsed_ms": 61.3},
+      {"text": "...", "source": "zh", "detected": true, "target": "en", "route": ["opus-mt-zh-en"], "elapsed_ms": 240.8}
+    ]
+  },
+  "elapsed_ms": {"ocr": 180.4, "translate": 305.2, "total": 486.1}
+}
+```
+
+| 字段 | 含义 |
+|------|------|
+| `lines[]` | 识别出的文本行：`text`、`box`（四点框 `[[x, y] × 4]`，原图像素，左上、右上、右下、左下）、`score`（0–1）、`low_confidence`。竖排时一个 `line` 是一列 |
+| `paragraphs[]` | 合并后的段落，顺序就是阅读顺序（竖排从右到左）：`text`、`box`（外接矩形 `[x0, y0, x1, y1]`）、`line_indices`（指向 `lines`）、`vertical` |
+| `text` | 段落以 `\n` 连接 |
+| `image` | 服务端解码出的 `width`、`height` |
+| `translation.results[]` | 与 `/translate` 批量结果同构，和 `paragraphs` 按顺序一一对应 |
+| `elapsed_ms` | 对象：`ocr`（从请求开始到识别完成，含读请求体、首次加载 OCR 模型）、`translate`（检测 + 翻译，含排队等翻译锁）、`total` |
+
+服务端日志只记录尺寸、字节数、行数、段数、目标语种和耗时，不记录图片和识别文本。
+
+## `POST /ocr`
+
+只识别不翻译。请求体、字节/像素上限、415/422/503 与 `/ocr_translate` 相同。查询参数 `lang`：`auto`（默认）、`zh`、`en`、`ja`，其他值 422 `invalid_request`。当前中英日共用一个识别模型，`lang` 只做校验，不改变识别结果。
+
+响应是 `/ocr_translate` 去掉 `translation` 的部分，`elapsed_ms` 是**数字**（总耗时毫秒），不是对象。
+
+#### bash
+
+```bash
+curl -sS 'http://127.0.0.1:18780/ocr?lang=auto' -H 'Content-Type: image/png' --data-binary @shot.png
+```
+
+#### Windows PowerShell
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:18780/ocr?lang=auto' -Method Post -InFile .\shot.png -ContentType image/png
+```
+
 ## 错误
 
 失败时 HTTP 状态不是 200，正文仍然是 JSON：
@@ -236,9 +343,13 @@ Invoke-RestMethod http://127.0.0.1:18780/translate -Method Post `
 | `error.code` | HTTP | 何时 | `details` |
 |--------------|------|------|-----------|
 | `unsupported_pair` | 422 | 语向没有可加载的模型 | `source`、`target`、`missing_models`（缺失的模型 id，可能为空）。批量时另有 `index` |
-| `invalid_request` | 422 | 缺字段、`text`/`texts` 冲突、语种代码非法、`target` 为 `auto`、JSON 无法解析 | 字段错误时有 `field`；JSON 校验失败时有 `errors`（`loc`、`msg`、`type`） |
+| `invalid_request` | 422 | 缺字段（含 OCR 接口缺 `target`）、`text`/`texts` 冲突、语种代码非法、`target` 为 `auto`、`lang` 不在允许范围、JSON 无法解析 | 字段错误时有 `field`；JSON 校验失败时有 `errors`（`loc`、`msg`、`type`） |
 | `text_too_long` | 413 | 某条文本超过字符上限 | `limit`、`length`。批量时另有 `index` |
 | `detect_failed` | 422 | `source` 为 `auto` 但检测结果不是可用语种（含 `und`） | `index`、`detected` |
+| `image_too_large` | 413 | OCR 请求体超过字节上限，或 PNG 宽 × 高超过像素上限 | `kind`（`bytes` / `pixels`）、`limit`、`actual`；像素超限时另有 `width`、`height` |
+| `unsupported_media_type` | 415 | OCR 请求体不是 PNG（按魔数判断）或为空 | `{}` |
+| `invalid_image` | 422 | PNG 头部不完整、尺寸为 0、或无法解码 | `{}` |
+| `ocr_unavailable` | 503 | OCR 依赖未安装、模型清单或模型文件缺失/损坏 | `reason`（`dependency_missing` / `models_missing` / `models_invalid` / `manifest_unavailable`）、`missing_models`（缺失的 OCR 模型 id，可能为空）。`message` 里有安装或下载提示 |
 | `internal_error` | 500 | 未预期的异常 | `{}`。响应里没有异常类型和栈 |
 
 客户端可以用 `missing_models` 提示「未下载语向」，不要只显示语种代码。
@@ -274,3 +385,6 @@ PowerShell 7 也可以给 `Invoke-RestMethod` 加 `-SkipHttpErrorCheck`，再读
 - `elapsed_ms` 不含语种检测和 HTTP 开销。
 - 纯汉字日语可能被检测成 `zh`，这是语种检测规则层的既有限制。
 - 一期推理仍是 CPU + int8。本接口不提供设备切换参数。
+- OCR 只接受 PNG；不支持 JPEG/BMP/base64 JSON，不支持一次多张图，不流式返回。
+- OCR 同时只跑一张图，多出来的请求排队（onnxruntime 内部已多线程）。
+- `ocr_unavailable` 的 `missing_models` 是 OCR 模型 id（如 `PP-OCRv6_det_small`），与 `unsupported_pair` 的翻译模型 id 不是一套。

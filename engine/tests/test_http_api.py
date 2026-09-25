@@ -131,7 +131,17 @@ def test_health_reports_version_models_dir_and_uptime(tmp_path: Path) -> None:
     assert Path(body["models_dir"]) == tmp_path
     assert body["loaded_models"] == []
     assert body["uptime_s"] >= 0
-    assert set(body) == {"status", "version", "models_dir", "loaded_models", "uptime_s"}
+    assert body["ocr_loaded"] is False
+    assert body["ocr_error"] is None  # 还没尝试加载
+    assert set(body) == {
+        "status",
+        "version",
+        "models_dir",
+        "loaded_models",
+        "uptime_s",
+        "ocr_loaded",
+        "ocr_error",
+    }
     assert "access-control-allow-origin" not in {name.lower() for name in response.headers}
 
 

@@ -13,7 +13,8 @@ import sys
 from pathlib import Path
 
 from suiyi_engine import langdetect
-from suiyi_engine.api import ApiSettings, create_app
+from suiyi_engine.api import DEFAULT_MAX_IMAGE_BYTES, ApiSettings, create_app
+from suiyi_engine.api_ocr import OcrProvider, OcrUnavailable
 from suiyi_engine.errors import UnsupportedPairError
 from suiyi_engine.registry import (
     DEFAULT_BEAM_SIZE,
@@ -84,6 +85,21 @@ def resolve_max_text_chars(cli_value: int | None) -> int:
     return _require_limit(value, "SUIYI_MAX_TEXT_CHARS")
 
 
+def resolve_max_image_bytes(cli_value: int | None) -> int:
+    """命令行优先，其次 ``SUIYI_MAX_IMAGE_BYTES``，默认 8 MiB。"""
+
+    if cli_value is not None:
+        return _require_limit(cli_value, "--max-image-bytes")
+    raw = os.environ.get("SUIYI_MAX_IMAGE_BYTES", "").strip()
+    if not raw:
+        return DEFAULT_MAX_IMAGE_BYTES
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ServeError(f"SUIYI_MAX_IMAGE_BYTES 不是整数：{raw}") from exc
+    return _require_limit(value, "SUIYI_MAX_IMAGE_BYTES")
+
+
 def parse_preload(raw: str | None) -> list[tuple[str, str]]:
     """把 ``zh-en,en-zh`` 解析成语种对。空字符串表示不预热。"""
 
@@ -114,6 +130,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         host = validate_host(args.host)
         port = resolve_port(args.port)
         max_text_chars = resolve_max_text_chars(args.max_text_chars)
+        max_image_bytes = resolve_max_image_bytes(getattr(args, "max_image_bytes", None))
         preload_pairs = parse_preload(args.preload)
     except ServeError as exc:
         print(str(exc), file=sys.stderr)
@@ -128,6 +145,8 @@ def serve_from_args(args: argparse.Namespace) -> int:
         intra_threads=args.intra_threads,
         beam_size=args.beam_size,
         max_batch_size=args.max_batch_size,
+        max_image_bytes=max_image_bytes,
+        preload_ocr=bool(getattr(args, "preload_ocr", False)),
     )
 
 
@@ -142,16 +161,21 @@ def run_server(
     intra_threads: int | None = None,
     beam_size: int | None = None,
     max_batch_size: int | None = None,
+    max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
+    preload_ocr: bool = False,
 ) -> int:
     """构建翻译器并阻塞运行，直到进程收到停止信号。
 
     ``intra_threads``、``beam_size``、``max_batch_size`` 为 ``None`` 时用翻译核心的默认值。
+    OCR 依赖或模型缺失从不阻止启动，文本翻译不受影响：``preload_ocr`` 加载失败只在 stderr 告警
+    （含缺失的模型 id），``/health`` 的 ``ocr_error`` 带上原因，OCR 接口返回 503。
     """
 
     try:
         host = validate_host(host)
         port = _require_port(port, "端口")
         max_text_chars = _require_limit(max_text_chars, "max_text_chars")
+        max_image_bytes = _require_limit(max_image_bytes, "max_image_bytes")
         decode = resolve_decode_options(
             intra_threads=intra_threads,
             beam_size=beam_size,
@@ -172,6 +196,11 @@ def run_server(
         print(str(exc), file=sys.stderr)
         return 1
 
+    ocr = OcrProvider(translator.registry.models_dir)
+    ocr_ms: float | None = None
+    if preload_ocr:
+        ocr_ms = warmup_ocr(ocr)
+
     # 先占住端口再预热：端口被占用时尽快退出，也不会在预热期间被别的进程抢走（#46）。
     try:
         listen_socket = bind_listen_socket(host, port)
@@ -185,9 +214,12 @@ def run_server(
         app = create_app(
             translator,
             None,
-            ApiSettings(max_text_chars=max_text_chars, dev=dev),
+            ApiSettings(max_text_chars=max_text_chars, dev=dev, max_image_bytes=max_image_bytes),
+            ocr,
         )
         _print_startup(host, port, translator, decode, detector_ms)
+        if ocr_ms is not None:
+            print(f"OCR 已预热 {ocr_ms:.0f} ms", flush=True)
         try:
             _serve_uvicorn(app, listen_socket)
         except OSError as exc:
@@ -210,6 +242,22 @@ def warmup_detector() -> float | None:
     except Exception as exc:  # 预热失败只告警，不影响翻译
         print(f"语种检测预热失败，将在首次使用时加载：{exc}", file=sys.stderr, flush=True)
         return None
+
+
+def warmup_ocr(ocr: OcrProvider) -> float | None:
+    """``--preload-ocr``：加载并预热 OCR，返回耗时毫秒。失败只告警、返回 ``None``，服务照常启动。"""
+
+    try:
+        return ocr.warmup()
+    except OcrUnavailable as exc:
+        print(
+            f"警告：--preload-ocr 未能加载 OCR，文本翻译照常可用，框选翻译将返回 503：{exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception as exc:  # 预热中的其他意外也不能拖垮文本翻译
+        print(f"警告：OCR 预热失败，将在首次框选时重试：{exc}", file=sys.stderr, flush=True)
+    return None
 
 
 def _serve_uvicorn(app: object, listen_socket: socket.socket) -> None:

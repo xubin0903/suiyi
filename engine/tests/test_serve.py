@@ -479,3 +479,161 @@ def test_port_in_use_skips_detector_warmup(monkeypatch: pytest.MonkeyPatch, tmp_
     finally:
         sock.close()
     assert code == 1
+
+
+def test_max_image_bytes_from_cli_env_and_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    from suiyi_engine.serve import ServeError, resolve_max_image_bytes
+
+    monkeypatch.delenv("SUIYI_MAX_IMAGE_BYTES", raising=False)
+    assert resolve_max_image_bytes(None) == 8 * 1024 * 1024
+    monkeypatch.setenv("SUIYI_MAX_IMAGE_BYTES", "1234")
+    assert resolve_max_image_bytes(None) == 1234
+    assert resolve_max_image_bytes(99) == 99
+    monkeypatch.setenv("SUIYI_MAX_IMAGE_BYTES", "big")
+    with pytest.raises(ServeError):
+        resolve_max_image_bytes(None)
+    with pytest.raises(ServeError):
+        resolve_max_image_bytes(0)
+
+
+def test_preload_ocr_missing_models_warns_and_service_works(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """缺 OCR 模型 + --preload-ocr：告警、照常监听；翻译可用，/health 与 OCR 接口给出缺失模型。"""
+
+    from fastapi.testclient import TestClient
+
+    seen: dict[str, object] = {}
+
+    def fake(app: object, listen_socket: socket.socket) -> None:
+        seen["listening_on"] = listen_socket.getsockname()[1]
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + (8).to_bytes(4, "big") * 2
+        with TestClient(app) as client:  # type: ignore[arg-type]
+            seen["translate"] = client.post(
+                "/translate", json={"text": "你好", "source": "zh", "target": "zh"}
+            )
+            seen["languages"] = client.get("/languages")
+            seen["health"] = client.get("/health").json()
+            seen["ocr"] = client.post(
+                "/ocr_translate",
+                params={"target": "en"},
+                content=png + b"\x08\x00\x00\x00\x00" + b"\x00" * 4,
+                headers={"Content-Type": "image/png"},
+            )
+
+    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fake)
+    port = _free_port()
+    code = run_server(
+        host="127.0.0.1",
+        port=port,
+        models_dir=tmp_path,
+        preload_pairs=[],
+        max_text_chars=100,
+        dev=False,
+        preload_ocr=True,
+    )
+    assert code == 0
+    assert seen["listening_on"] == port
+    captured = capsys.readouterr()
+    assert "警告" in captured.err and "--preload-ocr" in captured.err
+    assert "PP-OCRv6_det_small" in captured.err  # 告警里有模型 id
+    assert "download_ocr_models.py" in captured.err
+    assert "OCR 已预热" not in captured.out
+
+    translate = seen["translate"]
+    assert translate.status_code == 200 and translate.json()["text"] == "你好"  # type: ignore[attr-defined]
+    assert seen["languages"].status_code == 200  # type: ignore[attr-defined]
+
+    missing = ["PP-OCRv6_det_small", "ch_ppocr_mobile_v2.0_cls_mobile", "PP-OCRv6_rec_small"]
+    health = seen["health"]
+    assert health["ocr_loaded"] is False  # type: ignore[index]
+    assert health["ocr_error"]["reason"] == "models_missing"  # type: ignore[index]
+    assert health["ocr_error"]["missing_models"] == missing  # type: ignore[index]
+    assert "download_ocr_models.py" in health["ocr_error"]["message"]  # type: ignore[index]
+
+    ocr = seen["ocr"]
+    assert ocr.status_code == 503  # type: ignore[attr-defined]
+    error = ocr.json()["error"]  # type: ignore[attr-defined]
+    assert error["code"] == "ocr_unavailable"
+    assert error["details"]["missing_models"] == missing
+
+
+def test_without_preload_ocr_missing_models_still_serves(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake(app: object, listen_socket: socket.socket) -> None:
+        seen["ocr_loaded"] = app.state.ocr.loaded  # type: ignore[attr-defined]
+        seen["max_image_bytes"] = app.state.settings.max_image_bytes  # type: ignore[attr-defined]
+
+    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fake)
+    code = run_server(
+        host="127.0.0.1",
+        port=_free_port(),
+        models_dir=tmp_path,
+        preload_pairs=[],
+        max_text_chars=100,
+        dev=False,
+        max_image_bytes=4096,
+    )
+    assert code == 0
+    assert seen == {"ocr_loaded": False, "max_image_bytes": 4096}
+
+
+def test_preload_ocr_flag_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_run(**kwargs: object) -> int:
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("suiyi_engine.serve.run_server", fake_run)
+    # 客户端（EngineCommandResolver）的实际参数顺序
+    assert main(["serve", "--port", "18780", "--preload", "zh-en,en-zh", "--preload-ocr"]) == 0
+    assert seen["preload_ocr"] is True
+    assert main(["serve", "--port", "18780", "--max-image-bytes", "1000"]) == 0
+    assert seen["preload_ocr"] is False and seen["max_image_bytes"] == 1000
+
+
+def test_preload_ocr_success_is_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from suiyi_engine.api_ocr import OcrProvider
+
+    seen: dict[str, object] = {}
+
+    def warmup(self: OcrProvider) -> float:
+        seen["warmed"] = True
+        return 12.0
+
+    def fake(app: object, listen_socket: socket.socket) -> None:
+        seen["same_provider"] = app.state.ocr is provider_holder[0]  # type: ignore[attr-defined]
+
+    provider_holder: list[object] = []
+    original_init = OcrProvider.__init__
+
+    def init(self: OcrProvider, *args: object, **kwargs: object) -> None:
+        original_init(self, *args, **kwargs)  # type: ignore[arg-type]
+        provider_holder.append(self)
+
+    monkeypatch.setattr(OcrProvider, "warmup", warmup)
+    monkeypatch.setattr(OcrProvider, "__init__", init)
+    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fake)
+    code = run_server(
+        host="127.0.0.1",
+        port=_free_port(),
+        models_dir=tmp_path,
+        preload_pairs=[],
+        max_text_chars=100,
+        dev=False,
+        preload_ocr=True,
+    )
+    assert code == 0
+    assert "OCR 已预热 12 ms" in capsys.readouterr().out
+    assert seen == {"warmed": True, "same_provider": True}  # 预热的就是服务用的那个实例
