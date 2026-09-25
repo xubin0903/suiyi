@@ -19,11 +19,13 @@ engine/
 
 模型权重不放这里，也不进 git。本地缓存使用仓库根目录 `models/`。新增模型须先在 [docs/engine/](../docs/engine/README.md) 登记许可证，且不得默认打包 CC BY-NC 等非商用权重。
 
+语种检测在 `suiyi_engine.langdetect`。方案、许可证和实测性能见 [语种检测](../docs/engine/语种检测.md)。`py3langid` 自带的识别模型随该包分发，不进本仓库。
+
 ## 本地开发
 
 基准版本：**Python 3.11**。安装要求 `requires-python >= 3.10`。
 
-构建后端：**hatchling**（`src/` 布局，版本读自 `suiyi_engine.__version__`）。运行时依赖本骨架留空；`ctranslate2`、`sentencepiece`、`fastapi` 等由后续 Issue 按需添加。
+构建后端：**hatchling**（`src/` 布局，版本读自 `suiyi_engine.__version__`）。运行时依赖目前是语种检测用的 `py3langid`（BSD-3-Clause，会安装 `numpy`），不引入 `torch` / `transformers`。模型转换依赖在可选组 `convert`（`ctranslate2`、`huggingface_hub`、`sentencepiece`、`transformers`、CPU 版 `torch`）。翻译推理用的运行时 `ctranslate2` 由后续 Issue 加入。
 
 标准环境流程是 `python -m venv` + `pip`。下面的命令都在**仓库根目录**执行。
 
@@ -110,3 +112,14 @@ uv venv
 .\.venv\Scripts\Activate.ps1
 uv pip install -e "engine[dev]"
 ```
+
+## 模型转换
+
+把 OPUS-MT 转成 CTranslate2 的命令、输出目录和 `suiyi-model.json` 见 [模型目录约定](../docs/engine/模型目录约定.md)。转换依赖不在上面的 `engine[dev]` 里：
+
+```bash
+pip install -e "engine[convert]"
+python scripts/convert_models.py --manifest engine/model_manifest.example.json --list
+```
+
+正式清单 `engine/model_manifest.json` 由模型选型提供。该文件合并前，用 `--manifest` 指向示例清单。权重写入仓库根 `models/`，不要提交。

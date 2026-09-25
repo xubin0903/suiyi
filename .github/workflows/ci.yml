@@ -1,0 +1,137 @@
+# 随译 CI。
+# 触发：发往 main 的 pull_request，以及推送到 main。
+# 权限：只读检出。不发布、不签名、不改分支保护。
+#
+# 路径过滤取舍：
+# 不用 workflow 级 paths。文档类 PR 若因此整份工作流被跳过，
+# 将来把某个 job 设为必需检查时，GitHub 会把它当成「未运行」而卡住合并。
+# 这里改为 job 级过滤：文档类 PR 仍会跑「变更检测」和「engine 检查」，
+# 但跳过真正的 lint/test。分支保护应只要求「CI / engine 检查」，
+# 不要要求矩阵里的 ubuntu/windows job。
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Windows runner 默认是 PowerShell，方括号会被当成通配符。统一用 bash。
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  changes:
+    name: 变更检测
+    runs-on: ubuntu-latest
+    outputs:
+      engine: ${{ steps.filter.outputs.engine }}
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          # 空 token 时 paths-filter 用 git diff，需要能取到基线提交。
+          fetch-depth: 0
+
+      # token 置空，走 git diff，避免再申请 pull-requests: read。
+      - name: 判断是否需要跑 engine
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          token: ""
+          filters: |
+            engine:
+              - 'engine/**'
+              - '.github/workflows/**'
+
+  engine:
+    name: engine（${{ matrix.os }} / Python ${{ matrix.python-version }}）
+    needs: changes
+    if: ${{ needs.changes.outputs.engine == 'true' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11"]
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: engine/pyproject.toml
+
+      - name: 安装开发依赖
+        run: pip install -e "engine[dev]"
+
+      - name: ruff check
+        run: ruff check engine
+
+      - name: ruff format
+        run: ruff format --check engine
+
+      - name: pytest
+        # 不设置 SUIYI_MODELS_DIR，也不下载模型。
+        # @pytest.mark.model 由 engine/tests/conftest.py 跳过。
+        run: pytest engine
+
+  # 稳定的汇总检查，供将来分支保护使用。
+  # engine 矩阵被跳过时本 job 仍成功；矩阵失败或被取消时本 job 失败。
+  engine-check:
+    name: engine 检查
+    needs: [changes, engine]
+    if: ${{ always() && needs.changes.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 汇总 engine 结果
+        run: |
+          filter="${{ needs.changes.outputs.engine }}"
+          result="${{ needs.engine.result }}"
+          echo "engine 路径是否变更: ${filter}"
+          echo "engine job 结果: ${result}"
+          if [ "$filter" = "true" ]; then
+            if [ "$result" != "success" ]; then
+              echo "engine 或工作流有变更，但测试 job 不是 success。"
+              exit 1
+            fi
+          elif [ "$filter" = "false" ]; then
+            if [ "$result" != "skipped" ]; then
+              echo "本次变更不应跑 engine，实际结果是 ${result}。"
+              exit 1
+            fi
+          else
+            echo "无法识别的过滤结果: ${filter}"
+            exit 1
+          fi
+
+  # M2 初始化 WPF 工程后再启用。启用时删掉 `if: false`，保留下面的构建步骤。
+  # 不要把是否启用写在 job 级 hashFiles('client/**/*.csproj') 上：
+  # hashFiles 在 checkout 之前求值，工作区还是空的，条件会一直为假。
+  client:
+    name: client（预留）
+    if: false
+    runs-on: windows-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: 构建客户端
+        run: dotnet build client
