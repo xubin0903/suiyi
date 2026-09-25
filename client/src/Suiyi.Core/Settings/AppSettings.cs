@@ -1,4 +1,5 @@
 using Suiyi.Core.Clipboard;
+using Suiyi.Core.Engine;
 using Suiyi.Core.Popup;
 
 namespace Suiyi.Core.Settings;
@@ -108,7 +109,18 @@ public sealed record EngineSettings
     public string? ModelsDir { get; init; }
 
     /// <summary>启动时预加载的语向，逗号分隔；<c>""</c> 表示不预加载。</summary>
-    public string Preload { get; init; } = "zh-en,en-zh";
+    public string Preload { get; init; } = EngineOptions.DefaultPreload;
+
+    /// <summary>映射为进程管理（#32）的 <see cref="EngineOptions"/>；环境变量覆盖由 <c>EngineOptionsOverrides</c> 在其后应用。</summary>
+    public EngineOptions ToEngineOptions() => new()
+    {
+        Port = Port,
+        PythonPath = PythonPath,
+        Command = Command,
+        Args = Args ?? [],
+        ModelsDir = ModelsDir,
+        Preload = Preload,
+    };
 
     /// <inheritdoc />
     public bool Equals(EngineSettings? other) =>

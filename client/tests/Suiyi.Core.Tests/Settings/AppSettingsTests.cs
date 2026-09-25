@@ -65,6 +65,41 @@ public sealed class AppSettingsTests
     }
 
     [Fact]
+    public void ToEngineOptions_Maps()
+    {
+        var options = new EngineSettings
+        {
+            Port = 19000,
+            PythonPath = @"C:\py\python.exe",
+            Command = @"D:\suiyi-engine.exe",
+            Args = ["--flag"],
+            ModelsDir = @"D:\models",
+            Preload = string.Empty,
+        }.ToEngineOptions();
+
+        Assert.Equal(19000, options.Port);
+        Assert.Equal(@"C:\py\python.exe", options.PythonPath);
+        Assert.Equal(@"D:\suiyi-engine.exe", options.Command);
+        Assert.Equal(["--flag"], options.Args);
+        Assert.Equal(@"D:\models", options.ModelsDir);
+        Assert.Equal(string.Empty, options.Preload);
+    }
+
+    [Fact]
+    public void ToEngineOptions_DefaultsMatchEngineOptions()
+    {
+        var options = AppSettings.Default.Engine.ToEngineOptions();
+        var defaults = new Suiyi.Core.Engine.EngineOptions();
+
+        Assert.Equal(defaults.Port, options.Port);
+        Assert.Equal(defaults.Preload, options.Preload);
+        Assert.Empty(options.Args);
+        Assert.Null(options.Command);
+        Assert.Null(options.PythonPath);
+        Assert.Null(options.ModelsDir);
+    }
+
+    [Fact]
     public void Equality_IsStructuralIncludingArgs()
     {
         var a = AppSettings.Default with { Engine = new EngineSettings { Args = ["serve", "--port", "1"] } };

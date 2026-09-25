@@ -1,6 +1,6 @@
 namespace Suiyi.Core.Popup;
 
-/// <summary>浮窗参数（设置 Issue #27 接入后由 settings.json 提供）。</summary>
+/// <summary>浮窗参数，由设置 <c>popup.*</c> 映射（<c>PopupSettings.ToPopupOptions</c>）。</summary>
 public sealed record PopupOptions
 {
     /// <summary>最大宽度（DIP），默认 480。</summary>
