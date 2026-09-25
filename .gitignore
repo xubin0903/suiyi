@@ -23,6 +23,9 @@ models/
 __pycache__/
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
 
 # Node
 node_modules/

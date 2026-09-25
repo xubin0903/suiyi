@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "suiyi-engine"
+dynamic = ["version"]
+description = "随译本地翻译引擎骨架。翻译、HTTP 与模型加载由后续 Issue 实现。"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# 运行时依赖故意留空。ctranslate2、sentencepiece、fastapi 等由后续 Issue 按需添加。
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "ruff>=0.8",
+]
+
+[tool.hatch.version]
+path = "src/suiyi_engine/__init__.py"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/W：pycodestyle；F：Pyflakes；I：isort；UP：pyupgrade；B：flake8-bugbear。
+# 未加 D/ANN/S 等更严规则，避免空骨架被文档与注解检查淹没；需要时再扩展。
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "model: 需要真实模型。未设置 SUIYI_MODELS_DIR 或目录不存在时跳过，CI 不下载模型。",
+]
