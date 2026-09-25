@@ -5,11 +5,24 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- 托盘图标用 WinForms 的 NotifyIcon（框架自带，无第三方依赖）。 -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- PerMonitorV2 DPI 感知等，见 app.manifest。 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFAC010 建议 WinForms 应用改用 Application.SetHighDpiMode；本应用是 WPF，只借用 NotifyIcon，
+         进程 DPI 感知必须在 manifest 里声明（WPF 启动早于任何代码），故忽略。 -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <RootNamespace>Suiyi.App</RootNamespace>
     <AssemblyName>Suiyi</AssemblyName>
     <!-- 手写 LibraryImport 需要。 -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <!-- WPF 与 WinForms 同名类型很多（Application、MessageBox 等），不要隐式引入 WinForms / GDI+ 命名空间，用到时显式 using 或写别名。 -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Suiyi.Core\Suiyi.Core.csproj" />
