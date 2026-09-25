@@ -30,6 +30,7 @@ public sealed class SettingsStore
     private readonly TimeProvider _timeProvider;
     private AppSettings _current = AppSettings.Default;
     private DateTime? _knownWriteTimeUtc;
+    private List<SettingsNotice> _pendingNotices = [];
 
     /// <summary>创建设置存储。</summary>
     /// <param name="filePath">设置文件路径；默认 <see cref="SettingsPaths.ResolveFile"/>。</param>
@@ -60,13 +61,32 @@ public sealed class SettingsStore
         }
     }
 
-    /// <summary>从磁盘读取并设为 <see cref="Current"/>。任何情况下都不抛出（读不了就用默认值）。</summary>
+    /// <summary>
+    /// 从磁盘读取并设为 <see cref="Current"/>。任何情况下都不抛出（读不了就用默认值）。
+    /// 需要托盘提示的问题存起来，由 <see cref="TakeLoadNotices"/> 取走。
+    /// </summary>
     public AppSettings Load()
     {
         lock (_gate)
         {
-            _current = ReadFromDisk();
+            var notices = new List<SettingsNotice>();
+            _current = ReadFromDisk(notices);
+            _pendingNotices = notices;
             return _current;
+        }
+    }
+
+    /// <summary>
+    /// 取走最近一次 <see cref="Load"/> 产生的提示并清空：同一次加载的提示只会被取到一次（启动时托盘提示一次）。
+    /// <see cref="Update"/> 因外部修改重新读取文件时不产生新提示（手工编辑后需重启才生效）。
+    /// </summary>
+    public IReadOnlyList<SettingsNotice> TakeLoadNotices()
+    {
+        lock (_gate)
+        {
+            var notices = _pendingNotices;
+            _pendingNotices = [];
+            return notices;
         }
     }
 
@@ -96,7 +116,7 @@ public sealed class SettingsStore
             if (FileChangedExternally())
             {
                 _logger.Info("设置：检测到 settings.json 被外部修改，先重新读取");
-                _current = ReadFromDisk();
+                _current = ReadFromDisk(notices: null);
             }
 
             oldSettings = _current;
@@ -121,7 +141,7 @@ public sealed class SettingsStore
         return newSettings;
     }
 
-    private AppSettings ReadFromDisk()
+    private AppSettings ReadFromDisk(List<SettingsNotice>? notices)
     {
         string json;
         try
@@ -145,6 +165,7 @@ public sealed class SettingsStore
         var result = SettingsSerializer.Parse(json, Warn, message => _logger.Info(message));
         if (result.Status == SettingsParseStatus.Ok)
         {
+            notices?.AddRange(result.Notices);
             return result.Settings;
         }
 

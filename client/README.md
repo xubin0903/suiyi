@@ -192,7 +192,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `clipboard.debounceMs` | `150` | 50–1000 |
 | `clipboard.minChars` / `maxChars` | `2` / `2000` | 1–10000，且 `minChars ≤ maxChars`（否则两者都回落默认值） |
 | `hotkey.translate` | `"Ctrl+Alt+T"` | 快捷键字符串，`""` 表示禁用；格式由 `HotkeyParser` 解析，这里不校验 |
-| `hotkey.region` | `"Ctrl+Alt+S"` | 框选截屏快捷键（#55），`""` 表示禁用。读取时即用 `HotkeyParser` 校验：格式非法或类型不对回落默认值；与 `hotkey.translate` 相同（含回落后）时禁用并写 Warning，避免两个功能抢同一组合 |
+| `hotkey.region` | `"Ctrl+Alt+S"` | 框选截屏快捷键（#55），`""` 表示禁用。读取时即用 `HotkeyParser` 校验：格式非法或类型不对回落默认值；与 `hotkey.translate` 相同（含回落后）时禁用并写 Warning，避免两个功能抢同一组合；此时启动后托盘弹一次气泡「框选快捷键 Ctrl+Alt+S 与翻译快捷键相同，框选快捷键已禁用。请在设置文件中把 hotkey.region 改为其他组合…」（`SettingsStore.TakeLoadNotices`，每次运行一次） |
 | `popup.autoHideSeconds` | `8` | 0–60，0 表示不自动消失 |
 | `popup.maxWidth` | `480` | 240–1920（设备无关像素） |
 | `engine.port` | `18780` | 1–65535 |
@@ -226,11 +226,15 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `PopupViewModel` | Core | 集成方调用 `ShowPreparing()`、`ShowLoading(sourceText)`、`ShowResult(PopupResult)`、`ShowError(PopupError)`、`ShowLast()`、`Close(reason)`；事件 `CopyTranslationRequested(Text)`、`RetryRequested`、`SourceLanguageOverride(Language)`、`Closed(Reason)`；窗口用 `Shown(Reposition)`、`PropertyChanged`、`TogglePin()`、`SetHovered()`、`RequestCopy()`、`RequestRetry()`、`RequestSourceOverride()` |
 | `PopupKind` | Core | `None` / `Preparing` / `Loading` / `Result` / `Error` |
 | `PopupResult` | Core | `Translation`、`Source`、`Target`、`SourceDetected`、`Elapsed` |
+| `PopupOcrResult` | Core | 框选翻译结果（#57）：`SourceParagraphs` / `TranslationParagraphs`（一一对应）、`Source`、`Target`、`SourceDetected`、`Elapsed`；`SourceText` / `TranslationText`（段落间空一行）、`IsEmpty`、`Empty(target)` |
+| `PopupPlacement.CalculateAroundRect` | Core | 以选区为锚点：右下外侧 → 下方 → 上方 → 左侧 → 都放不下时压住选区（下 / 上空间大的一侧），最后夹紧到工作区；返回位置与 `RectPlacementSide` |
+| `OcrDraftContract` / `OcrTranslateResponse` / `OcrErrorCodes` | Core（`Ocr/`） | ⚠ 按 #53 **草案**的 `/ocr_translate` 响应 DTO、错误码与解析 |
+| `Flow/OcrResultMapper` | Core | 草案响应 → `PopupOcrResult`、草案错误码 → `PopupError`。与上一行是客户端里仅有的两处依赖草案字段的地方，#53 定稿后同步 |
 | `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）、`EngineStartTimeout`（等服务就绪超时）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 `Flow/PopupErrorMapper` 映射 |
 | `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
 | `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
 | `PopupText` | Core | 语种标签（`中文 → English`、`English（自动） → 中文`）、耗时、原文摘要、按语种的字体回退链 |
-| `PopupDemo` | Core | `--popup-demo` 步骤 |
+| `PopupDemo` | Core | `--popup-demo` 步骤（后半段为框选翻译：草案 JSON 经映射后显示，含展开原文、长文本、空结果、OCR 错误，选区锚点为固定坐标） |
 | `PopupWindow` / `PopupTheme` | App | 无边框圆角阴影、置顶、不进任务栏；`WS_EX_NOACTIVATE \| WS_EX_TOOLWINDOW`；`MonitorFromPoint` + `GetMonitorInfo` 取工作区；跟随 `AppsUseLightTheme` |
 
 **行为：**
@@ -241,6 +245,15 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 - **位置：** 每次新翻译（且未钉住）移到当前光标旁；钉住时原地更新内容。内容尺寸变化时按同一光标点重新夹紧。
 - **关闭：** 点 ×；Esc 在浮窗获得焦点时（钉住后）生效，未钉住时仅在鼠标悬停于浮窗上期间临时注册全局 Esc（移出即注销，不影响在原应用里按 Esc）。点击浮窗外不关闭。关闭会取消钉住，内容保留，托盘左键可重新显示。
 - **复制：** 发 `CopyTranslationRequested`，`App` 用 `ClipboardWriter.SetText` 写入（登记为自身写入，不触发监听），按钮显示「已复制」1 s。
+
+**框选翻译结果（#57）：** 集成方（#58）调用 `ShowOcrLoading(selection)` →（`ShowOcrResult(result)` | `ShowError(error)`），`selection` 为选区（物理像素 `PopupRect`）。
+
+- **加载：** 「正在识别并翻译…」，窗口延迟显示规则同复制翻译。
+- **结果：** 译文为主体；下方「原文 ▸」默认折叠，点击展开 / 收起，本次浮窗内保持（复制、悬停、钉住、关闭后托盘重新显示都不变），新一次翻译重新折叠。标题栏有「复制译文」「复制原文」（`CopyOriginalRequested`，同样经 `ClipboardWriter` 写入，不自触发）。段落间空一行；译文加展开的原文超过最大高度（工作区一半）时整体滚动。
+- **空结果：** `PopupKind.Empty`，灰色「未识别到文字」，非错误样式，无重试，照常自动消失。
+- **错误：** `ImageTooLarge`「选区过大，请缩小选区后重新框选」（不显示重试）、`InvalidImage`「截图无法识别，请重新框选」、`OcrUnavailable`「OCR 模型未安装：…」；其余沿用复制翻译的提示。`Mode` 仍为 `Ocr`，集成方据此决定重试走框选流程。
+- **语种标签：** 显示「中文（自动） → English」，取各段检测结果中最多的语种；框选翻译时**不可点击**（改原文语种需要重新识别，#58 之后再定）。
+- **位置：** 放在选区旁（`CalculateAroundRect`，卡片与选区间距 8 DIP），夹紧到选区中心所在显示器的工作区；钉住时原地更新。
 - **语种标签：** 点击后可选 中文 / English / 日本語，发 `SourceLanguageOverride`（`DetectFailed` 错误时显示为「指定原文语种 ▾」）。
 - **字体：** 中文 `Microsoft YaHei UI` 优先，日文 `Yu Gothic UI` 优先，英文 `Segoe UI` 优先，彼此互为回退。
 

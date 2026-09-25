@@ -18,6 +18,7 @@ internal sealed partial class PopupWindow : Window
 {
     private const int EscHotkeyId = 0x5301;
     private const double ShadowMargin = 12;
+    private const double SelectionGap = 8;
 
     private readonly PopupViewModel _model;
     private readonly IntPtr _hwnd;
@@ -43,6 +44,8 @@ internal sealed partial class PopupWindow : Window
         CloseButton.Click += (_, _) => _model.Close(PopupCloseReason.User);
         PinButton.Click += (_, _) => _model.TogglePin();
         CopyButton.Click += (_, _) => _model.RequestCopy();
+        CopyOriginalButton.Click += (_, _) => _model.RequestCopyOriginal();
+        OriginalToggle.Click += (_, _) => _model.ToggleOriginal();
         RetryButton.Click += (_, _) => _model.RequestRetry();
         LanguageButton.Click += (_, _) => OpenSourceMenu();
         Header.MouseLeftButtonDown += OnHeaderMouseDown;
@@ -154,6 +157,16 @@ internal sealed partial class PopupWindow : Window
         LoadingPanel.Visibility = Vis(kind == PopupKind.Loading);
         ResultPanel.Visibility = Vis(kind == PopupKind.Result);
         ErrorPanel.Visibility = Vis(kind == PopupKind.Error);
+        EmptyPanel.Visibility = Vis(kind == PopupKind.Empty);
+        EmptyPanel.Text = PopupText.OcrEmptyText;
+
+        OriginalSection.Visibility = Vis(kind == PopupKind.Result && _model.HasOriginal);
+        OriginalToggle.Content = _model.IsOriginalExpanded ? PopupText.HideOriginalText : PopupText.ShowOriginalText;
+        OriginalText.Visibility = Vis(_model.IsOriginalExpanded);
+        OriginalText.Text = _model.OriginalText;
+        OriginalText.FontFamily = new FontFamily(_model.OriginalFontFamily);
+        CopyOriginalButton.Visibility = Vis(_model.CanCopyOriginal);
+        CopyOriginalButton.Content = _model.ShowOriginalCopiedFeedback ? "已复制" : "复制原文";
 
         SourcePreviewText.Text = _model.SourcePreview;
         LoadingIndicator.Visibility = _model.ShowLoadingIndicator ? Visibility.Visible : Visibility.Hidden;
@@ -165,15 +178,22 @@ internal sealed partial class PopupWindow : Window
         RetryButton.Visibility = Vis(_model.CanRetry);
 
         LanguageButton.Content = _model.LanguageLabel;
-        LanguageButton.Visibility = Vis(kind == PopupKind.Result || (kind == PopupKind.Error && _model.Error?.Kind == PopupErrorKind.DetectFailed));
-        if (kind == PopupKind.Error && _model.Error?.Kind == PopupErrorKind.DetectFailed)
+        var detectFailed = kind == PopupKind.Error && _model.Error?.Kind == PopupErrorKind.DetectFailed;
+        LanguageButton.Visibility = Vis(kind == PopupKind.Result || (detectFailed && _model.CanOverrideSource));
+        if (detectFailed)
         {
             LanguageButton.Content = "指定原文语种 ▾";
         }
 
+        // 框选翻译的语种标签只展示，不能点（改原文语种需要重新识别，#58 之后再定）。
+        LanguageButton.IsHitTestVisible = _model.CanOverrideSource;
+        LanguageButton.Cursor = _model.CanOverrideSource ? Cursors.Hand : Cursors.Arrow;
+        LanguageButton.ToolTip = _model.CanOverrideSource ? "点击手动指定原文语种" : null;
+
         ElapsedText.Text = kind == PopupKind.Result ? _model.ElapsedText ?? string.Empty : string.Empty;
         CopyButton.Visibility = Vis(_model.CanCopy);
-        CopyButton.Content = _model.ShowCopiedFeedback ? "已复制" : "复制";
+        var copyLabel = _model.HasOriginal ? "复制译文" : "复制";
+        CopyButton.Content = _model.ShowCopiedFeedback ? "已复制" : copyLabel;
         PinButton.IsChecked = _model.IsPinned;
         Header.Cursor = _model.IsPinned ? Cursors.SizeAll : null;
     }
@@ -187,6 +207,10 @@ internal sealed partial class PopupWindow : Window
         TranslationText.Foreground = theme.Foreground;
         TranslationText.SelectionBrush = theme.Accent;
         SourcePreviewText.Foreground = theme.Secondary;
+        EmptyPanel.Foreground = theme.Secondary;
+        OriginalText.Foreground = theme.Secondary;
+        OriginalText.SelectionBrush = theme.Accent;
+        OriginalToggle.Foreground = theme.Secondary;
         ElapsedText.Foreground = theme.Secondary;
         ErrorText.Foreground = theme.ErrorForeground;
         LoadingIndicator.Foreground = theme.Accent;
@@ -196,6 +220,12 @@ internal sealed partial class PopupWindow : Window
 
     private void PlaceAtAnchor()
     {
+        if (_model.AnchorRect is { } selection)
+        {
+            PlaceAroundRect(selection);
+            return;
+        }
+
         if (!_hasAnchor)
         {
             return;
@@ -220,6 +250,35 @@ internal sealed partial class PopupWindow : Window
         var offset = Math.Max(0, _model.Options.CursorOffset - ShadowMargin) * dpi.DpiScaleX;
         var position = PopupPlacement.Calculate(new PopupPoint(cursor.X, cursor.Y), size, work, offset);
         SetWindowPos(_hwnd, IntPtr.Zero, (int)Math.Round(position.X), (int)Math.Round(position.Y), 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+    }
+
+    /// <summary>框选翻译（#57）：放在选区旁（右下外侧 → 下 → 上 → 左），夹紧到选区所在显示器的工作区。</summary>
+    private void PlaceAroundRect(PopupRect selection)
+    {
+        var center = new PopupNativeMethods.Point
+        {
+            X = (int)Math.Round(selection.Left + (selection.Width / 2)),
+            Y = (int)Math.Round(selection.Top + (selection.Height / 2)),
+        };
+        var monitor = MonitorFromPoint(center, MonitorDefaultToNearest);
+        var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return;
+        }
+
+        // 先移到选区所在显示器，让 WPF 按该显示器 DPI 重新缩放，再按新尺寸计算。
+        SetWindowPos(_hwnd, IntPtr.Zero, center.X, center.Y, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var work = new PopupRect(info.Work.Left, info.Work.Top, info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top);
+        ResultPanel.MaxHeight = Math.Max(80, (work.Height / dpi.DpiScaleY / 2) - 60);
+        UpdateLayout();
+
+        // 窗口四周有 ShadowMargin 的透明阴影边，卡片与选区的可见间距为 SelectionGap。
+        var size = new PopupSize(ActualWidth * dpi.DpiScaleX, ActualHeight * dpi.DpiScaleY);
+        var gap = (SelectionGap - ShadowMargin) * dpi.DpiScaleX;
+        var placement = PopupPlacement.CalculateAroundRect(selection, size, work, gap);
+        SetWindowPos(_hwnd, IntPtr.Zero, (int)Math.Round(placement.Position.X), (int)Math.Round(placement.Position.Y), 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
     }
 
     private void OnSizeChanged()

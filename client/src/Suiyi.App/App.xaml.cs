@@ -151,6 +151,12 @@ public partial class App : Application
         // Issue #34 组合根顺序：服务启动之后才开始接收快捷键与剪贴板事件。
         _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? settings.Hotkey.Translate);
         _regionHotkeyManager.Update(GetOptionValue(e.Args, "--region-hotkey") ?? settings.Hotkey.Region);
+
+        // 设置里需要明确告知的问题（如框选快捷键与翻译快捷键相同被禁用），每次运行只提示一次。
+        foreach (var notice in _settings.TakeLoadNotices())
+        {
+            _tray.ShowNotification(AppTitle, notice.Message);
+        }
         _clipboardMonitor.Start();
     }
 
@@ -247,16 +253,19 @@ public partial class App : Application
 
     private void WirePopup(PopupViewModel popup, ClipboardWriter clipboardWriter)
     {
-        // 复制译文：先 SuppressNext 再写入（写入同时登记自身序号，二者任一命中即忽略），不会再次触发翻译。
-        popup.CopyTranslationRequested += (_, args) =>
+        // 复制译文 / 复制原文（框选翻译，#57）：先 SuppressNext 再写入（写入同时登记自身序号，二者任一命中即忽略），不会再次触发翻译。
+        void Copy(string text)
         {
             clipboardWriter.SuppressNext(CopySuppressWindow);
-            if (!clipboardWriter.SetText(args.Text))
+            if (!clipboardWriter.SetText(text))
             {
                 clipboardWriter.CancelSuppress();
                 _tray?.ShowNotification(AppTitle, "复制失败：剪贴板被其他程序占用");
             }
-        };
+        }
+
+        popup.CopyTranslationRequested += (_, args) => Copy(args.Text);
+        popup.CopyOriginalRequested += (_, args) => Copy(args.Text);
 
         // 重试、指定原文语种由 TranslateFlowCoordinator 直接订阅。
     }

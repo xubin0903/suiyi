@@ -20,7 +20,11 @@ public enum SettingsParseStatus
 /// <param name="Status">类别。</param>
 /// <param name="Settings">解析出的设置；非 <see cref="SettingsParseStatus.Ok"/> 时为默认值。</param>
 /// <param name="Error">失败原因。</param>
-public sealed record SettingsParseResult(SettingsParseStatus Status, AppSettings Settings, string? Error = null);
+public sealed record SettingsParseResult(SettingsParseStatus Status, AppSettings Settings, string? Error = null)
+{
+    /// <summary>需要托盘明确提示的问题（见 <see cref="SettingsNotice"/>）；非 <see cref="SettingsParseStatus.Ok"/> 时为空。</summary>
+    public IReadOnlyList<SettingsNotice> Notices { get; init; } = [];
+}
 
 /// <summary>
 /// <c>settings.json</c> 序列化：写出 UTF-8（无 BOM）、缩进、camelCase；
@@ -132,7 +136,8 @@ public static class SettingsSerializer
                 },
             };
 
-            return new SettingsParseResult(SettingsParseStatus.Ok, SettingsRules.Validate(settings, warn));
+            var notices = new List<SettingsNotice>();
+            return new SettingsParseResult(SettingsParseStatus.Ok, SettingsRules.Validate(settings, warn, notices.Add)) { Notices = notices };
         }
     }
 

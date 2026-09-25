@@ -17,4 +17,17 @@ public enum PopupKind
 
     /// <summary>错误提示，可重试。</summary>
     Error,
+
+    /// <summary>框选翻译未识别到文字（#57）：普通提示样式，不是错误。</summary>
+    Empty,
+}
+
+/// <summary>浮窗内容来源：复制翻译（M2）或框选翻译（M3 OCR）。</summary>
+public enum PopupContentMode
+{
+    /// <summary>复制 / 快捷键取词翻译（M2）。定位到光标旁。</summary>
+    Text,
+
+    /// <summary>框选翻译（#57）：有原文区、复制原文，定位到选区旁。</summary>
+    Ocr,
 }

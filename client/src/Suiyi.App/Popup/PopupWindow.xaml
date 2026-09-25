@@ -39,6 +39,7 @@
       <DockPanel x:Name="Header" DockPanel.Dock="Top" Margin="0,0,0,6" Background="Transparent">
         <Button x:Name="CloseButton" DockPanel.Dock="Right" Content="✕" ToolTip="关闭（Esc）" Style="{DynamicResource HeaderButton}" />
         <ToggleButton x:Name="PinButton" DockPanel.Dock="Right" Content="📌" ToolTip="钉住（不自动消失，可拖动）" Style="{DynamicResource HeaderButton}" />
+        <Button x:Name="CopyOriginalButton" DockPanel.Dock="Right" Content="复制原文" ToolTip="复制识别出的原文" Style="{DynamicResource HeaderButton}" />
         <Button x:Name="CopyButton" DockPanel.Dock="Right" Content="复制" ToolTip="复制译文" Style="{DynamicResource HeaderButton}" />
         <TextBlock x:Name="ElapsedText" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0" FontSize="11" />
         <Button x:Name="LanguageButton" HorizontalAlignment="Left" ToolTip="点击手动指定原文语种" Style="{DynamicResource HeaderButton}" FontSize="12" />
@@ -52,15 +53,31 @@
           <ProgressBar x:Name="LoadingIndicator" IsIndeterminate="True" Height="3" Margin="0,8,0,0" BorderThickness="0" />
         </StackPanel>
 
+        <!-- 译文为主体；框选翻译时下方有可折叠的原文区（#57）。整体超过最大高度时滚动。 -->
         <ScrollViewer x:Name="ResultPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <TextBox x:Name="TranslationText"
-                   IsReadOnly="True"
-                   TextWrapping="Wrap"
-                   BorderThickness="0"
-                   Background="Transparent"
-                   Padding="0"
-                   FontSize="15" />
+          <StackPanel>
+            <TextBox x:Name="TranslationText"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     Padding="0"
+                     FontSize="15" />
+            <StackPanel x:Name="OriginalSection" Margin="0,8,0,0">
+              <Button x:Name="OriginalToggle" HorizontalAlignment="Left" ToolTip="展开 / 收起识别出的原文" Style="{DynamicResource HeaderButton}" Margin="0" Padding="0,1" FontSize="12" />
+              <TextBox x:Name="OriginalText"
+                       IsReadOnly="True"
+                       TextWrapping="Wrap"
+                       BorderThickness="0"
+                       Background="Transparent"
+                       Padding="0"
+                       Margin="0,4,0,0"
+                       FontSize="13" />
+            </StackPanel>
+          </StackPanel>
         </ScrollViewer>
+
+        <TextBlock x:Name="EmptyPanel" TextWrapping="Wrap" />
 
         <DockPanel x:Name="ErrorPanel">
           <Button x:Name="RetryButton" DockPanel.Dock="Right" Content="重试" Margin="12,0,0,0" Padding="10,2" VerticalAlignment="Center" />
