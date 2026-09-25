@@ -63,6 +63,8 @@
                      Background="Transparent"
                      Padding="0"
                      FontSize="15" />
+            <!-- 译文缺失、用原文代替的段落：灰色小字提示（#58），不改变复制内容。 -->
+            <TextBlock x:Name="UntranslatedHintText" TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11" />
             <StackPanel x:Name="OriginalSection" Margin="0,8,0,0">
               <Button x:Name="OriginalToggle" HorizontalAlignment="Left" ToolTip="展开 / 收起识别出的原文" Style="{DynamicResource HeaderButton}" Margin="0" Padding="0,1" FontSize="12" />
               <TextBox x:Name="OriginalText"

@@ -323,6 +323,44 @@ public sealed class PopupOcrViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Error_WithOcrMode_FromTextState_SwitchesModeAndRepositions()
+    {
+        _popup.ShowLoading("hello");
+        Advance(300);
+        _shown.Clear();
+
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout), PopupContentMode.Ocr, Selection);
+
+        Assert.Equal(PopupContentMode.Ocr, _popup.Mode);
+        Assert.Equal(Selection, _popup.AnchorRect);
+        Assert.Equal([true], _shown);
+    }
+
+    [Fact]
+    public void Error_WithTextMode_AfterOcr_ClearsAnchor()
+    {
+        _popup.ShowOcrResult(TwoParagraphs, Selection);
+
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout), PopupContentMode.Text, Selection);
+
+        Assert.Equal(PopupContentMode.Text, _popup.Mode);
+        Assert.Null(_popup.AnchorRect);
+    }
+
+    [Fact]
+    public void Error_WithOcrMode_SameAnchor_KeepsPosition()
+    {
+        _popup.ShowOcrLoading(Selection);
+        Advance(300);
+        _shown.Clear();
+
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout), PopupContentMode.Ocr, Selection);
+
+        Assert.DoesNotContain(true, _shown);
+        Assert.Equal(PopupKind.Error, _popup.Kind);
+    }
+
+    [Fact]
     public void Error_ThenResult_ErrorCleared()
     {
         _popup.ShowOcrLoading(Selection);

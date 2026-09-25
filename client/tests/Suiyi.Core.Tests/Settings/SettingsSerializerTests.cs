@@ -29,7 +29,8 @@ public sealed class SettingsSerializerTests
             "command": null,
             "args": null,
             "modelsDir": null,
-            "preload": "zh-en,en-zh"
+            "preload": "zh-en,en-zh",
+            "preloadOcr": false
           },
           "startWithWindows": false
         }
@@ -144,6 +145,28 @@ public sealed class SettingsSerializerTests
         Assert.Equal(SettingsParseStatus.Ok, result.Status);
         Assert.Equal(AppSettings.Default with { Clipboard = new ClipboardSettings { MaxChars = 3000 } }, result.Settings);
         Assert.Equal(11, _warnings.Count);
+    }
+
+    [Fact]
+    public void PreloadOcr_ReadsAndMapsToEngineOptions()
+    {
+        var result = Parse("""{ "engine": { "preloadOcr": true } }""");
+
+        Assert.True(result.Settings.Engine.PreloadOcr);
+        Assert.True(result.Settings.Engine.ToEngineOptions().PreloadOcr);
+        Assert.False(AppSettings.Default.Engine.ToEngineOptions().PreloadOcr);
+        Assert.NotEqual(AppSettings.Default, result.Settings);
+        Assert.Equal(result.Settings, Parse(SettingsSerializer.Serialize(result.Settings)).Settings);
+        Assert.Empty(_warnings);
+    }
+
+    [Fact]
+    public void PreloadOcr_WrongType_FallsBackToOff()
+    {
+        var result = Parse("""{ "engine": { "preloadOcr": "yes" } }""");
+
+        Assert.False(result.Settings.Engine.PreloadOcr);
+        Assert.Single(_warnings);
     }
 
     [Fact]

@@ -26,6 +26,19 @@ public sealed record PopupOcrResult(
     /// <summary>端到端或服务端耗时（可选，显示为小字）。</summary>
     public TimeSpan? Elapsed { get; init; }
 
+    /// <summary>
+    /// 译文缺失、用原文代替的段落下标（对应 <see cref="TranslationParagraphs"/>，从 0 起，升序）。
+    /// 浮窗据此轻微区分样式（小字提示），复制译文时内容不变。
+    /// </summary>
+    public IReadOnlyList<int> UntranslatedParagraphs { get; init; } = [];
+
+    /// <summary>是否有译文缺失、用原文代替的段落。</summary>
+    public bool HasUntranslated => UntranslatedParagraphs.Count > 0;
+
+    /// <summary>第 <paramref name="index"/> 段是否为用原文代替的段落。</summary>
+    /// <param name="index">段落下标（从 0 起）。</param>
+    public bool IsUntranslated(int index) => UntranslatedParagraphs.Contains(index);
+
     /// <summary>是否未识别到任何文字。</summary>
     public bool IsEmpty => SourceParagraphs.All(string.IsNullOrWhiteSpace);
 

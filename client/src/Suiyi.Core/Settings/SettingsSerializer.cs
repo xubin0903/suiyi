@@ -133,6 +133,7 @@ public static class SettingsSerializer
                     Args = reader.StringArray(engine, "args", "engine."),
                     ModelsDir = reader.String(engine, "modelsDir", null, "engine.", nullable: true),
                     Preload = reader.String(engine, "preload", d.Engine.Preload, "engine.")!,
+                    PreloadOcr = reader.Bool(engine, "preloadOcr", d.Engine.PreloadOcr, "engine."),
                 },
             };
 

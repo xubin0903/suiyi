@@ -1,4 +1,5 @@
 using Suiyi.Core.Engine;
+using Suiyi.Core.Ocr;
 using Suiyi.Core.Popup;
 
 namespace Suiyi.Core.Flow;
@@ -25,8 +26,27 @@ public static class PopupErrorMapper
             EngineErrorKind.DetectFailed => new PopupError(PopupErrorKind.DetectFailed),
             // OCR 错误码（#53 草案）统一走 OcrResultMapper，文案只维护一处；客户端预检拦截的 ImageTooLarge 也带同形 Details。
             EngineErrorKind.ImageTooLarge or EngineErrorKind.UnsupportedMediaType or EngineErrorKind.InvalidImage or EngineErrorKind.OcrUnavailable =>
-                OcrResultMapper.MapError(exception.ErrorCode, exception.Details),
+                MapOcr(exception),
             _ => new PopupError(PopupErrorKind.Other) { Detail = exception.UserMessage },
+        };
+    }
+
+    private static PopupError MapOcr(EngineException exception)
+    {
+        // 没有错误码（不是来自服务端信封）时按类别补上；Details 缺字段时用异常上已解析的值兜底。
+        var code = exception.ErrorCode ?? exception.Kind switch
+        {
+            EngineErrorKind.ImageTooLarge => OcrErrorCodes.ImageTooLarge,
+            EngineErrorKind.UnsupportedMediaType => OcrErrorCodes.UnsupportedMediaType,
+            EngineErrorKind.InvalidImage => OcrErrorCodes.InvalidImage,
+            _ => OcrErrorCodes.OcrUnavailable,
+        };
+        var mapped = OcrResultMapper.MapError(code, exception.Details);
+        return mapped with
+        {
+            MissingModels = mapped.MissingModels.Count > 0 ? mapped.MissingModels : exception.MissingModels,
+            Limit = mapped.Limit ?? exception.Limit,
+            Length = mapped.Length ?? exception.Length,
         };
     }
 

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Suiyi.Core.Capture;
 using Suiyi.Core.Clipboard;
 using Suiyi.Core.Engine;
 using Suiyi.Core.Logging;
@@ -8,21 +9,24 @@ using Suiyi.Core.Tray;
 namespace Suiyi.Core.Flow;
 
 /// <summary>
-/// 主流程编排（#34）：捕获文本 → 翻译 → 浮窗。只能在 UI 线程上调用；后台回调经 <c>dispatch</c> 切回 UI 线程。
+/// 主流程编排：复制翻译（#34，捕获文本 → 翻译 → 浮窗）与框选翻译（#58，框选 → OCR 翻译 → 浮窗，见
+/// <c>TranslateFlowCoordinator.Region.cs</c>）。两条流程共用一套「当前请求」：互相取消、共用服务未就绪时的等待与自动补译、
+/// 重试时重启服务等规则。只能在 UI 线程上调用；后台回调经 <c>dispatch</c> 切回 UI 线程。
 /// <list type="bullet">
 /// <item>服务就绪：浮窗 Loading → <see cref="ITranslationService.TranslateAsync"/> → Result / Error。</item>
 /// <item>服务启动中 / 重启中：浮窗「正在准备翻译服务…」，在 <see cref="TranslateFlowOptions.ReadyWaitTimeout"/>（默认 30 s）内就绪则自动补译最后一次请求；
 /// 超时显示「翻译服务启动超时」（可重试）；服务失败时立即提示可在托盘重启。浮窗不会一直停在「正在准备」。</item>
-/// <item>最新优先：新请求取消旧请求，旧请求的结果或错误一律丢弃。</item>
+/// <item>最新优先：新请求（文本或框选）取消旧请求，旧请求的结果或错误一律丢弃。</item>
+/// <item>重试按浮窗 <see cref="PopupViewModel.Mode"/> 分流：框选模式用原来那张 PNG 重新识别，复制模式重译上一次文本。</item>
 /// <item>连接被拒（服务刚退出）：催监管器做健康检查；状态转为启动中 / 重启中则按「未就绪」等待并自动重译，
 /// <see cref="TranslateFlowOptions.UnavailableConfirmTimeout"/> 内仍自称就绪则报「服务未运行」。</item>
 /// <item>服务失败或启动超时后点「重试」：顺带重启服务（重启中不重复触发），再等待就绪并自动补译。</item>
 /// <item>暂停监听时忽略 <see cref="ClipboardTrigger.Monitor"/>，快捷键与托盘仍可翻译。</item>
 /// <item>自动监听遇到过长文本不弹窗，只在托盘提示一次（每次运行最多一次）。</item>
 /// </list>
-/// 日志只记录长度、耗时与语种，不记录正文。
+/// 日志只记录长度、尺寸、耗时与语种，不记录正文、识别文本与图片。
 /// </summary>
-public sealed class TranslateFlowCoordinator : IDisposable
+public sealed partial class TranslateFlowCoordinator : IDisposable
 {
     private const string AppTitle = "随译";
 
@@ -36,7 +40,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
     private readonly Action<Action> _afterRender;
     private readonly OneShotTimer _readyWait;
 
-    private FlowRequest? _last;
+    private TextRequest? _lastText;
     private FlowRequest? _pending;
     private CancellationTokenSource? _cts;
     private int _generation;
@@ -55,6 +59,8 @@ public sealed class TranslateFlowCoordinator : IDisposable
     /// <param name="dispatch">切回 UI 线程；默认直接调用（测试用）。</param>
     /// <param name="afterRender">在浮窗渲染完成后执行（用于端到端计时）；默认直接调用。</param>
     /// <param name="options">参数。</param>
+    /// <param name="ocr">框选翻译服务（#56）；为 <see langword="null"/> 时不启用框选翻译。</param>
+    /// <param name="region">框选入口（#55）；为 <see langword="null"/> 时不启用框选翻译。</param>
     public TranslateFlowCoordinator(
         ITranslationService translator,
         IEngineStatus engine,
@@ -64,7 +70,9 @@ public sealed class TranslateFlowCoordinator : IDisposable
         TimeProvider? timeProvider = null,
         Action<Action>? dispatch = null,
         Action<Action>? afterRender = null,
-        TranslateFlowOptions? options = null)
+        TranslateFlowOptions? options = null,
+        IOcrTranslationService? ocr = null,
+        RegionCaptureTrigger? region = null)
     {
         _translator = translator ?? throw new ArgumentNullException(nameof(translator));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
@@ -76,7 +84,14 @@ public sealed class TranslateFlowCoordinator : IDisposable
         _afterRender = afterRender ?? (a => a());
         Options = options ?? new TranslateFlowOptions();
         Latency = new LatencyStats(Options.LatencyWindow);
+        OcrLatency = new LatencyStats(Options.LatencyWindow);
         _readyWait = new OneShotTimer(_timeProvider, _dispatch);
+        _ocr = ocr;
+        _region = region;
+        if (_region is not null)
+        {
+            _region.Failed += OnRegionCaptureFailed;
+        }
 
         _engine.StateChanged += OnEngineStateChanged;
         _popup.RetryRequested += OnRetryRequested;
@@ -90,7 +105,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
     /// <summary>参数。</summary>
     public TranslateFlowOptions Options { get; }
 
-    /// <summary>最近若干次端到端延迟（热路径；等待服务就绪的请求不计入）。</summary>
+    /// <summary>复制翻译最近若干次端到端延迟（热路径；等待服务就绪的请求不计入）。</summary>
     public LatencyStats Latency { get; }
 
     /// <summary>是否有请求在等服务就绪。</summary>
@@ -114,7 +129,13 @@ public sealed class TranslateFlowCoordinator : IDisposable
             return;
         }
 
-        Start(new FlowRequest(text, null, trigger, timestamp == 0 ? _timeProvider.GetTimestamp() : timestamp));
+        if (IsRegionCapturing)
+        {
+            _logger.Info("翻译：框选遮罩显示中，忽略文本捕获");
+            return;
+        }
+
+        Start(new TextRequest(text, null, trigger, timestamp == 0 ? _timeProvider.GetTimestamp() : timestamp));
     }
 
     /// <summary>剪贴板监听或快捷键的文本未被接受。</summary>
@@ -137,9 +158,16 @@ public sealed class TranslateFlowCoordinator : IDisposable
             return;
         }
 
+        if (IsRegionCapturing)
+        {
+            return;
+        }
+
         // 用户主动触发（快捷键 / 托盘）时明确告诉他超了多少。
         CancelInFlight();
-        _popup.ShowError(new PopupError(PopupErrorKind.TextTooLong) { Length = length, Limit = Options.ManualFilter.MaxChars });
+        _popup.ShowError(
+            new PopupError(PopupErrorKind.TextTooLong) { Length = length, Limit = Options.ManualFilter.MaxChars },
+            PopupContentMode.Text);
     }
 
     /// <summary>托盘「翻译剪贴板」：传入读取结果（由 App 读系统剪贴板）。</summary>
@@ -147,6 +175,12 @@ public sealed class TranslateFlowCoordinator : IDisposable
     {
         if (_disposed)
         {
+            return;
+        }
+
+        if (IsRegionCapturing)
+        {
+            _logger.Info("翻译：框选遮罩显示中，忽略托盘「翻译剪贴板」");
             return;
         }
 
@@ -182,18 +216,21 @@ public sealed class TranslateFlowCoordinator : IDisposable
             return;
         }
 
-        Start(new FlowRequest(result.Text!, null, ClipboardTrigger.Tray, started));
+        Start(new TextRequest(result.Text!, null, ClipboardTrigger.Tray, started));
     }
 
     /// <summary>重试上一次请求（浮窗「重试」）。</summary>
     /// <remarks>
+    /// 按浮窗 <see cref="PopupViewModel.Mode"/> 分流：框选模式用原来那张 PNG 重新识别并翻译（不重新框选），复制模式重译上一次文本。
     /// 服务已失败、上一次是「服务未运行」，或上一次是「启动超时」且服务仍未就绪时，顺带重启服务（与托盘「重启翻译服务」同一条路径），
     /// 然后按正常流程等待就绪并自动补译。重启进行中不会重复触发。
     /// </remarks>
     public void Retry()
     {
-        if (_last is not { } last || _disposed)
+        FlowRequest? last = _popup.Mode == PopupContentMode.Ocr ? _lastOcr : _lastText;
+        if (last is null || _disposed)
         {
+            _logger.Info($"翻译：没有可重试的请求（{_popup.Mode}）");
             return;
         }
 
@@ -208,7 +245,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
     /// <summary>以指定原文语种重新翻译上一次文本（浮窗语种标签）。</summary>
     public void TranslateWithSource(string language)
     {
-        if (_last is { } last && !_disposed && TrayLanguages.IsSupported(language))
+        if (_lastText is { } last && !_disposed && TrayLanguages.IsSupported(language))
         {
             Start(last with { SourceOverride = language.ToLowerInvariant(), Started = _timeProvider.GetTimestamp(), WaitSince = null });
         }
@@ -227,14 +264,29 @@ public sealed class TranslateFlowCoordinator : IDisposable
         _popup.RetryRequested -= OnRetryRequested;
         _popup.SourceLanguageOverride -= OnSourceLanguageOverride;
         _popup.Closed -= OnPopupClosed;
+        if (_region is not null)
+        {
+            _region.Failed -= OnRegionCaptureFailed;
+        }
+
         CancelInFlight();
+        _lastOcr = null;
         _readyWait.Dispose();
     }
 
     private void Start(FlowRequest request, bool restartEngine = false)
     {
         CancelInFlight();
-        _last = request;
+        if (request is TextRequest text)
+        {
+            _lastText = text;
+            _lastOcr = null; // 截图用完即丢：新的复制翻译开始后不再需要。
+        }
+        else if (request is OcrRequest ocr)
+        {
+            _lastOcr = ocr;
+        }
+
         var state = _engine.State;
         if (restartEngine || _restartRequested)
         {
@@ -257,7 +309,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
         if (state == EngineState.Failed)
         {
             _logger.Info("翻译：服务已失败，提示在托盘重启");
-            _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
+            ShowError(request, PopupErrorMapper.EngineFailed(_engine.Failure));
             return;
         }
 
@@ -302,7 +354,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
     {
         _pending = request;
         _confirmingUnavailable = true;
-        _popup.ShowPreparing();
+        ShowPreparing(request);
         _readyWait.Start(Options.UnavailableConfirmTimeout, () =>
         {
             if (_pending is not { } pending || !_confirmingUnavailable)
@@ -316,11 +368,11 @@ public sealed class TranslateFlowCoordinator : IDisposable
                 case EngineState.Ready:
                     _pending = null;
                     _logger.Warn($"翻译：服务自称就绪但连接仍被拒（{Options.UnavailableConfirmTimeout.TotalSeconds:0} 秒）");
-                    _popup.ShowError(new PopupError(PopupErrorKind.ServiceUnavailable));
+                    ShowError(pending, new PopupError(PopupErrorKind.ServiceUnavailable));
                     break;
                 case EngineState.Failed:
                     _pending = null;
-                    _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
+                    ShowError(pending, PopupErrorMapper.EngineFailed(_engine.Failure));
                     break;
                 default:
                     WaitForEngine(pending);
@@ -338,7 +390,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
         _confirmingUnavailable = false;
         var since = request.WaitSince ?? _timeProvider.GetTimestamp();
         _pending = request with { WaitSince = since };
-        _popup.ShowPreparing();
+        ShowPreparing(request);
         var remaining = Options.ReadyWaitTimeout - _timeProvider.GetElapsedTime(since);
         if (remaining <= TimeSpan.Zero)
         {
@@ -351,7 +403,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
 
     private void OnReadyWaitTimeout()
     {
-        if (_pending is null)
+        if (_pending is not { } pending)
         {
             return;
         }
@@ -361,16 +413,47 @@ public sealed class TranslateFlowCoordinator : IDisposable
         {
             // 连接被拒后服务仍报告就绪（没有发生重启）：按服务不可用报错，用户可重试。
             _logger.Warn("翻译：服务报告就绪但连接失败，等待超时");
-            _popup.ShowError(new PopupError(PopupErrorKind.ServiceUnavailable));
+            ShowError(pending, new PopupError(PopupErrorKind.ServiceUnavailable));
         }
         else
         {
             _logger.Warn($"翻译：等待服务就绪超时（{Options.ReadyWaitTimeout.TotalSeconds:0} 秒，服务状态 {_engine.State}）");
-            _popup.ShowError(new PopupError(PopupErrorKind.EngineStartTimeout));
+            ShowError(pending, new PopupError(PopupErrorKind.EngineStartTimeout));
         }
     }
 
-    private async Task RunAsync(FlowRequest request, bool waitedForEngine)
+    private void ShowPreparing(FlowRequest request)
+    {
+        if (request is OcrRequest ocr)
+        {
+            _popup.ShowPreparing(ocr.Anchor);
+        }
+        else
+        {
+            _popup.ShowPreparing();
+        }
+    }
+
+    private void ShowError(FlowRequest request, PopupError error)
+    {
+        if (request is OcrRequest ocr)
+        {
+            _popup.ShowError(error, PopupContentMode.Ocr, ocr.Anchor);
+        }
+        else
+        {
+            _popup.ShowError(error, PopupContentMode.Text);
+        }
+    }
+
+    private Task RunAsync(FlowRequest request, bool waitedForEngine) => request switch
+    {
+        OcrRequest ocr => RunOcrAsync(ocr, waitedForEngine),
+        TextRequest text => RunTextAsync(text, waitedForEngine),
+        _ => Task.CompletedTask,
+    };
+
+    private async Task RunTextAsync(TextRequest request, bool waitedForEngine)
     {
         var generation = ++_generation;
         var cts = new CancellationTokenSource();
@@ -406,7 +489,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
         _dispatch(() => OnSucceeded(generation, request, outcome, waitedForEngine));
     }
 
-    private void OnSucceeded(int generation, FlowRequest request, TranslationOutcome outcome, bool waitedForEngine)
+    private void OnSucceeded(int generation, TextRequest request, TranslationOutcome outcome, bool waitedForEngine)
     {
         if (generation != _generation || _disposed)
         {
@@ -446,7 +529,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
         }
 
         _cts = null;
-        _logger.Warn($"翻译失败：trigger={request.Trigger} chars={request.Text.Length} kind={ex.Kind}：{ex.Message}");
+        LogFailure(request, ex);
         if (ex.Kind == EngineErrorKind.Unavailable)
         {
             // 服务多半刚退出、监管器还没察觉：催一次健康检查，浮窗显示「正在准备」，恢复后自动重译。
@@ -454,7 +537,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
             switch (_engine.State)
             {
                 case EngineState.Failed:
-                    _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
+                    ShowError(request, PopupErrorMapper.EngineFailed(_engine.Failure));
                     break;
                 case EngineState.Ready:
                     ConfirmUnavailable(request);
@@ -467,7 +550,25 @@ public sealed class TranslateFlowCoordinator : IDisposable
             return;
         }
 
-        _popup.ShowError(PopupErrorMapper.Map(ex));
+        ShowError(request, PopupErrorMapper.Map(ex));
+    }
+
+    private void LogFailure(FlowRequest request, EngineException ex)
+    {
+        switch (request)
+        {
+            case TextRequest text:
+                _logger.Warn($"翻译失败：trigger={text.Trigger} chars={text.Text.Length} kind={ex.Kind}：{ex.Message}");
+                break;
+            case OcrRequest ocr:
+                // 服务端的错误说明不写日志（框选翻译只记尺寸、字节数与错误码）。
+                _logger.Warn(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"框选翻译失败：trigger={ocr.Trigger} size={ocr.Width}x{ocr.Height} bytes={ocr.Png.Length} kind={ex.Kind} code={ex.ErrorCode ?? "-"} status={ex.StatusCode?.ToString(CultureInfo.InvariantCulture) ?? "-"}"));
+                break;
+            default:
+                break;
+        }
     }
 
     private void OnEngineStateChanged(object? sender, EngineStateChangedEventArgs e) => _dispatch(() =>
@@ -502,7 +603,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
             _pending = null;
             _confirmingUnavailable = false;
             _readyWait.Stop();
-            _popup.ShowError(PopupErrorMapper.EngineFailed(e.Failure ?? _engine.Failure));
+            ShowError(pending, PopupErrorMapper.EngineFailed(e.Failure ?? _engine.Failure));
         }
     });
 
@@ -516,6 +617,12 @@ public sealed class TranslateFlowCoordinator : IDisposable
         if (e.Reason == PopupCloseReason.User)
         {
             CancelInFlight();
+        }
+
+        // 浮窗已不可见、也没有进行中的识别：截图用完即丢（不再能重试）。
+        if (_cts is null && _pending is null)
+        {
+            _lastOcr = null;
         }
     }
 
@@ -539,12 +646,14 @@ public sealed class TranslateFlowCoordinator : IDisposable
         }
     }
 
-    /// <param name="Text"></param>
+    /// <summary>一次请求（文本或框选）。</summary>
+    /// <param name="Started">端到端计时起点（<see cref="TimeProvider.GetTimestamp"/>）。</param>
+    /// <param name="WaitSince">开始等服务就绪的时刻；<see langword="null"/> 表示还没等过。重试、改语种时重新计时。</param>
+    private abstract record FlowRequest(long Started, long? WaitSince);
 
-    /// <param name="SourceOverride"></param>
-    /// <param name="Trigger"></param>
-    /// <param name="Started"></param>    /// <param name="WaitSince">开始等服务就绪的时刻；<see langword="null"/> 表示还没等过。重试、改语种时重新计时。</param>
-    private sealed record FlowRequest(string Text, string? SourceOverride, ClipboardTrigger Trigger, long Started, long? WaitSince = null);
+    /// <summary>复制翻译请求。</summary>
+    private sealed record TextRequest(string Text, string? SourceOverride, ClipboardTrigger Trigger, long Started, long? WaitSince = null)
+        : FlowRequest(Started, WaitSince);
 }
 
 /// <summary><see cref="TranslateFlowCoordinator.Completed"/> 参数。</summary>
