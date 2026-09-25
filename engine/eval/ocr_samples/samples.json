@@ -17,7 +17,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "12px 菜单与状态栏，三行各自一段，行距与正文相同"
+      "note": "12px 菜单与状态栏，三行各自一段，行距与正文相同",
+      "split": "dev"
     },
     {
       "id": "zh_ui_small_02",
@@ -36,7 +37,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "12px 设置项列表"
+      "note": "12px 设置项列表",
+      "split": "dev"
     },
     {
       "id": "zh_ui_small_03",
@@ -55,7 +57,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "对话框：正文、两个按钮、底部提示"
+      "note": "对话框：正文、两个按钮、底部提示",
+      "split": "dev"
     },
     {
       "id": "en_ui_small_01",
@@ -73,7 +76,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "12px 菜单与状态栏"
+      "note": "12px 菜单与状态栏",
+      "split": "dev"
     },
     {
       "id": "ja_ui_small_01",
@@ -91,7 +95,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "12px 菜单与状态栏"
+      "note": "12px 菜单与状态栏",
+      "split": "dev"
     },
     {
       "id": "zh_dark_small_01",
@@ -108,7 +113,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "深灰底浅灰字，约 4:1"
+      "note": "深灰底浅灰字，约 4:1",
+      "split": "dev"
     },
     {
       "id": "en_dark_small_01",
@@ -124,7 +130,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "深色 UI，对比度约 3.8:1"
+      "note": "深色 UI，对比度约 3.8:1",
+      "split": "dev"
     },
     {
       "id": "zh_lowcontrast_small_01",
@@ -140,7 +147,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "浅灰底浅灰字，约 2.3:1（低于无障碍标准）"
+      "note": "浅灰底浅灰字，约 2.3:1（低于无障碍标准）",
+      "split": "dev"
     },
     {
       "id": "zh_web_small_01",
@@ -156,7 +164,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "小选区里的一段正文"
+      "note": "小选区里的一段正文",
+      "split": "dev"
     },
     {
       "id": "en_doc_small_01",
@@ -172,7 +181,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "mixed_small_01",
@@ -188,7 +198,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "en_code_small_01",
@@ -205,7 +216,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "zh_web_720_01",
@@ -223,7 +235,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "zh_web_720_02",
@@ -241,7 +254,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "宋体，行高 1.8"
+      "note": "宋体，行高 1.8",
+      "split": "dev"
     },
     {
       "id": "zh_web_720_03",
@@ -259,7 +273,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "行高 2.0（中文网站常见），段间距仅略大于行距"
+      "note": "行高 2.0（中文网站常见），段间距仅略大于行距",
+      "split": "dev"
     },
     {
       "id": "en_doc_720_01",
@@ -277,7 +292,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "en_doc_720_02",
@@ -295,7 +311,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "ja_web_720_01",
@@ -313,7 +330,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "ja_web_720_02",
@@ -330,7 +348,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "明朝体"
+      "note": "明朝体",
+      "split": "dev"
     },
     {
       "id": "zh_twocol_720_01",
@@ -350,7 +369,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "横贯标题 + 双栏"
+      "note": "横贯标题 + 双栏",
+      "split": "dev"
     },
     {
       "id": "en_code_720_01",
@@ -370,7 +390,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "zh_dark_720_01",
@@ -388,7 +409,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "mixed_720_01",
@@ -406,7 +428,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "ja_vertical_720_01",
@@ -423,7 +446,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "ja_vertical_720_02",
@@ -441,7 +465,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "三段，字号 26"
+      "note": "三段，字号 26",
+      "split": "dev"
     },
     {
       "id": "zh_dense_1080_01",
@@ -465,7 +490,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "整屏中文正文，8 段"
+      "note": "整屏中文正文，8 段",
+      "split": "dev"
     },
     {
       "id": "en_dense_1080_01",
@@ -489,7 +515,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "ja_dense_1080_01",
@@ -511,7 +538,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "整屏日文"
+      "note": "整屏日文",
+      "split": "dev"
     },
     {
       "id": "en_twocol_1080_01",
@@ -533,7 +561,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "zh_ui_1080_01",
@@ -563,7 +592,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "整屏设置窗口：菜单、侧栏列表、正文、状态栏"
+      "note": "整屏设置窗口：菜单、侧栏列表、正文、状态栏",
+      "split": "dev"
     },
     {
       "id": "en_code_1080_01",
@@ -591,7 +621,8 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": ""
+      "note": "",
+      "split": "dev"
     },
     {
       "id": "ja_vertical_1080_01",
@@ -612,7 +643,241 @@
       ],
       "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
       "license": "CC0-1.0",
-      "note": "六段，字号 34"
+      "note": "六段，字号 34",
+      "split": "dev"
+    },
+    {
+      "id": "ho_en_menu_small_01",
+      "file": "images/ho_en_menu_small_01.png",
+      "lang": "en",
+      "category": "英文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 3980,
+      "paragraphs": [
+        "Cut",
+        "Copy",
+        "Paste",
+        "Select all",
+        "Translate selection",
+        "Search the web"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "右键菜单，6 项",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_zh_menu_small_01",
+      "file": "images/ho_zh_menu_small_01.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 7165,
+      "paragraphs": [
+        "新建标签页",
+        "新建窗口",
+        "历史记录",
+        "下载内容",
+        "书签管理器"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "浏览器菜单，5 项",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_ja_status_small_01",
+      "file": "images/ho_ja_status_small_01.png",
+      "lang": "ja",
+      "category": "日文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 8523,
+      "paragraphs": [
+        "保存  元に戻す  やり直し  印刷",
+        "オフラインで作業中",
+        "変更は自動的に保存されます"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "工具栏 + 状态两行",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_zh_chat_720_01",
+      "file": "images/ho_zh_chat_720_01.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 26090,
+      "paragraphs": [
+        "王小明",
+        "李华",
+        "产品讨论组",
+        "文件传输助手",
+        "明天下午三点的评审改到四点了，会议室不变，记得带上打印好的材料",
+        "好的收到，我顺便把上周的数据也整理一下"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "聊天：联系人列表 + 两个窄气泡（气泡内换行的短行属于同一段）",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_en_settings_720_01",
+      "file": "images/ho_en_settings_720_01.png",
+      "lang": "en",
+      "category": "英文 UI 小字",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 26336,
+      "paragraphs": [
+        "Preferences",
+        "General",
+        "Appearance",
+        "Shortcuts",
+        "Languages",
+        "Privacy",
+        "Updates",
+        "Appearance",
+        "Choose how the floating window looks. The theme follows the system setting unless you pick one below, and the font size applies to both the original text and the translation.",
+        "Theme: System",
+        "Font size: 14",
+        "Window opacity: 95%"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "设置页：侧栏 + 说明正文 + 选项行",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_zh_filemgr_1080_01",
+      "file": "images/ho_zh_filemgr_1080_01.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 28819,
+      "paragraphs": [
+        "桌面",
+        "下载",
+        "文档",
+        "图片",
+        "音乐",
+        "回收站",
+        "季度报告终稿.docx",
+        "会议纪要 0921.txt",
+        "产品截图（高清）.png",
+        "安装包备份.zip",
+        "旅行照片",
+        "5 个项目，已选择 1 个"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "文件管理器：侧栏 + 文件列表 + 状态栏",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_en_lang_small_01",
+      "file": "images/ho_en_lang_small_01.png",
+      "lang": "en",
+      "category": "英文 UI 小字",
+      "size_class": "small",
+      "width": 400,
+      "height": 150,
+      "bytes": 5301,
+      "paragraphs": [
+        "English (United States)",
+        "简体中文",
+        "日本語",
+        "Deutsch",
+        "Français"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "语言下拉列表（混合文字）",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_zh_form_720_01",
+      "file": "images/ho_zh_form_720_01.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 25335,
+      "paragraphs": [
+        "登录随译账户",
+        "用户名",
+        "密码",
+        "记住我，下次自动登录",
+        "忘记密码？",
+        "登录即表示你同意用户协议和隐私政策，本地翻译功能无需登录也可使用。"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "登录表单：标签行 + 底部说明（一段正文）",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_ja_settings_720_01",
+      "file": "images/ho_ja_settings_720_01.png",
+      "lang": "ja",
+      "category": "日文 UI 小字",
+      "size_class": "720p",
+      "width": 1280,
+      "height": 720,
+      "bytes": 22653,
+      "paragraphs": [
+        "一般",
+        "表示",
+        "ショートカット",
+        "言語",
+        "詳細設定",
+        "ショートカット",
+        "範囲を選んで翻訳：Ctrl+Alt+T",
+        "クリップボードを翻訳：Ctrl+Alt+C",
+        "翻訳ウィンドウを閉じる：Esc"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "日文设置：侧栏 + 快捷键列表",
+      "split": "holdout"
+    },
+    {
+      "id": "ho_mixed_toolbar_1080_01",
+      "file": "images/ho_mixed_toolbar_1080_01.png",
+      "lang": "zh",
+      "category": "中文 UI 小字",
+      "size_class": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 44843,
+      "paragraphs": [
+        "开始  插入  设计  布局  引用  审阅  视图",
+        "宋体",
+        "五号",
+        "加粗",
+        "居中",
+        "第三章 实验结果",
+        "本章介绍离线翻译在三种硬件上的实验结果，包括平均耗时、峰值内存和译文质量评分。所有实验均在断网环境下完成，每组重复五次取中位数。",
+        "第 3 页，共 12 页",
+        "字数：4,862"
+      ],
+      "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
+      "license": "CC0-1.0",
+      "note": "文档编辑器：功能区 + 竖排工具项 + 正文 + 状态栏",
+      "split": "holdout"
     }
   ]
 }

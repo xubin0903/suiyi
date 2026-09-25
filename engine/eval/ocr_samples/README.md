@@ -1,6 +1,6 @@
-# OCR 评测样例集（#54）
+# OCR 评测样例集（#54 / #75）
 
-32 张固定样例，给 `scripts/eval_ocr.py` 用。说明与结果见 [docs/engine/OCR评测.md](../../../docs/engine/OCR评测.md)。
+42 张固定样例，给 `scripts/eval_ocr.py` 用：原 32 张（`split: dev`）+ 10 张 UI 留出集（`split: holdout`，#75）。说明与结果见 [docs/engine/OCR评测.md](../../../docs/engine/OCR评测.md)。
 
 ## 来源与许可
 
@@ -10,7 +10,7 @@
 | 渲染 | `scripts/make_ocr_samples.py` 用 Pillow 渲染，固定画布，无随机数，可重复生成 |
 | 字体 | Noto Sans CJK / Noto Serif CJK（SIL OFL 1.1）、DejaVu Sans Mono（Bitstream Vera 许可）。字体只用于渲染，未随样例分发；OFL 与 Vera 许可都不约束渲染出的图片 |
 | 样例许可 | **CC0-1.0**（每条样例在 `samples.json` 的 `source` / `license` 字段里也有记录） |
-| 体积 | PNG 合计约 1.5 MB（单张 ≤ 190 KB），随仓库提交；评测不需要重新生成 |
+| 体积 | PNG 合计约 1.6 MB（单张 ≤ 190 KB），随仓库提交；评测不需要重新生成 |
 
 ## 覆盖
 
@@ -29,6 +29,14 @@
 | 密集文字（小字号、长段落） | | | 2 |
 
 合计：400×150 12 张、720p 13 张、1080p 7 张。
+
+### 留出集（#75，`split: holdout`，id 以 `ho_` 开头）
+
+10 张 UI 类样例，布局和文字都不同于上面的 dev 集：右键菜单、浏览器菜单、日文工具栏+状态、聊天（联系人列表 + 两个窄气泡，
+气泡内换行的短行属于同一段）、英文设置页、文件管理器、语言下拉列表、登录表单、日文设置页、文档编辑器功能区。
+400×150 4 张、720p 4 张、1080p 2 张。**这些样例是在设计短行分段规则之前画好的，调参时不看它们的识别结果**，只在最后单独报指标；
+以后改段落规则时也请遵守，否则留出集就失去意义（需要新样例时另画一批）。
+`eval_ocr.py` 的 CER、耗时、内存、段落等汇总只算 dev，留出集在报告里单独一节；`--split dev|holdout` 只跑其中一部分。
 
 ## 标注约定（`samples.json`）
 

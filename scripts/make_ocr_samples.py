@@ -84,6 +84,7 @@ class Sample:
     note: str = ""
     vertical: list[str] | None = None  # 日文竖排段落
     vertical_size: int = 30
+    split: str = "dev"  # dev：调参可看；holdout：留出集（#75），调参时不看
 
 
 def render(sample: Sample) -> tuple[Image.Image, list[str]]:
@@ -313,7 +314,67 @@ def samples() -> list[Sample]:
         Sample("ja_vertical_1080_01", "ja", "日文竖排", "1080p", vertical=JA_V, vertical_size=34, bg="#fbf8f1", fg="#1a1a1a",
                note="六段，字号 34"),
     ]
-    return s
+    return s + holdout_samples()
+
+
+def holdout_samples() -> list[Sample]:
+    """#75 留出集：UI 类样例，布局与文字都不同于上面的样例。调段落规则时不看，只在最后单独报指标。"""
+
+    h: list[Sample] = [
+        Sample("ho_en_menu_small_01", "en", "英文 UI 小字", "small",
+               [ui_rows(["Cut", "Copy", "Paste", "Select all", "Translate selection", "Search the web"], 12, 20, 8, 1.75)],
+               note="右键菜单，6 项"),
+        Sample("ho_zh_menu_small_01", "zh", "中文 UI 小字", "small",
+               [ui_rows(["新建标签页", "新建窗口", "历史记录", "下载内容", "书签管理器"], 13, 24, 10, 2.0)],
+               note="浏览器菜单，5 项"),
+        Sample("ho_ja_status_small_01", "ja", "日文 UI 小字", "small",
+               [ui_rows(["保存  元に戻す  やり直し  印刷", "オフラインで作業中", "変更は自動的に保存されます"], 12, 12, 16, 2.0)],
+               note="工具栏 + 状态两行"),
+        Sample("ho_zh_chat_720_01", "zh", "中文 UI 小字", "720p",
+               [ui_rows(["王小明", "李华", "产品讨论组", "文件传输助手"], 15, 30, 40, 3.2),
+                Block(420, 60, 260, [P("明天下午三点的评审改到四点了，会议室不变，记得带上打印好的材料", 15)], line_gap=1.5),
+                Block(420, 200, 260, [P("好的收到，我顺便把上周的数据也整理一下", 15)], line_gap=1.5)],
+               note="聊天：联系人列表 + 两个窄气泡（气泡内换行的短行属于同一段）"),
+        Sample("ho_en_settings_720_01", "en", "英文 UI 小字", "720p",
+               [Block(40, 30, 400, [T("Preferences", 20)]),
+                ui_rows(["General", "Appearance", "Shortcuts", "Languages", "Privacy", "Updates"], 14, 40, 90, 2.3),
+                Block(320, 90, 700, [T("Appearance", 18),
+                                     P("Choose how the floating window looks. The theme follows the system setting unless you pick one below, and the font size applies to both the original text and the translation.", 14)],
+                      line_gap=1.6, para_gap=1.2),
+                ui_rows(["Theme: System", "Font size: 14", "Window opacity: 95%"], 14, 320, 260, 2.2)],
+               note="设置页：侧栏 + 说明正文 + 选项行"),
+        Sample("ho_zh_filemgr_1080_01", "zh", "中文 UI 小字", "1080p",
+               [ui_rows(["桌面", "下载", "文档", "图片", "音乐", "回收站"], 14, 24, 80, 2.4),
+                ui_rows(["季度报告终稿.docx", "会议纪要 0921.txt", "产品截图（高清）.png", "安装包备份.zip", "旅行照片"], 14, 260, 80, 2.2),
+                Block(24, 1050, 600, [P("5 个项目，已选择 1 个", 12)])],
+               note="文件管理器：侧栏 + 文件列表 + 状态栏"),
+        Sample("ho_en_lang_small_01", "en", "英文 UI 小字", "small",
+               [ui_rows(["English (United States)", "简体中文", "日本語", "Deutsch", "Français"], 12, 16, 10, 1.9)],
+               note="语言下拉列表（混合文字）"),
+        Sample("ho_zh_form_720_01", "zh", "中文 UI 小字", "720p",
+               [Block(440, 120, 400, [T("登录随译账户", 22)]),
+                ui_rows(["用户名", "密码", "记住我，下次自动登录", "忘记密码？"], 15, 440, 200, 2.6),
+                Block(440, 420, 400, [P("登录即表示你同意用户协议和隐私政策，本地翻译功能无需登录也可使用。", 13)], line_gap=1.6)],
+               note="登录表单：标签行 + 底部说明（一段正文）"),
+        Sample("ho_ja_settings_720_01", "ja", "日文 UI 小字", "720p",
+               [ui_rows(["一般", "表示", "ショートカット", "言語", "詳細設定"], 15, 40, 60, 2.4),
+                Block(300, 60, 800, [T("ショートカット", 18),
+                                     P("範囲を選んで翻訳：Ctrl+Alt+T", 14), P("クリップボードを翻訳：Ctrl+Alt+C", 14),
+                                     P("翻訳ウィンドウを閉じる：Esc", 14)], line_gap=1.7, para_gap=0.7)],
+               note="日文设置：侧栏 + 快捷键列表"),
+        Sample("ho_mixed_toolbar_1080_01", "zh", "中文 UI 小字", "1080p",
+               [ui_rows(["开始  插入  设计  布局  引用  审阅  视图"], 13, 16, 10),
+                ui_rows(["宋体", "五号", "加粗", "居中"], 13, 16, 50, 2.0),
+                Block(400, 200, 1100, [T("第三章 实验结果", 24),
+                                       P("本章介绍离线翻译在三种硬件上的实验结果，包括平均耗时、峰值内存和译文质量评分。所有实验均在断网环境下完成，每组重复五次取中位数。", 16)],
+                      line_gap=1.7, para_gap=1.0),
+                Block(16, 1052, 400, [P("第 3 页，共 12 页", 12)]),
+                Block(1700, 1052, 200, [P("字数：4,862", 12)])],
+               note="文档编辑器：功能区 + 竖排工具项 + 正文 + 状态栏"),
+    ]
+    for sample in h:
+        sample.split = "holdout"
+    return h
 
 
 def main() -> None:
@@ -338,6 +399,7 @@ def main() -> None:
                 "source": "自制：scripts/make_ocr_samples.py 用 PIL 渲染，文字原创",
                 "license": "CC0-1.0",
                 "note": sample.note,
+                "split": sample.split,
             }
         )
     out = {"schema_version": 1, "samples": manifest}
