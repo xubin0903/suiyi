@@ -221,4 +221,92 @@ public sealed class RegionHotkeySettingsTests
         Assert.Contains("\"region\": \"Ctrl+Alt+S\"", written, StringComparison.Ordinal);
         Assert.Contains("\"translate\": \"Ctrl+Shift+Y\"", written, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("Ctrl+Alt+T", "alt+ctrl+t", "Ctrl+Alt+T")]
+    [InlineData("Ctrl+Alt+S", "Ctrl+Alt+S", "Ctrl+Alt+S")]
+    [InlineData("Ctrl+Alt+S", "乱写", "Ctrl+Alt+S")] // 回落默认后冲突
+    public void Conflict_ProducesTrayNotice(string translate, string region, string shown)
+    {
+        var notices = new List<SettingsNotice>();
+
+        SettingsRules.Validate(AppSettings.Default with { Hotkey = new HotkeySettings { Translate = translate, Region = region } }, _warnings.Add, notices.Add);
+
+        var notice = Assert.Single(notices);
+        Assert.Equal(SettingsNoticeKind.RegionHotkeyConflict, notice.Kind);
+        Assert.Contains($"框选快捷键 {shown} 与翻译快捷键相同", notice.Message, StringComparison.Ordinal);
+        Assert.Contains("已禁用", notice.Message, StringComparison.Ordinal);
+        Assert.Contains("hotkey.region", notice.Message, StringComparison.Ordinal);
+        Assert.Contains("重启", notice.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Ctrl+Alt+T", "Ctrl+Alt+S")]
+    [InlineData("Ctrl+Alt+T", "")] // 用户主动禁用
+    [InlineData("", "")]
+    [InlineData("乱写", "Ctrl+Alt+S")]
+    [InlineData("Ctrl+Alt+T", "乱写")] // 回落默认，不冲突：只有日志
+    public void NoConflict_NoNotice(string translate, string region)
+    {
+        var notices = new List<SettingsNotice>();
+
+        SettingsRules.Validate(AppSettings.Default with { Hotkey = new HotkeySettings { Translate = translate, Region = region } }, _warnings.Add, notices.Add);
+
+        Assert.Empty(notices);
+    }
+
+    [Fact]
+    public void Parse_ConflictNoticeInResult()
+    {
+        var result = Parse("""{ "hotkey": { "translate": "Ctrl+Alt+S" } }""");
+
+        Assert.Equal(SettingsNoticeKind.RegionHotkeyConflict, Assert.Single(result.Notices).Kind);
+        Assert.Empty(Parse("""{ "hotkey": { "translate": "Ctrl+Alt+T" } }""").Notices);
+        Assert.Empty(Parse("not json").Notices);
+    }
+
+    [Fact]
+    public void Store_ConflictNotice_TakenOncePerLoad()
+    {
+        using var dir = new TempDirectory();
+        var file = dir.File("settings.json");
+        File.WriteAllText(file, """{ "schemaVersion": 2, "hotkey": { "translate": "Ctrl+Alt+S", "region": "Ctrl+Alt+S" } }""");
+        var store = new SettingsStore(file, new RecordingLogger());
+
+        Assert.Empty(store.TakeLoadNotices());
+        store.Load();
+
+        var notice = Assert.Single(store.TakeLoadNotices());
+        Assert.Equal(SettingsNoticeKind.RegionHotkeyConflict, notice.Kind);
+        Assert.Empty(store.TakeLoadNotices());
+
+        // 托盘写回（含外部修改后的重新读取）不再产生提示。
+        File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(1));
+        store.Update(s => s.WithPrimaryTarget("en"));
+        Assert.Empty(store.TakeLoadNotices());
+    }
+
+    [Fact]
+    public void Store_NoConflict_NoNotice()
+    {
+        using var dir = new TempDirectory();
+        var file = dir.File("settings.json");
+        File.WriteAllText(file, Version1File);
+        var store = new SettingsStore(file);
+
+        store.Load();
+
+        Assert.Empty(store.TakeLoadNotices());
+    }
+
+    [Fact]
+    public void Store_MissingFile_NoNotice()
+    {
+        using var dir = new TempDirectory();
+        var store = new SettingsStore(dir.File("settings.json"));
+
+        store.Load();
+
+        Assert.Empty(store.TakeLoadNotices());
+    }
 }

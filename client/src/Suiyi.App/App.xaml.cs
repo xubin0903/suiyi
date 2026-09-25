@@ -151,6 +151,12 @@ public partial class App : Application
         // Issue #34 组合根顺序：服务启动之后才开始接收快捷键与剪贴板事件。
         _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? settings.Hotkey.Translate);
         _regionHotkeyManager.Update(GetOptionValue(e.Args, "--region-hotkey") ?? settings.Hotkey.Region);
+
+        // 设置里需要明确告知的问题（如框选快捷键与翻译快捷键相同被禁用），每次运行只提示一次。
+        foreach (var notice in _settings.TakeLoadNotices())
+        {
+            _tray.ShowNotification(AppTitle, notice.Message);
+        }
         _clipboardMonitor.Start();
     }
 

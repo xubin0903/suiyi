@@ -45,10 +45,14 @@ public static class SettingsRules
     /// <summary>
     /// 校验并修正：越界 / 非法字段单独回落默认值（通过 <paramref name="warn"/> 报告），其余字段保留；最后一致化目标语言。
     /// </summary>
-    public static AppSettings Validate(AppSettings settings, Action<string>? warn = null)
+    /// <param name="settings">待校验的设置。</param>
+    /// <param name="warn">字段级问题（写日志）。</param>
+    /// <param name="notice">需要托盘明确提示的问题（目前只有框选快捷键冲突被禁用）。</param>
+    public static AppSettings Validate(AppSettings settings, Action<string>? warn = null, Action<SettingsNotice>? notice = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         warn ??= _ => { };
+        notice ??= _ => { };
         var d = AppSettings.Default;
 
         var primary = Language(settings.PrimaryTarget, d.PrimaryTarget, "primaryTarget", warn);
@@ -68,7 +72,7 @@ public static class SettingsRules
 
         var hotkey = settings.Hotkey ?? Fallback(d.Hotkey, "hotkey", warn);
         var translate = hotkey.Translate ?? Fallback(d.Hotkey.Translate, "hotkey.translate", warn);
-        var region = RegionHotkey(hotkey.Region, translate, warn);
+        var region = RegionHotkey(hotkey.Region, translate, warn, notice);
 
         var popup = settings.Popup ?? Fallback(d.Popup, "popup", warn);
         var autoHide = Range(popup.AutoHideSeconds, 0, MaxAutoHideSeconds, d.Popup.AutoHideSeconds, "popup.autoHideSeconds", warn);
@@ -115,7 +119,7 @@ public static class SettingsRules
     /// <c>hotkey.region</c>：null 或格式非法回落默认值；与 <c>hotkey.translate</c> 解析后相同（含回落后的默认值）时禁用，
     /// 避免两个功能抢同一个快捷键。<c>translate</c> 本身格式非法时不比较（由快捷键注册时提示）。
     /// </summary>
-    private static string RegionHotkey(string? value, string translate, Action<string> warn)
+    private static string RegionHotkey(string? value, string translate, Action<string> warn, Action<SettingsNotice> notice)
     {
         var fallback = AppSettings.Default.Hotkey.Region;
         string region;
@@ -139,6 +143,7 @@ public static class SettingsRules
             && translateGesture == regionGesture)
         {
             warn($"设置 hotkey.region（{region}）与 hotkey.translate 相同，框选快捷键已禁用，请改为其他组合");
+            notice(SettingsNotice.RegionHotkeyConflict(regionGesture.Value.ToString()));
             return string.Empty;
         }
 

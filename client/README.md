@@ -192,7 +192,7 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `clipboard.debounceMs` | `150` | 50–1000 |
 | `clipboard.minChars` / `maxChars` | `2` / `2000` | 1–10000，且 `minChars ≤ maxChars`（否则两者都回落默认值） |
 | `hotkey.translate` | `"Ctrl+Alt+T"` | 快捷键字符串，`""` 表示禁用；格式由 `HotkeyParser` 解析，这里不校验 |
-| `hotkey.region` | `"Ctrl+Alt+S"` | 框选截屏快捷键（#55），`""` 表示禁用。读取时即用 `HotkeyParser` 校验：格式非法或类型不对回落默认值；与 `hotkey.translate` 相同（含回落后）时禁用并写 Warning，避免两个功能抢同一组合 |
+| `hotkey.region` | `"Ctrl+Alt+S"` | 框选截屏快捷键（#55），`""` 表示禁用。读取时即用 `HotkeyParser` 校验：格式非法或类型不对回落默认值；与 `hotkey.translate` 相同（含回落后）时禁用并写 Warning，避免两个功能抢同一组合；此时启动后托盘弹一次气泡「框选快捷键 Ctrl+Alt+S 与翻译快捷键相同，框选快捷键已禁用。请在设置文件中把 hotkey.region 改为其他组合…」（`SettingsStore.TakeLoadNotices`，每次运行一次） |
 | `popup.autoHideSeconds` | `8` | 0–60，0 表示不自动消失 |
 | `popup.maxWidth` | `480` | 240–1920（设备无关像素） |
 | `engine.port` | `18780` | 1–65535 |
