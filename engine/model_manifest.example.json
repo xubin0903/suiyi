@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "description": "临时示例清单，仅供模型转换脚本开发与自测。正式清单是 engine/model_manifest.json（模型选型 Issue），本文件不会被默认读取。",
+  "models": [
+    {
+      "id": "opus-mt-zh-en",
+      "src": "zh",
+      "tgt": "en",
+      "hf_repo": "Helsinki-NLP/opus-mt-zh-en",
+      "hf_revision": "cf109095479db38d6df799875e34039d4938aaa6",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+      "attribution": "Helsinki-NLP OPUS-MT opus-mt-zh-en (revision cf109095479db38d6df799875e34039d4938aaa6); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
+      "src_prefix_token": null,
+      "tier": "mvp",
+      "notes": "示例条目。Hugging Face 模型卡 license 为 cc-by-4.0。正式许可证与署名以 engine/model_manifest.json 为准。"
+    },
+    {
+      "id": "opus-mt-en-zh",
+      "src": "en",
+      "tgt": "zh",
+      "hf_repo": "Helsinki-NLP/opus-mt-en-zh",
+      "hf_revision": "408d9bc410a388e1d9aef112a2daba955b945255",
+      "license": "Apache-2.0",
+      "license_url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "attribution": "Helsinki-NLP OPUS-MT opus-mt-en-zh (revision 408d9bc410a388e1d9aef112a2daba955b945255); Tiedemann & Thottingal, EAMT 2020",
+      "src_prefix_token": ">>cmn_Hans<<",
+      "tier": "mvp",
+      "notes": "示例条目。Hugging Face 模型卡 license 为 apache-2.0；上游 OPUS-MT 权重说明可能另有 CC-BY-4.0，正式清单可能改写本字段。推理时源文本需前置 src_prefix_token。转换脚本不使用该标记。"
+    }
+  ],
+  "pivots": []
+}
