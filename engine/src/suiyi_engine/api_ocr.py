@@ -75,6 +75,8 @@ class OcrProvider:
         self._factory = engine_factory
         self._engine: OcrEngine | None = None
         self._lock = threading.Lock()
+        self.last_error: OcrUnavailable | None = None
+        """最近一次加载失败的原因（``/health.ocr_error``）；加载成功后清空。"""
 
     @property
     def loaded(self) -> bool:
@@ -82,8 +84,25 @@ class OcrProvider:
         return engine is not None and engine.loaded
 
     def engine(self) -> OcrEngine:
-        """返回已加载模型的引擎；不可用时抛 :class:`OcrUnavailable`。首次调用会加载模型。"""
+        """返回已加载模型的引擎；不可用时抛 :class:`OcrUnavailable` 并记到 :attr:`last_error`。"""
 
+        try:
+            engine = self._engine_or_raise()
+        except OcrUnavailable as exc:
+            self.last_error = exc
+            raise
+        self.last_error = None
+        return engine
+
+    def health(self) -> dict[str, object] | None:
+        """``/health.ocr_error``：最近一次加载失败的原因，没有失败（或尚未尝试）时为 ``None``。"""
+
+        error = self.last_error
+        if error is None:
+            return None
+        return {"message": str(error), **error.details()}
+
+    def _engine_or_raise(self) -> OcrEngine:
         from suiyi_engine.ocr import OcrEngine, OcrError, OcrModelError, OcrModelsMissingError
 
         with self._lock:

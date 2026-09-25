@@ -486,6 +486,8 @@ def test_missing_models_503_translation_still_works_and_recovers(tmp_path: Path)
         assert error["details"]["missing_models"] == ["fake_det", "fake_cls", "fake_rec"]
         assert "download_ocr_models.py" in error["message"]
         assert health["ocr_loaded"] is False
+        assert health["ocr_error"]["reason"] == "models_missing"
+        assert health["ocr_error"]["missing_models"] == ["fake_det", "fake_cls", "fake_rec"]
         assert text.status_code == 200
 
         pytest.importorskip("PIL", reason="恢复后的识别需要 PIL 解码")
@@ -494,7 +496,9 @@ def test_missing_models_503_translation_still_works_and_recovers(tmp_path: Path)
         recovered = _post(client, "/ocr_translate", make_png(), target="en")
         assert recovered.status_code == 200, recovered.text  # 补齐模型后不用重启
         assert recovered.json()["translation"]["results"][0]["text"] == "<opus-mt-zh-en>本地翻译"
-        assert client.get("/health").json()["ocr_loaded"] is True
+        health_after = client.get("/health").json()
+        assert health_after["ocr_loaded"] is True
+        assert health_after["ocr_error"] is None  # 恢复后清空
 
 
 def test_default_provider_with_empty_models_dir_is_503(tmp_path: Path) -> None:
@@ -573,7 +577,9 @@ def test_health_stays_fast_during_long_ocr(tmp_path: Path) -> None:
         text_ms = time.perf_counter() - started
         worker.join(10)
         assert box["r"].status_code == 200  # type: ignore[union-attr]
-        assert client.get("/health").json()["ocr_loaded"] is True
+        health_after = client.get("/health").json()
+        assert health_after["ocr_loaded"] is True
+        assert health_after["ocr_error"] is None  # 恢复后清空
     assert max(timings) < 0.2, timings
     assert text.status_code == 200
     assert text_ms < 1.0  # 翻译不等 OCR

@@ -167,9 +167,8 @@ def run_server(
     """构建翻译器并阻塞运行，直到进程收到停止信号。
 
     ``intra_threads``、``beam_size``、``max_batch_size`` 为 ``None`` 时用翻译核心的默认值。
-    不加 ``preload_ocr`` 时，OCR 依赖或模型缺失不阻止启动，OCR 接口返回 503。
-    加了 ``preload_ocr`` 则与 ``preload_pairs`` 一致：加载失败时打印原因（含缺失的模型 id），
-    以状态 1 退出，不开始监听。
+    OCR 依赖或模型缺失从不阻止启动，文本翻译不受影响：``preload_ocr`` 加载失败只在 stderr 告警
+    （含缺失的模型 id），``/health`` 的 ``ocr_error`` 带上原因，OCR 接口返回 503。
     """
 
     try:
@@ -200,11 +199,7 @@ def run_server(
     ocr = OcrProvider(translator.registry.models_dir)
     ocr_ms: float | None = None
     if preload_ocr:
-        try:
-            ocr_ms = ocr.warmup()
-        except OcrUnavailable as exc:
-            print(f"--preload-ocr 失败：{exc}", file=sys.stderr, flush=True)
-            return 1
+        ocr_ms = warmup_ocr(ocr)
 
     # 先占住端口再预热：端口被占用时尽快退出，也不会在预热期间被别的进程抢走（#46）。
     try:
@@ -247,6 +242,22 @@ def warmup_detector() -> float | None:
     except Exception as exc:  # 预热失败只告警，不影响翻译
         print(f"语种检测预热失败，将在首次使用时加载：{exc}", file=sys.stderr, flush=True)
         return None
+
+
+def warmup_ocr(ocr: OcrProvider) -> float | None:
+    """``--preload-ocr``：加载并预热 OCR，返回耗时毫秒。失败只告警、返回 ``None``，服务照常启动。"""
+
+    try:
+        return ocr.warmup()
+    except OcrUnavailable as exc:
+        print(
+            f"警告：--preload-ocr 未能加载 OCR，文本翻译照常可用，框选翻译将返回 503：{exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception as exc:  # 预热中的其他意外也不能拖垮文本翻译
+        print(f"警告：OCR 预热失败，将在首次框选时重试：{exc}", file=sys.stderr, flush=True)
+    return None
 
 
 def _serve_uvicorn(app: object, listen_socket: socket.socket) -> None:

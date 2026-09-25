@@ -30,13 +30,13 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--preload` | 不预热 | 逗号分隔的语向，如 `zh-en,en-zh`。缺模型时非零退出，不会开始监听 |
 | `--max-text-chars` | `SUIYI_MAX_TEXT_CHARS`，否则 `10000` | 单条文本的字符上限 |
 | `--max-image-bytes` | `SUIYI_MAX_IMAGE_BYTES`，否则 `8388608`（8 MiB） | OCR 请求体的字节上限 |
-| `--preload-ocr` | 关闭 | 开始监听前加载并预热 OCR 模型（启动日志「OCR 已预热 N ms」），之后 `/health` 的 `ocr_loaded` 为 `true`。与 `--preload` 一致：OCR 依赖未装或模型缺失/损坏时打印原因（含缺失的 OCR 模型 id 和下载命令）并以状态 1 退出，不会开始监听。客户端设置 `engine.preloadOcr`（#58）为 `true` 时追加这个参数 |
+| `--preload-ocr` | 关闭 | 开始监听前加载并预热 OCR 模型（启动日志「OCR 已预热 N ms」），之后 `/health` 的 `ocr_loaded` 为 `true`。**与 `--preload` 不同，失败不退出**：OCR 依赖未装或模型缺失/损坏时只在 stderr 打一行警告（含缺失的 OCR 模型 id 和下载命令），服务照常启动，文本翻译不受影响；`/health` 的 `ocr_error` 带上原因，OCR 接口返回 503。客户端设置 `engine.preloadOcr`（#58）为 `true` 时追加这个参数，可以安全地默认开启 |
 | `--dev` | 关闭 | 才挂载 `/docs` 与 `/openapi.json` |
 | `--intra-threads` | `min(2, CPU 数)` | 单个模型内部的计算线程。不传则用翻译核心的默认 |
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
 
-不加 `--preload-ocr` 时，OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型，服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
+OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
 
 进程起来后，标准输出有四行：监听 URL、模型目录、可用语向数量，以及实际使用的 `intra_threads`、`beam_size`、`max_batch_size`。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
 
@@ -106,7 +106,12 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "models_dir": "/path/to/models",
   "loaded_models": ["opus-mt-zh-en"],
   "uptime_s": 12.3,
-  "ocr_loaded": false
+  "ocr_loaded": false,
+  "ocr_error": {
+    "message": "缺少 OCR 模型：PP-OCRv6_det_small、ch_ppocr_mobile_v2.0_cls_mobile、PP-OCRv6_rec_small（目录 /path/to/models/ocr）。请执行 python scripts/download_ocr_models.py download 下载 OCR 模型",
+    "reason": "models_missing",
+    "missing_models": ["PP-OCRv6_det_small", "ch_ppocr_mobile_v2.0_cls_mobile", "PP-OCRv6_rec_small"]
+  }
 }
 ```
 
@@ -117,7 +122,8 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `models_dir` | 本次进程使用的模型目录 |
 | `loaded_models` | 已经加载进内存的模型 id，字典序。`--preload` 成功后这里能看到它们 |
 | `uptime_s` | 自开始监听起的秒数，保留 1 位小数 |
-| `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求之后为 `true`）。只表示是否已预热，不表示 OCR 可用：缺模型要到 OCR 接口返回 503 才知道。#53 新增 |
+| `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增 |
+| `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增 |
 
 翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 也在线程池里执行，有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。
 

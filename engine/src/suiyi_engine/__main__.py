@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument(
         "--preload-ocr",
         action="store_true",
-        help="开始监听前加载并预热 OCR 模型；OCR 依赖或模型缺失时非零退出（同 --preload）",
+        help="开始监听前加载并预热 OCR 模型；OCR 不可用时只告警，服务照常启动，OCR 接口返回 503",
     )
     serve.add_argument("--dev", action="store_true", help="开启 /docs 与 /openapi.json")
     serve.add_argument(

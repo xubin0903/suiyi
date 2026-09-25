@@ -496,30 +496,68 @@ def test_max_image_bytes_from_cli_env_and_default(monkeypatch: pytest.MonkeyPatc
         resolve_max_image_bytes(0)
 
 
-def test_preload_ocr_missing_models_exits_nonzero_without_listening(
+def test_preload_ocr_missing_models_warns_and_service_works(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fail(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("不应开始监听")
+    """缺 OCR 模型 + --preload-ocr：告警、照常监听；翻译可用，/health 与 OCR 接口给出缺失模型。"""
 
-    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fail)
-    monkeypatch.setattr("suiyi_engine.serve.bind_listen_socket", fail)
+    from fastapi.testclient import TestClient
+
+    seen: dict[str, object] = {}
+
+    def fake(app: object, listen_socket: socket.socket) -> None:
+        seen["listening_on"] = listen_socket.getsockname()[1]
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + (8).to_bytes(4, "big") * 2
+        with TestClient(app) as client:  # type: ignore[arg-type]
+            seen["translate"] = client.post(
+                "/translate", json={"text": "你好", "source": "zh", "target": "zh"}
+            )
+            seen["languages"] = client.get("/languages")
+            seen["health"] = client.get("/health").json()
+            seen["ocr"] = client.post(
+                "/ocr_translate",
+                params={"target": "en"},
+                content=png + b"\x08\x00\x00\x00\x00" + b"\x00" * 4,
+                headers={"Content-Type": "image/png"},
+            )
+
+    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fake)
+    port = _free_port()
     code = run_server(
         host="127.0.0.1",
-        port=_free_port(),
+        port=port,
         models_dir=tmp_path,
         preload_pairs=[],
         max_text_chars=100,
         dev=False,
         preload_ocr=True,
     )
-    assert code == 1
-    err = capsys.readouterr().err
-    assert "--preload-ocr" in err
-    assert "PP-OCRv6_det_small" in err and "PP-OCRv6_rec_small" in err  # 报模型 id
-    assert "download_ocr_models.py" in err
+    assert code == 0
+    assert seen["listening_on"] == port
+    captured = capsys.readouterr()
+    assert "警告" in captured.err and "--preload-ocr" in captured.err
+    assert "PP-OCRv6_det_small" in captured.err  # 告警里有模型 id
+    assert "download_ocr_models.py" in captured.err
+    assert "OCR 已预热" not in captured.out
+
+    translate = seen["translate"]
+    assert translate.status_code == 200 and translate.json()["text"] == "你好"  # type: ignore[attr-defined]
+    assert seen["languages"].status_code == 200  # type: ignore[attr-defined]
+
+    missing = ["PP-OCRv6_det_small", "ch_ppocr_mobile_v2.0_cls_mobile", "PP-OCRv6_rec_small"]
+    health = seen["health"]
+    assert health["ocr_loaded"] is False  # type: ignore[index]
+    assert health["ocr_error"]["reason"] == "models_missing"  # type: ignore[index]
+    assert health["ocr_error"]["missing_models"] == missing  # type: ignore[index]
+    assert "download_ocr_models.py" in health["ocr_error"]["message"]  # type: ignore[index]
+
+    ocr = seen["ocr"]
+    assert ocr.status_code == 503  # type: ignore[attr-defined]
+    error = ocr.json()["error"]  # type: ignore[attr-defined]
+    assert error["code"] == "ocr_unavailable"
+    assert error["details"]["missing_models"] == missing
 
 
 def test_without_preload_ocr_missing_models_still_serves(

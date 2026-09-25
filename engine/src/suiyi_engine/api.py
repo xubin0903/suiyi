@@ -188,6 +188,7 @@ def create_app(
                 "loaded_models": list(current.loaded_model_ids()),
                 "uptime_s": round(float(uptime), 1),
                 "ocr_loaded": bool(app.state.ocr.loaded),
+                "ocr_error": app.state.ocr.health(),
             }
         except Exception:
             logger.exception("读取健康状态失败")
