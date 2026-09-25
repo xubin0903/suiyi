@@ -5,15 +5,16 @@ build-backend = "hatchling.build"
 [project]
 name = "suiyi-engine"
 dynamic = ["version"]
-description = "随译本地翻译引擎骨架。翻译、HTTP 与模型加载由后续 Issue 实现。"
+description = "随译本地翻译引擎。CTranslate2 / OPUS-MT 推理、语种路由与分句拼回。"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-# 运行时目前只有语种检测用的 py3langid（BSD-3-Clause，传递依赖 numpy）。
-# 不引入 torch / transformers。翻译推理用的 ctranslate2 由后续 Issue 加入。
-# 模型转换依赖只放在可选组 convert。
+# 运行时：语种检测 py3langid；翻译推理 ctranslate2 与 sentencepiece。
+# torch、transformers、huggingface_hub 只在可选组 convert，不能进运行时。
 dependencies = [
   "py3langid>=0.4.0,<0.5",
+  "ctranslate2>=4.6",
+  "sentencepiece>=0.2",
 ]
 
 [project.optional-dependencies]

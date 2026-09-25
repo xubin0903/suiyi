@@ -505,15 +505,23 @@ def test_missing_sentencepiece_cleans_partial(
     assert not (out_dir / ".opus-mt-zh-en.partial").exists()
 
 
-def test_runtime_dependencies_do_not_include_convert_stack() -> None:
+def test_runtime_dependencies_exclude_torch_and_transformers() -> None:
+    """torch / transformers / huggingface_hub 只留在 convert。
+
+    翻译推理需要的 ctranslate2 与 sentencepiece 是运行时依赖，转换额外依赖里仍保留它们。
+    """
+
     text = (ROOT / "engine" / "pyproject.toml").read_text(encoding="utf-8")
     runtime, _, optional = text.partition("[project.optional-dependencies]")
     assert "py3langid>=" in runtime
     runtime_code = "\n".join(
         line for line in runtime.splitlines() if line.strip() and not line.strip().startswith("#")
     )
-    for name in ("torch", "transformers", "ctranslate2", "sentencepiece", "huggingface_hub"):
+    for name in ("torch", "transformers", "huggingface_hub"):
         assert name not in runtime_code
+        assert name in optional
+    for name in ("ctranslate2", "sentencepiece"):
+        assert name in runtime_code
         assert name in optional
 
 
