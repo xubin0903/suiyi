@@ -81,9 +81,10 @@ internal sealed class FakeEngineStatus : IEngineStatus
         OnHealthCheck?.Invoke();
     }
 
-    public void Raise(EngineState state)
+    public void Raise(EngineState state, EngineFailure? failure = null)
     {
         State = state;
-        StateChanged?.Invoke(this, new EngineStateChangedEventArgs(state, EngineOwnership.Managed, state.ToString()));
+        Failure = failure;
+        StateChanged?.Invoke(this, new EngineStateChangedEventArgs(state, EngineOwnership.Managed, state.ToString(), failure));
     }
 }

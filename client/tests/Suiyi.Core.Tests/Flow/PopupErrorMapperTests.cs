@@ -64,4 +64,24 @@ public sealed class PopupErrorMapperTests
         Assert.Equal(PopupErrorMapper.EngineFailedMessage, error.Message);
         Assert.Contains("重启翻译服务", error.Message, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData(EngineFailureReason.LaunchFailed)]
+    [InlineData(EngineFailureReason.ExitedBeforeReady)]
+    [InlineData(EngineFailureReason.CrashedRepeatedly)]
+    public void EngineFailed_OtherReasons_PointToTrayRestart(EngineFailureReason reason)
+    {
+        var error = PopupErrorMapper.EngineFailed(new EngineFailure(reason, "x"));
+
+        Assert.Equal(PopupErrorMapper.EngineFailedMessage, error.Message);
+    }
+
+    [Fact]
+    public void EngineFailed_StartupTimeout_IsStartTimeoutError()
+    {
+        var error = PopupErrorMapper.EngineFailed(new EngineFailure(EngineFailureReason.StartupTimeout, "x"));
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, error.Kind);
+        Assert.True(error.CanRetry);
+    }
 }

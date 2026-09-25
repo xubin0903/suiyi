@@ -357,6 +357,30 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public void Waiting_EngineStartupTimesOut_ShowsStartTimeoutError()
+    {
+        // 监管器自己的 30 s 启动超时通常先于编排器的等待上限到达：同样显示「翻译服务启动超时」。
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
+
+        _engine.Raise(EngineState.Failed, new EngineFailure(EngineFailureReason.StartupTimeout, "启动超时"));
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+        Assert.True(_popup.CanRetry);
+    }
+
+    [Fact]
+    public void Failed_ByStartupTimeout_NewRequestShowsStartTimeoutError()
+    {
+        _engine.State = EngineState.Failed;
+        _engine.Failure = new EngineFailure(EngineFailureReason.StartupTimeout, "启动超时");
+
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+    }
+
+    [Fact]
     public void Waiting_StateChangesWithoutPending_AreIgnored()
     {
         _engine.Raise(EngineState.Restarting);

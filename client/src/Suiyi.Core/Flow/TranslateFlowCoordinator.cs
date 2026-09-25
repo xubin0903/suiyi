@@ -230,7 +230,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
         if (state == EngineState.Failed)
         {
             _logger.Info("翻译：服务已失败，提示在托盘重启");
-            _popup.ShowError(PopupErrorMapper.EngineFailed());
+            _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
             return;
         }
 
@@ -362,7 +362,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
             _engine.RequestHealthCheck();
             if (_engine.State == EngineState.Failed)
             {
-                _popup.ShowError(PopupErrorMapper.EngineFailed());
+                _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
             }
             else
             {
@@ -393,7 +393,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
         {
             _pending = null;
             _readyWait.Stop();
-            _popup.ShowError(PopupErrorMapper.EngineFailed());
+            _popup.ShowError(PopupErrorMapper.EngineFailed(e.Failure ?? _engine.Failure));
         }
     });
 

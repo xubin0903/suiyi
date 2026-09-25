@@ -132,7 +132,8 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 | `DetectFailed` | `DetectFailed`「无法识别原文语种，请点击语种标签手动指定」 |
 | `InvalidRequest` / `Internal` / `Unknown` / 其他异常 | `Other`，文案为 `EngineException.UserMessage` |
 | 等待服务就绪超时 | `EngineStartTimeout`「翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」」（可重试） |
-| 服务 Failed | `ServiceUnavailable`，文案 `PopupErrorMapper.EngineFailedMessage` |
+| 服务 Failed（启动超时，`EngineFailureReason.StartupTimeout`） | 同「等待服务就绪超时」 |
+| 服务 Failed（其他原因） | `ServiceUnavailable`，文案 `PopupErrorMapper.EngineFailedMessage` |
 
 **端到端计时：** 从 `WM_CLIPBOARDUPDATE`（监听）或快捷键按下，到浮窗显示译文后 WPF 完成布局（`Dispatcher` 的 `Loaded` 优先级回调）。每次写一行日志，不含正文：
 
