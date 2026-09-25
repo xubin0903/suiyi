@@ -165,19 +165,21 @@ TranslateRegionAsync(trigger)
 | 成员 | 说明 |
 |---|---|
 | `TranslateRegionAsync(RegionTranslateTrigger trigger, CancellationToken)` | `Hotkey` / `Tray`；只在 UI 线程调用 |
-| `IsRegionTranslateEnabled` / `HasRetainedScreenshot` | 是否接了 OCR 与框选；当前是否还持有可重试的截图 |
+| `IsRegionTranslateEnabled` / `HasRetainedScreenshot` / `RetainedScreenshotBytes` | 是否接了 OCR 与框选；是否保留着截图（最多一张，语义见下方「截图生命周期」）及其字节数 |
 | `OcrLatency`（`LatencyStats`） | 最近 20 次框选 `ocr_e2e_ms`，「关于」里显示 |
 | `RegionCompleted`（`RegionTranslateCompletedEventArgs`） | 一次框选翻译显示完成（`Trigger`、`Outcome`、`Result`、`EndToEnd`、`WaitedForEngine`） |
 | `RegionCaptureTrigger.Failed`（`RegionCaptureFailedEventArgs`） | 截屏异常（与用户取消区分） |
 | `ITrayService.TranslateRegionRequested` / `SetRegionHotkey(string?)`、`TrayCommand.TranslateRegion`、`TrayState.RegionHotkey` / `RegionMenuText` | 托盘菜单项 |
 | `PopupViewModel.ShowError(error, mode, anchor)` | 可选参数：编排器按请求类型指定 `Mode` 与选区锚点 |
+| `PopupViewModel.SetRetryAvailability(text, ocr)` | 两种来源是否有可重发的请求；`CanRetry` 按当前 `Mode` 取值（默认都可用） |
 | `PopupOcrResult.UntranslatedParagraphs` / `HasUntranslated` / `IsUntranslated(i)`；`PopupViewModel.UntranslatedHint` / `HasUntranslatedHint` | 译文缺失、以原文代替的段落 |
 
 **行为：**
 
 - **最新优先、互相取消：** 文本请求和框选请求共用一个代次号与 `CancellationTokenSource`，谁后来谁生效，旧请求晚到的结果被丢弃，不会互相覆盖。开始框选即取消进行中的请求并隐藏浮窗（截图里不会有随译浮窗）；遮罩显示期间忽略剪贴板监听、翻译快捷键、托盘「翻译剪贴板」。
 - **重试按 `PopupViewModel.Mode` 分流：** `Ocr` 用原来那张 PNG 重发（不重新框选）；`Text` 走原来的文本重试。服务 Failed / 未运行 / 启动超时后的重试同样会先 `RestartAsync()`。
-- **截图生命周期：** PNG 只在内存，保留到本次识别成功、或浮窗被关闭且没有进行中的请求为止（失败时留着给重试用）；只丢引用，不主动清零。`--region-demo` 另存一份到临时目录，正式流程不落盘。
+- **截图生命周期：** PNG 只在内存，内存里最多一张：跟着对应浮窗的内容一直保留（识别成功、失败、浮窗关闭后都还在），直到被下一次框选**成功拿到的**新截图替换（框选途中按 Esc 取消不影响旧截图）。托盘左键重新显示旧的框选错误浮窗时，点「重试」仍用这张 PNG 重发。浮窗改为显示复制翻译的内容（新的文本请求、「文本过长」提示等，即 `Mode` 变为 `Text`）时旧的框选内容不会再显示，截图随即丢弃；被忽略的文本捕获（暂停监听、遮罩期间）不影响。只丢引用，不主动清零。`--region-demo` 另存一份到临时目录，正式流程不落盘。
+- **「重试」不会点了没反应：** 编排器通过 `PopupViewModel.SetRetryAvailability(text, ocr)` 告知两种来源是否还有可重发的请求，`CanRetry` 按当前 `Mode` 取值，没有截图（或没有上一次文本）时隐藏「重试」。
 - **关闭浮窗即取消**进行中或等待服务的框选请求。
 - **暂停监听不影响框选**（Issue 要求）。
 - **目标语言：** 与复制翻译一样读 `primaryTarget` / `secondaryTarget`，识别出的主要语种等于主目标时由 `OcrTranslationService` 改译为次目标。

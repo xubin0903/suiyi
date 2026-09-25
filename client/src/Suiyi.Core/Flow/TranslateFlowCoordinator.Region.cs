@@ -33,7 +33,7 @@ public sealed partial class TranslateFlowCoordinator
 {
     private readonly IOcrTranslationService? _ocr;
     private readonly RegionCaptureTrigger? _region;
-    private OcrRequest? _lastOcr;
+    private OcrRequest? _lastOcrRequest;
 
     /// <summary>一次框选翻译完成并显示结果（端到端计时之后）。</summary>
     public event EventHandler<RegionTranslateCompletedEventArgs>? RegionCompleted;
@@ -44,8 +44,25 @@ public sealed partial class TranslateFlowCoordinator
     /// <summary>是否启用了框选翻译（构造时传入了 OCR 服务与框选入口）。</summary>
     public bool IsRegionTranslateEnabled => _ocr is not null && _region is not null;
 
-    /// <summary>是否保留着可供重试的截图（测试与诊断用）。</summary>
-    public bool HasRetainedScreenshot => _lastOcr is not null;
+    /// <summary>
+    /// 是否保留着一张截图（最近一次框选请求的 PNG，最多一张）。截图跟着对应浮窗的内容保留（识别成功、失败、浮窗关闭后都在，
+    /// 托盘左键重新显示旧的框选错误浮窗时仍可用它重试），直到被下一次框选替换，或浮窗改为显示复制翻译的内容。
+    /// </summary>
+    public bool HasRetainedScreenshot => _lastOcrRequest is not null;
+
+    /// <summary>保留着的截图字节数（没有时为 0）；用于诊断与验证「最多一张」。</summary>
+    public int RetainedScreenshotBytes => _lastOcrRequest?.Png.Length ?? 0;
+
+    /// <summary>最近一次框选请求；赋值时同步浮窗「重试」是否可用。</summary>
+    private OcrRequest? _lastOcr
+    {
+        get => _lastOcrRequest;
+        set
+        {
+            _lastOcrRequest = value;
+            UpdateRetryAvailability();
+        }
+    }
 
     private bool IsRegionCapturing => _region?.IsCapturing == true;
 
@@ -73,9 +90,9 @@ public sealed partial class TranslateFlowCoordinator
             return;
         }
 
-        // 隐藏当前浮窗、取消进行中的请求：新的框选优先。
+        // 隐藏当前浮窗、取消进行中的请求：新的框选优先。旧截图留到新截图到手才替换：
+        // 这次若取消框选，托盘左键重新显示的旧浮窗仍可重试。
         CancelInFlight();
-        _lastOcr = null;
         _popup.Close(PopupCloseReason.Program);
 
         var capture = await _region.RunAsync(cancellationToken).ConfigureAwait(true);
@@ -138,8 +155,7 @@ public sealed partial class TranslateFlowCoordinator
             return;
         }
 
-        _cts = null;
-        _lastOcr = null; // 识别成功：截图用完即丢。
+        _cts = null; // 截图继续保留（跟着这次结果），直到被下一次框选替换。
         var result = OcrResultMapper.Map(outcome.Response, outcome.Target) with { Elapsed = outcome.ClientElapsed };
         _popup.ShowOcrResult(result, request.Anchor);
 

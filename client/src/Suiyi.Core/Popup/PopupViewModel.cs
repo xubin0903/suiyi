@@ -33,6 +33,8 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     private PopupRect? _anchorRect;
     private string _originalText = string.Empty;
     private bool _isOriginalExpanded;
+    private bool _textRetryAvailable = true;
+    private bool _ocrRetryAvailable = true;
     private bool _showOriginalCopiedFeedback;
     private string _originalFontFamily = PopupText.FontFamilyFor(null);
     private string _untranslatedHint = string.Empty;
@@ -122,8 +124,11 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>错误提示（Error）。</summary>
     public string ErrorMessage => _error?.Message ?? string.Empty;
 
-    /// <summary>是否显示「重试」。</summary>
-    public bool CanRetry => _kind == PopupKind.Error && _error is { CanRetry: true };
+    /// <summary>是否显示「重试」：错误可重试，且集成方对当前 <see cref="Mode"/> 有可重发的请求（见 <see cref="SetRetryAvailability"/>）。</summary>
+    public bool CanRetry =>
+        _kind == PopupKind.Error
+        && _error is { CanRetry: true }
+        && (_mode == PopupContentMode.Ocr ? _ocrRetryAvailable : _textRetryAvailable);
 
     /// <summary>是否可以复制（有译文）。</summary>
     public bool CanCopy => _kind == PopupKind.Result && _translation.Length > 0;
@@ -137,6 +142,7 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
             if (Set(ref _mode, value))
             {
                 OnPropertyChanged(nameof(CanOverrideSource));
+                OnPropertyChanged(nameof(CanRetry));
             }
         }
     }
@@ -420,6 +426,24 @@ public sealed class PopupViewModel : INotifyPropertyChanged, IDisposable
         ShowOriginalCopiedFeedback = false;
         ShowCopiedFeedback = true;
         _copiedTimer.Start(Options.CopiedFeedbackDuration, ClearCopiedFeedback);
+    }
+
+    /// <summary>
+    /// 集成方告知两种来源各自是否还有可重发的请求（框选翻译即是否还保留着截图）。没有时对应模式下隐藏「重试」，
+    /// 避免出现点了没反应的按钮。默认都为 <see langword="true"/>。
+    /// </summary>
+    /// <param name="text">复制翻译有上一次文本。</param>
+    /// <param name="ocr">框选翻译有上一次截图。</param>
+    public void SetRetryAvailability(bool text, bool ocr)
+    {
+        if (_textRetryAvailable == text && _ocrRetryAvailable == ocr)
+        {
+            return;
+        }
+
+        _textRetryAvailable = text;
+        _ocrRetryAvailable = ocr;
+        OnPropertyChanged(nameof(CanRetry));
     }
 
     /// <summary>点击「重试」。</summary>
