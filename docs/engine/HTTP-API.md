@@ -25,7 +25,7 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `--host` | `127.0.0.1` | 只接受 `127.0.0.1`、`::1`、`localhost`。其他值打印原因后非零退出，不会开始监听 |
-| `--port` | 环境变量 `SUIYI_PORT`，否则 `18780` | 命令行优先于环境变量。端口被占用时非零退出 |
+| `--port` | 环境变量 `SUIYI_PORT`，否则 `18780` | 命令行优先于环境变量。端口上已有监听者时非零退出（见下文「端口占用判断」） |
 | `--models-dir` | `SUIYI_MODELS_DIR`，否则仓库根 `models/` | 传给 `Translator` |
 | `--preload` | 不预热 | 逗号分隔的语向，如 `zh-en,en-zh`。缺模型时非零退出，不会开始监听 |
 | `--max-text-chars` | `SUIYI_MAX_TEXT_CHARS`，否则 `10000` | 单条文本的字符上限 |
@@ -35,6 +35,28 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
 
 进程起来后，标准输出有四行：监听 URL、模型目录、可用语向数量，以及实际使用的 `intra_threads`、`beam_size`、`max_batch_size`。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
+
+### 端口占用判断
+
+服务先绑定监听套接字，再预热语种检测，然后把同一个套接字交给 uvicorn 开始监听。绑定失败就打印「端口 … 已被占用」并以状态 1 退出，不预热也不监听。
+
+套接字选项按平台区分（#46）：
+
+| 平台 | 选项 | 原因 |
+|------|------|------|
+| Linux / macOS | `SO_REUSEADDR` | 服务被强杀后，调用方连接池里的 keep-alive 连接会让服务端一侧停在 FIN-WAIT / TIME_WAIT（Linux 最长约 60 秒）。不设这个选项时绑定报 `EADDRINUSE`，服务无法立即重启。这些平台上它不允许和正在监听的套接字共用同一地址，所以真实占用仍然报错 |
+| Windows | 不设 `SO_REUSEADDR`，也不设 `SO_EXCLUSIVEADDRUSE`，用默认选项 | Windows 上的 `SO_REUSEADDR` 允许抢占别人正在用的端口。监听套接字如果设 `SO_EXCLUSIVEADDRUSE`，它接受过的连接在完全结束前会挡住下一次独占绑定，同样无法立即重启。默认绑定不受残留连接影响；同一地址上已有监听者时仍报 `WSAEADDRINUSE` |
+
+已知差异：同一用户下，别人监听 `0.0.0.0`、随译绑定 `127.0.0.1` 时，Windows 与 macOS 允许两者共存（CI 实测 Windows 上用 `SO_EXCLUSIVEADDRUSE` 探测也发现不了）。这与修复前相同。客户端用 `/health` 判断端口上是不是随译
+
+两个实例同时启动时，在 POSIX 上可能都绑定成功，但后调用 `listen` 的那个会失败，打印「无法在 … 启动服务」并以状态 1 退出。
+
+修复前后，Linux 上「带 keep-alive 连接强杀服务，然后立即重启」各测 5 次：
+
+| | 重启结果 |
+|---|---|
+| 修复前 | 5 次都失败：`端口 … 已被占用或无法在 127.0.0.1 上监听：[Errno 98] Address already in use`（残留连接状态 `FIN-WAIT-1`） |
+| 修复后 | 5 次都成功，716–778 ms 后 `/health` 就绪 |
 
 ## 安全
 
