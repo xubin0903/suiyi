@@ -5,6 +5,11 @@ obj/
 .idea/
 *.user
 *.suo
+
+# .NET
+TestResults/
+*.binlog
+*.trx
 .DS_Store
 
 # Models (download on demand)

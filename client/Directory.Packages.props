@@ -1,0 +1,13 @@
+<Project>
+  <!-- 中央包版本管理：项目里只写 <PackageReference Include="..." />，版本统一在这里。
+       只允许 MIT / Apache-2.0 / BSD 等宽松许可证的包。 -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 测试（均为 MIT 或 Apache-2.0） -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>

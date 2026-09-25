@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 纯逻辑库：设置、HTTP 客户端、文本过滤、状态机、ViewModel。
+       不引用 WPF / WinForms，不写 P/Invoke，Linux 上可测试。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Suiyi.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Suiyi.Core.Tests" />
+  </ItemGroup>
+
+</Project>

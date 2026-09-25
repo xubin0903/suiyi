@@ -1,0 +1,5 @@
+# 客户端源码统一 LF，与根 .editorconfig 的 end_of_line = lf 一致。
+# Windows runner 上 git 默认 core.autocrlf=true，不固定的话 dotnet format 会把 CRLF 报成格式问题。
+* text=auto eol=lf
+*.ico binary
+*.png binary
