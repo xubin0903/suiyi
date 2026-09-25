@@ -25,7 +25,7 @@
 
 ## 引擎文档
 
-[docs/engine/](engine/README.md) 存放引擎设计、HTTP API、模型清单与第三方模型署名。具体文档由后续 Issue 加在该目录，不在调研目录里另起一份。
+[docs/engine/](engine/README.md) 存放引擎设计、HTTP API、模型清单与第三方模型署名。具体文档由后续 Issue 加在该目录，不在调研目录里另起一份。已有：[语种检测](engine/语种检测.md)。
 
 ## 代码目录说明
 

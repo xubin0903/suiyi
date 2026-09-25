@@ -19,11 +19,13 @@ engine/
 
 模型权重不放这里，也不进 git。本地缓存使用仓库根目录 `models/`。新增模型须先在 [docs/engine/](../docs/engine/README.md) 登记许可证，且不得默认打包 CC BY-NC 等非商用权重。
 
+语种检测在 `suiyi_engine.langdetect`。方案、许可证和实测性能见 [语种检测](../docs/engine/语种检测.md)。`py3langid` 自带的识别模型随该包分发，不进本仓库。
+
 ## 本地开发
 
 基准版本：**Python 3.11**。安装要求 `requires-python >= 3.10`。
 
-构建后端：**hatchling**（`src/` 布局，版本读自 `suiyi_engine.__version__`）。运行时依赖本骨架留空；`ctranslate2`、`sentencepiece`、`fastapi` 等由后续 Issue 按需添加。
+构建后端：**hatchling**（`src/` 布局，版本读自 `suiyi_engine.__version__`）。运行时依赖目前是语种检测用的 `py3langid`（BSD-3-Clause，会安装 `numpy`）。`ctranslate2`、`sentencepiece`、`fastapi` 等仍由后续 Issue 按需添加。
 
 标准环境流程是 `python -m venv` + `pip`。下面的命令都在**仓库根目录**执行。
 
