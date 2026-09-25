@@ -34,6 +34,13 @@ class LayoutOptions:
     """行首比上一行多缩进超过该值（× 字号），视为新段首行缩进。"""
     short_line: float = 2.0
     """上一行行尾比段落右缘短超过该值（× 字号），视为上一段已结束。"""
+    short_row: float = 12.0
+    """短行分段（#75）：相邻两行的长度都 ≤ 该值（× 各自字号），且上一行不以续接标点
+    （:data:`CONTINUATION_END`）结尾，视为两个独立的 UI 条目（菜单项、列表项、设置项）。
+    0 表示关闭（同时关闭段尾短行豁免）。"""
+    tail_ratio: float = 1.7
+    """段尾短行（#75）：长度 ≤ ``short_row``、比上一行短、字号比 ≤ 该值，且与上一行的间距
+    不大于本段已有行距时，不按字号比分段。缩小检测图后，只有几个字的段尾行框常偏高（「对。」）。"""
 
 
 DEFAULT_OPTIONS = LayoutOptions()
@@ -209,7 +216,7 @@ def _build(
     if not indices:
         return []
     rows = _merge_rows(lines, indices, vertical, options)
-    paras = _group_rows(rows, options)
+    paras = _group_rows(rows, options, vertical)
     result: list[OcrParagraph] = []
     for para in paras:
         flow_box = para.rows[0].rect
@@ -265,7 +272,7 @@ def _merge_rows(
     return rows
 
 
-def _group_rows(rows: list[_Row], options: LayoutOptions) -> list[_Para]:
+def _group_rows(rows: list[_Row], options: LayoutOptions, vertical: bool = False) -> list[_Para]:
     """按行距、对齐、缩进、字号和行尾长度把行归成段落（流坐标）。"""
 
     paras: list[_Para] = []
@@ -282,26 +289,67 @@ def _group_rows(rows: list[_Row], options: LayoutOptions) -> list[_Para]:
                 continue
             if gap < best_gap:
                 best, best_gap = para, gap
-        if best is not None and _continues(best, row, options):
+        if best is not None and _continues(best, row, options, short_rows=not vertical):
             best.rows.append(row)
         else:
             paras.append(_Para([row]))
     return paras
 
 
-def _continues(para: _Para, row: _Row, options: LayoutOptions) -> bool:
+CONTINUATION_END = tuple("，、,；：（(《「『—-")
+"""行尾是这些字符时，下一行多半是同一句话的续行（逗号、顿号、全角冒号、左括号、连接号）。
+
+不含半角 ``:`` ``;``：代码行常以它们结尾，却各自独立。"""
+
+
+def _continues(para: _Para, row: _Row, options: LayoutOptions, *, short_rows: bool = True) -> bool:
+    """``short_rows``：是否启用短行分段（只对横排；竖排 UI 很少见，竖排的短列按原规则处理）。"""
+
     last = para.last
     size = max(row.size, last.size)
-    single = len(row.text.strip()) == 1  # 单字框的尺寸随字形变化，不拿来比字号
-    if not single and size > options.height_ratio * min(row.size, last.size):
+    continued = last.text.rstrip().endswith(CONTINUATION_END)
+    head = row.text.lstrip()[:1]
+    lower_start = head.isascii() and head.islower()  # 西文句子跨行：下一行以小写字母开头
+    if size > options.height_ratio * min(row.size, last.size) and not (
+        len(row.text.strip()) == 1  # 单字框的尺寸随字形变化，不拿来比字号
+        or _is_tail_row(para, row, size, options)
+    ):
         return False  # 字号不同：标题与正文
     if row.rect[0] - last.rect[0] > options.indent * size:
         return False  # 首行缩进：新段
     first_line_indent = len(para.rows) == 1 and row.rect[0] < last.rect[0]
     if abs(row.rect[0] - last.rect[0]) > options.align * size and not first_line_indent:
         return False  # 行首不对齐
+    if continued:
+        return True  # 上一行以续接标点结尾：句子没写完，不按行长分段
+    if (
+        short_rows
+        and options.short_row > 0
+        and _width(last) <= options.short_row * last.size
+        and _width(row) <= options.short_row * row.size
+    ):
+        return False  # 相邻两行都短：UI 条目，各自一段
     right = max(para.right, row.rect[2])
-    return not last.rect[2] < right - options.short_line * size  # 上一行明显短：段落已结束
+    short_line = options.short_line * (2 if lower_start else 1)  # 西文换行时行长差一个词很常见
+    return not last.rect[2] < right - short_line * size  # 上一行明显短：段落已结束
+
+
+def _width(row: _Row) -> float:
+    return row.rect[2] - row.rect[0]
+
+
+def _is_tail_row(para: _Para, row: _Row, size: float, options: LayoutOptions) -> bool:
+    """段尾短行：比上一行短、字号比不大、且没有比本段已有行距更大的间距（标题前通常有段间距）。"""
+
+    last = para.last
+    if len(para.rows) < 2 or _width(row) >= _width(last):
+        return False
+    if _width(row) > options.short_row * row.size:
+        return False  # 只豁免短的段尾行
+    if size > options.tail_ratio * min(row.size, last.size):
+        return False
+    gaps = [b.rect[1] - a.rect[3] for a, b in zip(para.rows, para.rows[1:], strict=False)]
+    return row.rect[1] - last.rect[3] <= max(gaps) + 0.1 * min(row.size, last.size)
 
 
 # ---- 阅读顺序 -----------------------------------------------------------------

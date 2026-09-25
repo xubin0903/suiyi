@@ -292,6 +292,7 @@ def rapidocr_backend(
             boxes = boxes / np.float32(scale)
         boxes[..., 0] = np.clip(boxes[..., 0], 0, width - 1)
         boxes[..., 1] = np.clip(boxes[..., 1], 0, height - 1)
+        boxes = merge_touching_boxes(boxes)
         pad = runtime.crop_pad / scale if scale != 1.0 and not dilation else 0.0
         crops = [get_rotate_crop_image(image, _crop_box(box, pad, width, height)) for box in boxes]
         if use_cls:
@@ -307,6 +308,72 @@ def rapidocr_backend(
         ]
 
     return run
+
+
+def merge_touching_boxes(boxes: np.ndarray) -> np.ndarray:
+    """把同一行上相接或重叠的横排框合成一个再识别（#75）。
+
+    关闭膨胀后，检测偶尔把一个词切成相互重叠的两个框（代码里的 ``return ""``），
+    引号单独识别会出错（``" I``）。只合并近似水平、非竖排、左右间距 ≤ 0.25 × 行高、
+    上下重叠 ≥ 0.7 × 行高的框；有明显空隙的碎片（菜单项之间）不动，交给分段合成一行。
+    """
+
+    import numpy as np
+
+    boxes = np.asarray(boxes, dtype=np.float32)
+    if len(boxes) < 2:
+        return boxes
+    rects = []
+    for quad in boxes:
+        x0, y0 = quad[:, 0].min(), quad[:, 1].min()
+        x1, y1 = quad[:, 0].max(), quad[:, 1].max()
+        tilt = abs(float(quad[1, 1] - quad[0, 1]))
+        h = y1 - y0
+        flat = h > 0 and tilt <= 0.2 * h and h < 1.5 * (x1 - x0)
+        rects.append([float(x0), float(y0), float(x1), float(y1), flat])
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(rects)):
+            a = rects[i]
+            if a is None or not a[4]:
+                continue
+            for j in range(i + 1, len(rects)):
+                b = rects[j]
+                if b is None or not b[4]:
+                    continue
+                h = min(a[3] - a[1], b[3] - b[1])
+                gap = max(b[0] - a[2], a[0] - b[2])
+                overlap = min(a[3], b[3]) - max(a[1], b[1])
+                if gap <= 0.25 * h and overlap >= 0.7 * h:
+                    rects[i] = a = [
+                        min(a[0], b[0]),
+                        min(a[1], b[1]),
+                        max(a[2], b[2]),
+                        max(a[3], b[3]),
+                        True,
+                    ]
+                    rects[j] = None
+                    merged = True
+    if all(r is not None for r in rects):
+        return boxes
+    out = [_rect_quad(r, q) for q, r in zip(boxes, rects, strict=True) if r is not None]
+    return np.stack(out).astype(np.float32)
+
+
+def _rect_quad(rect: list[Any], quad: np.ndarray) -> np.ndarray:
+    import numpy as np
+
+    x0, y0, x1, y1 = rect[:4]
+    original = (
+        float(quad[:, 0].min()),
+        float(quad[:, 1].min()),
+        float(quad[:, 0].max()),
+        float(quad[:, 1].max()),
+    )
+    if (x0, y0, x1, y1) == original:
+        return quad  # 没参与合并：保留原来的四点框（可能略有倾斜）
+    return np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=np.float32)
 
 
 def _crop_box(box: np.ndarray, pad: float, width: int, height: int) -> np.ndarray:

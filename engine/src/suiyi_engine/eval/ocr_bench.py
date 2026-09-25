@@ -50,9 +50,14 @@ TARGET_REQUEST_PEAK_MB = 400.0
 """单次 OCR 请求峰值内存增量上限（相对预热后空闲进程，#74 负责人拍板，取代 #54 的 300 MB）。"""
 TARGET_DENSE_1080_P95_MS = 1500.0
 DENSE_CATEGORY = "密集文字"
-BASELINE_EXACT = 21
-"""#54 small 基线的段落完全正确数（完整 32 张样例集），#74 要求不低于它。"""
+BASELINE_EXACT = 23
+"""段落完全正确数下限（原 32 张 = dev 集）：#74 调优后的 23/32，#75 要求不低于它。"""
+TARGET_SPLITS = 1
+"""误拆分上限（dev 集，#75 新增验收）。"""
 FULL_SAMPLE_COUNT = 32
+"""dev 集（原 32 张）样例数；只有跑完整 dev 集时才对照上面两个目标。"""
+SPLITS = ("dev", "holdout")
+"""样例划分：dev 调参可看；holdout 是 #75 的留出集，调参时不看，报告里单独汇总。"""
 DET_ALIASES = {
     "small": "PP-OCRv6_det_small",
     "tiny": "PP-OCRv6_det_tiny",
@@ -114,6 +119,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--only", default=None, help="只跑这些样例 id（逗号分隔）")
     parser.add_argument(
+        "--split",
+        choices=("all", *SPLITS),
+        default="all",
+        help="只跑某个划分：dev（原 32 张）/ holdout（留出集）；默认 all",
+    )
+    parser.add_argument(
         "--quick",
         action="store_true",
         help=f"快速子集：{len(QUICK_IDS)} 张样例、repeats=2、warmup=1（CI 冒烟用）",
@@ -162,6 +173,10 @@ def run(args: argparse.Namespace, *, log: Log) -> int:
     samples = load_samples(samples_path)
     only = _split(args.only) or (list(QUICK_IDS) if args.quick else None)
     samples = select_samples(samples, only)
+    if args.split != "all":
+        samples = [s for s in samples if s["split"] == args.split]
+        if not samples:
+            raise OcrEvalError(f"划分 {args.split} 里没有选中的样例", code=2)
     line_gaps = parse_floats(args.line_gaps)
     manifest_path = (args.manifest or default_manifest_path()).resolve()
     manifest = load_manifest(manifest_path)
@@ -212,6 +227,9 @@ def run(args: argparse.Namespace, *, log: Log) -> int:
             "line_gaps": line_gaps,
             "samples": str(samples_path),
             "sample_count": len(samples),
+            "split": args.split,
+            "dev_count": sum(1 for s in samples if s["split"] == "dev"),
+            "holdout_count": sum(1 for s in samples if s["split"] == "holdout"),
             "models_dir": str(models_dir),
             "manifest": str(manifest_path),
             "recommended": dict(manifest.recommended),
@@ -223,6 +241,7 @@ def run(args: argparse.Namespace, *, log: Log) -> int:
             "cer": TARGET_CER,
             "request_peak_delta_mb": TARGET_REQUEST_PEAK_MB,
             "baseline_exact": BASELINE_EXACT,
+            "max_splits": TARGET_SPLITS,
         },
         "variants": variants,
     }
@@ -269,6 +288,9 @@ def load_samples(path: Path) -> list[dict[str, Any]]:
             or not all(isinstance(p, str) and p for p in paragraphs)
         ):
             raise OcrEvalError(f"样例 {row['id']} 的 paragraphs 必须是非空字符串列表", code=2)
+        row.setdefault("split", "dev")
+        if row["split"] not in SPLITS:
+            raise OcrEvalError(f"样例 {row['id']} 的 split 必须是 {SPLITS} 之一", code=2)
         if row["size_class"] not in SIZE_CLASSES:
             raise OcrEvalError(f"样例 {row['id']} 的 size_class 不在 {SIZE_CLASSES}", code=2)
         if not (path.parent / row["file"]).is_file():
@@ -667,6 +689,7 @@ def score_variant(
                 "id": row["id"],
                 "lang": sample["lang"],
                 "category": sample["category"],
+                "split": sample.get("split", "dev"),
                 "size_class": row["size_class"],
                 "cer": round(c.cer, 4),
                 "edits": c.edits,
@@ -685,12 +708,36 @@ def score_variant(
             }
         )
 
+    # 主汇总只算 dev（原 32 张），保证与 #54 / #74 的基线可比；留出集单独汇总。
+    # 只跑了留出集（--split holdout）时，主汇总退回到全部样例。
+    main_ids = {r["id"] for r in per_sample if by_id[r["id"]].get("split", "dev") == "dev"}
+    if not main_ids:
+        main_ids = {r["id"] for r in per_sample}
+    holdout_ids = [r["id"] for r in per_sample if by_id[r["id"]].get("split", "dev") == "holdout"]
+    main_rows = [r for r in per_sample if r["id"] in main_ids]
+    main_raw = [r for r in raw["samples"] if r["id"] in main_ids]
+
     def group(key: str) -> dict[str, list[str]]:
         groups: dict[str, list[str]] = {}
-        for sample_row in per_sample:
+        for sample_row in main_rows:
             groups.setdefault(sample_row[key], []).append(sample_row["id"])
         return groups
 
+    def seg_block(ids: Iterable[str], scores: Mapping[str, SegmentationScore]) -> dict[str, Any]:
+        ids = list(ids)
+        return {
+            "overall": _seg_dict(merge_segmentation(scores[i] for i in ids)),
+            "ui": _seg_dict(
+                merge_segmentation(scores[i] for i in ids if UI_MARK in by_id[i]["category"])
+            ),
+            "body": _seg_dict(
+                merge_segmentation(
+                    scores[i] for i in ids if by_id[i]["category"] in BODY_CATEGORIES
+                )
+            ),
+        }
+
+    main_seg = {k: v for k, v in seg_scores.items() if k in main_ids}
     variant.update(
         threads=raw["threads"],
         load_ms=raw["load_ms"],
@@ -699,11 +746,11 @@ def score_variant(
         runtime=raw.get("runtime"),
         peak_method=raw.get("peak_method"),
         memory={
-            **{size: _memory(raw["samples"], size) for size in SIZE_CLASSES},
-            "overall": _memory(raw["samples"], None),
+            **{size: _memory(main_raw, size) for size in SIZE_CLASSES},
+            "overall": _memory(main_raw, None),
         },
         cer={
-            "overall": _cer_dict(merge_cer(cer_scores.values())),
+            "overall": _cer_dict(merge_cer(cer_scores[i] for i in main_ids)),
             "by_category": {
                 k: _cer_dict(merge_cer(cer_scores[i] for i in ids))
                 for k, ids in group("category").items()
@@ -718,33 +765,32 @@ def score_variant(
             },
         },
         segmentation={
-            "overall": _seg_dict(merge_segmentation(seg_scores.values())),
+            **seg_block(main_ids, main_seg),
             "by_category": {
                 k: _seg_dict(merge_segmentation(seg_scores[i] for i in ids))
                 for k, ids in group("category").items()
             },
         },
+        holdout=(
+            {
+                "samples": len(holdout_ids),
+                "cer": _cer_dict(merge_cer(cer_scores[i] for i in holdout_ids)),
+                "segmentation": seg_block(holdout_ids, seg_scores),
+            }
+            if holdout_ids and len(holdout_ids) < len(per_sample)
+            else None
+        ),
         line_gap_sweep=[
             {
                 "line_gap": gap,
                 "default": gap == DEFAULT_OPTIONS.line_gap,
-                "overall": _seg_dict(merge_segmentation(scores.values())),
-                "ui": _seg_dict(
-                    merge_segmentation(
-                        v for k, v in scores.items() if UI_MARK in by_id[k]["category"]
-                    )
-                ),
-                "body": _seg_dict(
-                    merge_segmentation(
-                        v for k, v in scores.items() if by_id[k]["category"] in BODY_CATEGORIES
-                    )
-                ),
+                **seg_block(main_ids, scores),
             }
             for gap, scores in sweep.items()
         ],
-        latency={size: _latency(raw["samples"], size) for size in SIZE_CLASSES},
+        latency={size: _latency(main_raw, size) for size in SIZE_CLASSES},
         dense_1080p=_latency(
-            [r for r in raw["samples"] if by_id[r["id"]]["category"] == DENSE_CATEGORY],
+            [r for r in main_raw if by_id[r["id"]]["category"] == DENSE_CATEGORY],
             "1080p",
         ),
         samples=per_sample,
@@ -855,6 +901,11 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         add(f"- 机器说明：{report['label']}")
     if report.get("quick"):
         add("- **快速子集（--quick）**：样例少、重复次数少，只用于验证脚本可用，耗时仅供参考")
+    if settings.get("holdout_count"):
+        add(
+            f"- 其中 dev（原 32 张）{settings.get('dev_count', 0)} 张、"
+            f"留出集 {settings['holdout_count']} 张；除「留出集」一节外，所有汇总只算 dev"
+        )
     add(
         f"- 样例 {settings['sample_count']} 张；"
         f"每张预热 {settings['warmup']} 次、计时 {settings['repeats']} 次；"
@@ -922,13 +973,22 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     )
     cells = [_mbs(v["rss"]["resident_delta"]) + " MB" for v in ok]
     add("| 常驻增长（跑完全部样例后） | — | " + " | ".join(cells) + " |")
-    full = settings["sample_count"] == FULL_SAMPLE_COUNT
+    full = settings.get("dev_count", settings["sample_count"]) == FULL_SAMPLE_COUNT
     cells = [_exact_cell(v["segmentation"]["overall"], full) for v in ok]
     target = f"≥ {BASELINE_EXACT}/{FULL_SAMPLE_COUNT}" if full else "—（非完整样例集）"
     add(f"| 段落完全正确 | {target} | " + " | ".join(cells) + " |")
+    cells = [_splits_cell(v["segmentation"]["overall"], full) for v in ok]
+    add(f"| 误拆分 | {f'≤ {TARGET_SPLITS}' if full else '—'} | " + " | ".join(cells) + " |")
+    cells = [str(v["segmentation"]["overall"]["merges"]) for v in ok]
+    add("| 误合并 | — | " + " | ".join(cells) + " |")
+    cells = [str(v["segmentation"]["ui"]["merges"]) for v in ok]
+    add("| UI 误合并 | — | " + " | ".join(cells) + " |")
+    if any(v.get("holdout") for v in ok):
+        cells = [_holdout_cell(v.get("holdout")) for v in ok]
+        add("| 留出集 完全正确 / 误合并 / 误拆分 | — | " + " | ".join(cells) + " |")
     add("")
     add(
-        "CER 另要求不劣于 #54 基线（det small：全部 0.6%，日文竖排 11.4%），"
+        "CER 另要求不劣于 #74 基线（det small：全部 0.5%，日文竖排 8.9%），"
         "请对照下方 CER 表与 legacy 列。"
     )
     add("")
@@ -966,6 +1026,41 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         for k in sorted(v["segmentation"]["by_category"], key=_sort_key):
             add(_seg_row(k, v["segmentation"]["by_category"][k]))
         add(_seg_row("**全部**", v["segmentation"]["overall"]))
+        add("")
+    held = [v for v in ok if v.get("holdout")]
+    if held:
+        add("### 留出集（#75，调参时不看）")
+        add("")
+        add(
+            _row(
+                "检测模型",
+                "样例",
+                "完全正确",
+                "误合并",
+                "误拆分",
+                "F1",
+                "UI 误合并",
+                "UI 误拆分",
+                "CER",
+            )
+        )
+        add("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for v in held:
+            ho = v["holdout"]
+            o, u = ho["segmentation"]["overall"], ho["segmentation"]["ui"]
+            add(
+                _row(
+                    _short(v["det"]),
+                    ho["samples"],
+                    f"{o['exact_samples']}/{o['samples']}",
+                    o["merges"],
+                    o["splits"],
+                    f"{o['f1']:.2f}",
+                    u["merges"],
+                    u["splits"],
+                    _pct(ho["cer"]),
+                )
+            )
         add("")
     add("### line_gap 扫描")
     add("")
@@ -1086,8 +1181,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     add("|---|---|---|" + "---:|" * len(ok) + "---:|" + "---:|" * len(ok) * 2)
     for index, row in enumerate(ok[0]["samples"]):
         rows = [v["samples"][index] for v in ok]
+        mark = "（留出）" if row.get("split") == "holdout" else ""
         add(
-            f"| {row['id']} | {row['category']} | {SIZE_LABELS[row['size_class']]} | "
+            f"| {row['id']}{mark} | {row['category']} | {SIZE_LABELS[row['size_class']]} | "
             + " | ".join(f"{r['cer']:.1%}" for r in rows)
             + f" | {row['expected_paragraphs']} | "
             + " | ".join(f"{r['predicted_paragraphs']}/{r['merges']}/{r['splits']}" for r in rows)
@@ -1097,6 +1193,20 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         )
     add("")
     return "\n".join(out) + "\n"
+
+
+def _splits_cell(seg: Mapping[str, Any], full: bool) -> str:
+    text = str(seg["splits"])
+    if not full:
+        return text
+    return text + (" ✅" if seg["splits"] <= TARGET_SPLITS else " ❌")
+
+
+def _holdout_cell(holdout: Mapping[str, Any] | None) -> str:
+    if not holdout:
+        return "—"
+    o = holdout["segmentation"]["overall"]
+    return f"{o['exact_samples']}/{o['samples']} / {o['merges']} / {o['splits']}"
 
 
 def _row(*cells: object) -> str:

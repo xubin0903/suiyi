@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 
 from suiyi_engine.ocr import OcrLine, is_vertical, join_lines, merge_paragraphs
+from suiyi_engine.ocr.layout import LayoutOptions
 
 
 def line(text: str, x0: float, y0: float, x1: float, y1: float, **kwargs: object) -> OcrLine:
@@ -291,7 +292,66 @@ def test_single_char_column_head_and_tail_join_vertical_paragraph() -> None:
 
 def test_single_char_row_is_not_compared_by_font_size() -> None:
     # 单字行的框随字形变胖，不因字号比把它从段落里切出去
-    lines = [line("第一行文字比较长一些", 10, 10, 210, 30), line("对。", 10, 36, 50, 64)]
+    lines = [line("第一行文字比较长一些", 10, 10, 310, 30), line("对。", 10, 36, 50, 64)]
     assert len(texts(lines)) == 2  # 两个字：照常按字号比切开
-    lines = [line("第一行文字比较长一些", 10, 10, 210, 30), line("。", 10, 36, 40, 64)]
+    lines = [line("第一行文字比较长一些", 10, 10, 310, 30), line("。", 10, 36, 40, 64)]
     assert texts(lines) == ["第一行文字比较长一些。"]
+
+
+# ---- #75 短行分段 -------------------------------------------------------------
+
+
+def test_short_ui_rows_are_separate_items() -> None:
+    # 设置项列表：行距与正文相同，每行都短（≤ 12 × 字号），各自一段
+    rows = ["启动时自动运行", "关闭窗口时最小化到托盘", "检查更新（每周一次）", "显示翻译耗时"]
+    lines = [line(t, 10, 10 + 20 * i, 10 + 12 * len(t), 22 + 20 * i) for i, t in enumerate(rows)]
+    assert texts(lines) == rows
+    assert texts(lines) == [p.text for p in merge_paragraphs(lines)]
+    # 关闭规则时回到旧行为（后三行被合并）
+    assert len([p.text for p in merge_paragraphs(lines, LayoutOptions(short_row=0))]) < len(rows)
+
+
+def test_short_rows_joined_by_continuation_punctuation() -> None:
+    lines = [
+        line("目标语言：简体中文，", 10, 10, 130, 22),
+        line("检测到中文时改译英文", 10, 30, 130, 42),
+    ]
+    assert texts(lines) == ["目标语言：简体中文，检测到中文时改译英文"]
+
+
+def test_long_wrapped_lines_are_not_short_rows() -> None:
+    # 窄气泡里的正文：每行 16 × 字号，不算短行，仍合成一段（最后一行很短也一样）
+    lines = [
+        line("明天下午三点的评审改到四点了，会议", 10, 10, 250, 25),
+        line("室不变，记得带上打印好的材料和上周", 10, 33, 250, 48),
+        line("一下", 10, 56, 40, 71),
+    ]
+    assert texts(lines) == [
+        "明天下午三点的评审改到四点了，会议室不变，记得带上打印好的材料和上周一下"
+    ]
+
+
+def test_tail_row_with_taller_box_stays_in_paragraph() -> None:
+    # 缩放后段尾短行的框偏高（字号比 1.5），但间距没有超出本段行距：仍属同一段
+    body = [
+        line("图书馆的旧报纸已经全部扫描成电子版读者", 10, 10 + 30 * i, 610, 27 + 30 * i)
+        for i in range(2)
+    ]
+    tail = line("对。", 10, 64, 36, 89.5)
+    assert len(texts([*body, tail])) == 1
+    # 同样字号比、但前面有段间距：标题（新段）
+    heading = line("小结", 10, 90, 62, 115.5)
+    assert len(texts([*body, heading])) == 2
+
+
+def test_lowercase_continuation_tolerates_one_word_shorter_line() -> None:
+    lines = [
+        line("To translate part of the screen, press the shortcut, drag a", 10, 10, 770, 31),
+        line("release the mouse. The recognized text and its translation appear", 10, 38, 813, 59),
+    ]
+    assert len(texts(lines)) == 1
+    # 下一行大写开头时仍按「上一行明显短」分段
+    lines[1] = line(
+        "Release the mouse. The recognized text and its translation appear", 10, 38, 813, 59
+    )
+    assert len(texts(lines)) == 2

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -143,11 +144,12 @@ def _line(text: str, x: float, y: float, w: float, h: float = 12.0) -> dict[str,
 
 
 def _raw() -> dict[str, object]:
-    # 三行 12px 小字，行距 = 0.6 × 字号：默认 line_gap=0.9 会合并成一段，0.5 时分开
+    # 三行 12px 字、行宽 20 × 字号（不算短行），行距 = 0.6 × 字号：
+    # 默认 line_gap=0.9 会合并成一段，0.5 时分开
     lines = [
-        _line("自动保存已开启。", 10, 10, 96),
-        _line("上次保存于三点。", 10, 29.2, 96),
-        _line("提示：可以关闭。", 10, 48.4, 96),
+        _line("自动保存已开启。", 10, 10, 240),
+        _line("上次保存于三点。", 10, 29.2, 240),
+        _line("提示：可以关闭。", 10, 48.4, 240),
     ]
     return {
         "det": "PP-OCRv6_det_small",
@@ -323,8 +325,8 @@ def test_memory_aggregation_and_targets() -> None:
     assert variant["samples"][0]["request_peak_max"] == 200 * 2**20
     assert ocr_bench._peak_cell(overall) == "200 MB ✅"
     assert ocr_bench._peak_cell({"max": 401 * 2**20}).endswith("❌")
-    assert ocr_bench._exact_cell({"exact_samples": 21, "samples": 32}, True) == "21/32 ✅"
-    assert ocr_bench._exact_cell({"exact_samples": 20, "samples": 32}, True) == "20/32 ❌"
+    assert ocr_bench._exact_cell({"exact_samples": 23, "samples": 32}, True) == "23/32 ✅"
+    assert ocr_bench._exact_cell({"exact_samples": 22, "samples": 32}, True) == "22/32 ❌"
     assert ocr_bench._exact_cell({"exact_samples": 1, "samples": 1}, False) == "1/1"
 
 
@@ -341,3 +343,56 @@ def test_peak_meter_sees_allocation_inside_request() -> None:
     peak = meter.stop()
     assert peak is not None and before is not None
     assert peak - before >= 48 * 2**20
+
+
+def test_repository_holdout_split_for_issue_75() -> None:
+    samples = load_samples(default_samples_path())
+    dev = [s for s in samples if s["split"] == "dev"]
+    holdout = [s for s in samples if s["split"] == "holdout"]
+    assert len(dev) == ocr_bench.FULL_SAMPLE_COUNT
+    assert len(holdout) >= 8
+    assert all(ocr_bench.UI_MARK in s["category"] for s in holdout)
+    assert not {s["id"] for s in holdout} & set(ocr_bench.QUICK_IDS)
+
+
+def test_score_variant_keeps_holdout_out_of_main_totals(tmp_path: Path) -> None:
+    raw = _raw()
+    first = raw["samples"][0]  # type: ignore[index]
+    raw["samples"] = [first, {**first, "id": "b"}]  # type: ignore[dict-item]
+    paragraphs = ["自动保存已开启。", "上次保存于三点。", "提示：可以关闭。"]
+    samples = [_row(paragraphs=paragraphs), _row(id="b", paragraphs=paragraphs, split="holdout")]
+    variant = score_variant(raw, samples, [0.9])
+    assert variant["segmentation"]["overall"]["samples"] == 1
+    assert variant["latency"]["small"]["samples"] == 1
+    assert variant["holdout"]["samples"] == 1
+    assert variant["holdout"]["segmentation"]["ui"]["samples"] == 1
+    assert [s["split"] for s in variant["samples"]] == ["dev", "holdout"]
+    assert re.fullmatch(r"[01]/1 / \d+ / \d+", ocr_bench._holdout_cell(variant["holdout"]))
+    # 只跑留出集时，主汇总退回到全部样例，不再单列留出集
+    only = score_variant({**raw, "samples": [raw["samples"][1]]}, samples[1:], [0.9])  # type: ignore[index]
+    assert only["segmentation"]["overall"]["samples"] == 1 and only["holdout"] is None
+    bad = _write_samples(tmp_path, [_row(split="test")])
+    with pytest.raises(OcrEvalError):
+        load_samples(bad)
+    assert load_samples(_write_samples(tmp_path, [_row()]))[0]["split"] == "dev"
+
+
+def test_merge_touching_boxes_joins_overlapping_word_fragments() -> None:
+    np = pytest.importorskip("numpy")
+    from suiyi_engine.ocr.engine import merge_touching_boxes
+
+    def quad(x0: float, y0: float, x1: float, y1: float) -> list[list[float]]:
+        return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+
+    # return 与 "" 重叠 10 px：合成一个框
+    boxes = np.array([quad(124, 92, 199, 115), quad(189, 91, 225, 111), quad(82, 149, 549, 168)])
+    out = merge_touching_boxes(boxes)
+    assert len(out) == 2
+    assert out[0].tolist() == quad(124, 91, 225, 115)
+    assert out[1].tolist() == boxes[2].tolist()
+    # 菜单项之间有一个字宽的空隙：不合并
+    menu = np.array([quad(10, 10, 34, 22), quad(46, 10, 70, 22)])
+    assert len(merge_touching_boxes(menu)) == 2
+    # 竖排列不合并
+    columns = np.array([quad(100, 10, 130, 300), quad(128, 10, 158, 300)])
+    assert len(merge_touching_boxes(columns)) == 2
