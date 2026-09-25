@@ -524,7 +524,7 @@ OCR 联调（`EngineOcrLiveTests`，需 #53 服务端实现）另需 `SUIYI_ENGI
 3. 从客户端 exe 所在目录向上找仓库根（含 `engine/pyproject.toml`），用 `<仓库根>\.venv\Scripts\python.exe`
 4. `py -3.11`（Windows Python Launcher），再退到 PATH 上的 `python`
 
-Python 参数：`-m suiyi_engine serve --port <engine.port，默认 18780> --preload <engine.preload，默认 zh-en,en-zh> [--models-dir <engine.modelsDir>]`；工作目录为仓库根（找不到时为 exe 所在目录）。进程以 `CreateNoWindow` 启动，不弹控制台，并加入 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object（`Suiyi.App/Interop/JobObject.cs`），客户端被任务管理器强杀时服务随之退出。
+Python 参数：`-m suiyi_engine serve --port <engine.port，默认 18780> --preload <engine.preload，默认 zh-en,en-zh> [--preload-ocr，engine.preloadOcr 为 true 时，默认带] [--models-dir <engine.modelsDir>]`；工作目录为仓库根（找不到时为 exe 所在目录）。进程以 `CreateNoWindow` 启动，不弹控制台，并加入 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object（`Suiyi.App/Interop/JobObject.cs`），客户端被任务管理器强杀时服务随之退出。
 
 以上 `engine.*` 取自设置文件（见「设置文件」）；开发时也可用环境变量临时覆盖（优先于设置）：`SUIYI_ENGINE_PORT`、`SUIYI_ENGINE_PRELOAD`、`SUIYI_ENGINE_PYTHON`、`SUIYI_ENGINE_MODELS_DIR`、`SUIYI_ENGINE_COMMAND`。
 
