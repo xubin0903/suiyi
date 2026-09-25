@@ -1,0 +1,5 @@
+Offline translation in practice
+
+Suiyi keeps every step on your own machine. When you copy a sentence, the text is sent to a small local service instead of a remote server, translated by a compact neural model, and shown in a floating window next to your cursor.
+
+Because nothing leaves the computer, the tool keeps working on a plane, in a hotel with unreliable Wi-Fi, or inside a company network that blocks cloud services.
