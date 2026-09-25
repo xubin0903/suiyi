@@ -2,6 +2,13 @@
 
 输出目录约定见 ``docs/engine/模型目录约定.md``。本模块在导入时不加载
 torch、transformers 或 ctranslate2，方便只安装 ``engine[dev]`` 的单元测试与 CI。
+
+权重来源有两种：
+
+* 默认：Hugging Face 仓库的固定 ``hf_revision``，用 Transformers 转换器。
+* ``weights_source.type == "opus-mt-zip"``：Helsinki-NLP 在 object.pouta.csc.fi
+  发布的原始 Marian zip，按 ``sha256`` 校验后用 CTranslate2 的 Marian 转换器。
+  用于 Hugging Face 转换版有缺陷、或 HF 上没有该次发布的模型（见 Issue #25）。
 """
 
 import argparse
@@ -12,6 +19,8 @@ import os
 import re
 import shutil
 import sys
+import urllib.request
+import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,6 +73,9 @@ _MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 _LANG_RE = re.compile(r"^[a-z]{2}$")
 _REPO_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_ZIP_SOURCE_TYPE = "opus-mt-zip"
+_ZIP_URL_PREFIX = "https://object.pouta.csc.fi/"
 _SPM_FILES = ("source.spm", "target.spm")
 _VOCAB_FILES = ("vocab.json", "source.vocab", "target.vocab")
 _REQUIRED_OUTPUTS = ("model.bin", "config.json", "source.spm", "target.spm")
@@ -208,6 +220,118 @@ def convert_snapshot(
             shutil.copyfile(snapshot / name, destination)
 
 
+def fetch_opus_zip(source: Mapping[str, object], cache_dir: Path, work_dir: Path) -> Path:
+    """下载（或复用缓存的）上游 Marian zip，校验 sha256，只解出需要的文件。
+
+    缓存文件名是 ``<sha256>.zip``，放在 ``cache_dir``。返回解压目录。
+    """
+    url = str(source["url"])
+    expected = str(source["sha256"])
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    archive = cache_dir / f"{expected}.zip"
+    if not archive.is_file() or _sha256_file(archive) != expected:
+        partial = archive.with_suffix(".zip.partial")
+        _emit(f"下载 {url}")
+        with urllib.request.urlopen(url, timeout=60) as response, partial.open("wb") as handle:
+            shutil.copyfileobj(response, handle, length=1024 * 1024)
+        actual = _sha256_file(partial)
+        if actual != expected:
+            partial.unlink(missing_ok=True)
+            raise ConvertError(
+                f"zip 的 sha256 不符：期望 {expected}，实际 {actual}（{url}）",
+                code=1,
+            )
+        partial.replace(archive)
+    else:
+        _emit(f"复用缓存 {archive}")
+    wanted = zip_member_names(source)
+    with zipfile.ZipFile(archive) as bundle:
+        names = set(bundle.namelist())
+        missing = [name for name in wanted if name not in names]
+        if missing:
+            raise ConvertError(f"zip 中缺少文件：{', '.join(missing)}（{url}）", code=1)
+        for name in wanted:
+            bundle.extract(name, work_dir)
+    return work_dir
+
+
+def zip_member_names(source: Mapping[str, object]) -> list[str]:
+    """zip 里需要解出的文件：权重、词表和要拷贝的文件，去重保序。"""
+    names = [str(source["model_file"])]
+    names.extend(str(name) for name in source["vocab_files"])  # type: ignore[union-attr]
+    names.extend(str(name) for name in source["copy_files"])  # type: ignore[union-attr]
+    return list(dict.fromkeys(names))
+
+
+def marian_vocab_to_yaml(path: Path, destination: Path) -> Path:
+    """把「一行一个 token」的 Marian 词表改写成 CTranslate2 能读的 YAML。
+
+    已是 ``.yml`` / ``.yaml`` 时原样返回。键用 JSON 字符串写，
+    CTranslate2 的 Marian 读取器会去掉引号并反转义。
+    """
+    if path.suffix in (".yml", ".yaml"):
+        return path
+    # 按字节读并只按 \n 切分：词表里可能有 \r、U+0085 之类的 token，不能走通用换行。
+    text = path.read_bytes().decode("utf-8")
+    tokens = text.split("\n")
+    if tokens and tokens[-1] == "":
+        tokens.pop()
+    if len(tokens) != len(set(tokens)):
+        raise ConvertError(f"词表中有重复 token：{path}", code=1)
+    lines = [f"{_yaml_vocab_key(token, path)}: {index}" for index, token in enumerate(tokens)]
+    destination.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+    return destination
+
+
+def _yaml_vocab_key(token: str, path: Path) -> str:
+    """按 CTranslate2 Marian 读取器能还原的方式给 token 加引号。
+
+    读取器去掉双引号后把 ``\\c`` 还原成 ``c``；整个 token 形如 ``\\xNN`` 时还原成该字符。
+    单个控制字符用 ``\\xNN``；多字符 token 里夹控制字符无法表达，直接报错。
+    """
+    if len(token) == 1 and ord(token) < 0x20:
+        return f'"\\x{ord(token):02x}"'
+    if any(ord(char) < 0x20 for char in token):
+        raise ConvertError(f"词表 token 含控制字符，无法转换：{token!r}（{path}）", code=1)
+    escaped = token.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def convert_opus_zip(
+    extracted: Path,
+    output_dir: Path,
+    quantization: str,
+    source: Mapping[str, object],
+) -> None:
+    """用 CTranslate2 Marian 转换器转换解压后的上游模型，再拷入分词与许可证文件。"""
+    try:
+        ctranslate2 = importlib.import_module("ctranslate2")
+    except ImportError as exc:
+        raise ConvertError(_missing_convert_extra(), code=1) from exc
+    vocab_paths: list[str] = []
+    for index, name in enumerate(source["vocab_files"]):  # type: ignore[union-attr]
+        original = extracted / str(name)
+        converted = extracted / f"vocab{index}.suiyi.yml"
+        vocab_paths.append(str(marian_vocab_to_yaml(original, converted)))
+    if len(vocab_paths) == 1:
+        vocab_paths.append(vocab_paths[0])
+    converter = ctranslate2.converters.MarianConverter(
+        str(extracted / str(source["model_file"])),
+        vocab_paths,
+    )
+    converter.convert(str(output_dir), quantization=quantization, force=True)
+    for name in source["copy_files"]:  # type: ignore[union-attr]
+        shutil.copyfile(extracted / str(name), output_dir / Path(str(name)).name)
+
+
+def source_key(entry: Mapping[str, object]) -> str:
+    """判断「已存在」用的来源标识：zip 用 ``sha256:<hex>``，否则用 ``hf_revision``。"""
+    source = entry.get("weights_source")
+    if isinstance(source, Mapping):
+        return f"sha256:{source['sha256']}"
+    return str(entry["hf_revision"])
+
+
 def current_ctranslate2_version() -> str:
     try:
         ctranslate2 = importlib.import_module("ctranslate2")
@@ -242,6 +366,8 @@ def convert_one(
     convert: Callable[[Path, Path, str, Sequence[str]], None] | None = None,
     version: Callable[[], str] | None = None,
     now: Callable[[], str] | None = None,
+    fetch_zip: Callable[[Mapping[str, object], Path, Path], Path] | None = None,
+    convert_zip: Callable[[Path, Path, str, Mapping[str, object]], None] | None = None,
 ) -> str:
     """转换单个模型。返回 ``converted`` 或 ``skipped``。
 
@@ -255,15 +381,19 @@ def convert_one(
         version = current_ctranslate2_version
     if now is None:
         now = utc_now_iso
+    if fetch_zip is None:
+        fetch_zip = fetch_opus_zip
+    if convert_zip is None:
+        convert_zip = convert_opus_zip
     model_id = str(entry["id"])
-    revision = str(entry["hf_revision"])
+    key = source_key(entry)
     final_dir = _model_dir(out_dir, model_id)
-    if _is_current(final_dir, revision, quantization) and not force:
+    if _is_current(final_dir, key, quantization) and not force:
         _emit(f"{model_id} 已存在，跳过")
         return "skipped"
     if final_dir.exists() and not force:
         raise ConvertError(
-            f"{model_id} 的目录已存在，但 revision 或量化与清单不一致。加上 --force 可覆盖。",
+            f"{model_id} 的目录已存在，但来源修订或量化与清单不一致。加上 --force 可覆盖。",
             code=2,
         )
     if force and final_dir.exists():
@@ -273,13 +403,24 @@ def convert_one(
     if partial.exists():
         shutil.rmtree(partial)
     partial.mkdir(parents=True)
+    work = out_dir / f".{model_id}.work"
     try:
-        repo_id = str(entry["hf_repo"])
-        _emit(f"下载 {repo_id}@{revision}")
-        snapshot = download(repo_id, revision)
-        copy_files = spm_and_vocab_files(snapshot)
-        _emit(f"转换 {model_id} → {final_dir} （{quantization}）")
-        convert(snapshot, partial, quantization, copy_files)
+        source = entry.get("weights_source")
+        if isinstance(source, Mapping):
+            if work.exists():
+                shutil.rmtree(work)
+            work.mkdir(parents=True)
+            extracted = fetch_zip(source, out_dir / ".cache", work)
+            _emit(f"转换 {model_id} → {final_dir} （{quantization}，上游 Marian zip）")
+            convert_zip(extracted, partial, quantization, source)
+        else:
+            repo_id = str(entry["hf_repo"])
+            revision = str(entry["hf_revision"])
+            _emit(f"下载 {repo_id}@{revision}")
+            snapshot = download(repo_id, revision)
+            copy_files = spm_and_vocab_files(snapshot)
+            _emit(f"转换 {model_id} → {final_dir} （{quantization}）")
+            convert(snapshot, partial, quantization, copy_files)
         _require_outputs(partial)
         file_info = hash_files(partial)
         metadata = build_metadata(entry, quantization, version(), now(), file_info)
@@ -291,6 +432,9 @@ def convert_one(
         if partial.exists():
             shutil.rmtree(partial, ignore_errors=True)
         raise
+    finally:
+        if work.exists():
+            shutil.rmtree(work, ignore_errors=True)
     total = sum(item["bytes"] for item in file_info.values())
     _emit(f"完成 {model_id}，权重大小 {total} 字节（不含 {METADATA_NAME}）")
     return "converted"
@@ -435,16 +579,22 @@ def _validate_model_entry(entry: object, index: int) -> None:
         value = entry[key]
         if not isinstance(value, str) or _LANG_RE.fullmatch(value) is None:
             raise ConvertError(f"{model_id} 的 {key} 必须是 ISO 639-1 小写二字母代码", code=2)
+    has_zip = "weights_source" in entry and entry["weights_source"] is not None
+    if has_zip:
+        _validate_weights_source(model_id, entry["weights_source"])
     repo = entry["hf_repo"]
-    if not isinstance(repo, str) or _REPO_RE.fullmatch(repo) is None:
-        raise ConvertError(f"{model_id} 的 hf_repo 必须是 owner/name：{repo!r}", code=2)
     revision = entry["hf_revision"]
-    if not isinstance(revision, str) or _REVISION_RE.fullmatch(revision) is None:
-        raise ConvertError(
-            f"{model_id} 的 hf_revision 必须是 40 位小写 commit sha，"
-            f"不能是分支名或标签：{revision!r}",
-            code=2,
-        )
+    if has_zip and repo is None and revision is None:
+        pass
+    else:
+        if not isinstance(repo, str) or _REPO_RE.fullmatch(repo) is None:
+            raise ConvertError(f"{model_id} 的 hf_repo 必须是 owner/name：{repo!r}", code=2)
+        if not isinstance(revision, str) or _REVISION_RE.fullmatch(revision) is None:
+            raise ConvertError(
+                f"{model_id} 的 hf_revision 必须是 40 位小写 commit sha，"
+                f"不能是分支名或标签：{revision!r}",
+                code=2,
+            )
     for key in ("license", "license_url", "attribution"):
         value = entry[key]
         if not isinstance(value, str) or not value.strip():
@@ -458,7 +608,61 @@ def _validate_model_entry(entry: object, index: int) -> None:
         raise ConvertError(f"{model_id} 的 notes 必须是字符串", code=2)
 
 
-def _is_current(model_dir: Path, revision: str, quantization: str) -> bool:
+def _validate_weights_source(model_id: object, source: object) -> None:
+    if not isinstance(source, dict):
+        raise ConvertError(f"{model_id} 的 weights_source 必须是对象", code=2)
+    if source.get("type") != _ZIP_SOURCE_TYPE:
+        raise ConvertError(
+            f"{model_id} 的 weights_source.type 只支持 {_ZIP_SOURCE_TYPE}：{source.get('type')!r}",
+            code=2,
+        )
+    url = source.get("url")
+    if not isinstance(url, str) or not url.startswith(_ZIP_URL_PREFIX) or not url.endswith(".zip"):
+        raise ConvertError(
+            f"{model_id} 的 weights_source.url 必须是 {_ZIP_URL_PREFIX} 下的 .zip：{url!r}",
+            code=2,
+        )
+    sha = source.get("sha256")
+    if not isinstance(sha, str) or _SHA256_RE.fullmatch(sha) is None:
+        raise ConvertError(f"{model_id} 的 weights_source.sha256 必须是 64 位小写十六进制", code=2)
+    model_file = source.get("model_file")
+    if not isinstance(model_file, str) or not model_file.endswith(".npz"):
+        raise ConvertError(f"{model_id} 的 weights_source.model_file 必须是 .npz 文件名", code=2)
+    vocab_files = source.get("vocab_files")
+    if (
+        not isinstance(vocab_files, list)
+        or len(vocab_files) not in (1, 2)
+        or not all(isinstance(name, str) and name for name in vocab_files)
+    ):
+        raise ConvertError(
+            f"{model_id} 的 weights_source.vocab_files 必须是 1 或 2 个文件名",
+            code=2,
+        )
+    copy_files = source.get("copy_files")
+    if not isinstance(copy_files, list) or not all(
+        isinstance(name, str) and name for name in copy_files
+    ):
+        raise ConvertError(f"{model_id} 的 weights_source.copy_files 必须是文件名数组", code=2)
+    missing = [name for name in _SPM_FILES if name not in copy_files]
+    if missing:
+        raise ConvertError(
+            f"{model_id} 的 weights_source.copy_files 必须包含 {', '.join(missing)}",
+            code=2,
+        )
+    for name in [model_file, *vocab_files, *copy_files]:
+        if name.startswith(("/", "\\")) or ".." in Path(name).parts:
+            raise ConvertError(f"{model_id} 的 weights_source 文件名非法：{name!r}", code=2)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_current(model_dir: Path, key: str, quantization: str) -> bool:
     meta_path = model_dir / METADATA_NAME
     if not meta_path.is_file() or not (model_dir / "model.bin").is_file():
         return False
@@ -468,7 +672,11 @@ def _is_current(model_dir: Path, revision: str, quantization: str) -> bool:
         return False
     if not isinstance(metadata, dict):
         return False
-    return metadata.get("hf_revision") == revision and metadata.get("quantization") == quantization
+    try:
+        current = source_key(metadata)
+    except (KeyError, TypeError):
+        return False
+    return current == key and metadata.get("quantization") == quantization
 
 
 def _require_outputs(directory: Path) -> None:
@@ -498,9 +706,14 @@ def _print_list(manifest: Mapping[str, object]) -> None:
     for entry in models:
         token = entry["src_prefix_token"]
         token_text = "null" if token is None else str(token)
+        source = entry.get("weights_source")
+        if isinstance(source, Mapping):
+            where = f"{source['url']}（sha256 {str(source['sha256'])[:12]}…）"
+        else:
+            where = f"{entry['hf_repo']}@{entry['hf_revision']}"
         _emit(
             f"{entry['id']}\t{entry['src']}→{entry['tgt']}\ttier={entry['tier']}\t"
-            f"{entry['hf_repo']}@{entry['hf_revision']}\tprefix={token_text}"
+            f"{where}\tprefix={token_text}"
         )
 
 

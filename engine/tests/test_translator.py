@@ -138,15 +138,15 @@ def test_pivot_route_length_is_two_and_keeps_sentence_alignment(tmp_path: Path) 
 
 def test_manifest_direct_is_not_replaced_by_english_pivot(tmp_path: Path) -> None:
     _install(tmp_path, "opus-mt-zh-en", "zh", "en")
-    _install(tmp_path, "opus-tatoeba-en-ja", "en", "ja")
+    _install(tmp_path, "opus-mt-eng-jpn-2021-02-18", "en", "ja")
     log: list[str] = []
     translator = _translator(tmp_path, log, {})
 
     with pytest.raises(UnsupportedPairError) as exc_info:
         translator.translate("你好。", "zh", "ja")
 
-    assert exc_info.value.missing_ids == ("opus-mt-tc-big-zh-ja",)
-    assert "opus-mt-tc-big-zh-ja" in str(exc_info.value)
+    assert exc_info.value.missing_ids == ("opus-mt-zho-jpn-tc-big-2022-07-28",)
+    assert "opus-mt-zho-jpn-tc-big-2022-07-28" in str(exc_info.value)
     assert log == []
 
 
@@ -201,7 +201,7 @@ def test_unlisted_pair_reports_manifest_hop_ids(tmp_path: Path) -> None:
     with pytest.raises(UnsupportedPairError) as exc_info:
         translator.translate("안녕하세요.", "ko", "ja")
 
-    assert exc_info.value.missing_ids == ("opus-mt-ko-en", "opus-tatoeba-en-ja")
+    assert exc_info.value.missing_ids == ("opus-mt-ko-en", "opus-mt-eng-jpn-2021-02-18")
 
 
 def test_src_equals_tgt_returns_input_without_loading(tmp_path: Path) -> None:
@@ -332,7 +332,7 @@ def test_translate_many_matches_single_calls_and_fails_fast(tmp_path: Path) -> N
 
     with pytest.raises(UnsupportedPairError) as exc_info:
         translator.translate_many(["", "你好。"], "zh", "ja")
-    assert "opus-mt-tc-big-zh-ja" in exc_info.value.missing_ids
+    assert "opus-mt-zho-jpn-tc-big-2022-07-28" in exc_info.value.missing_ids
 
 
 def test_backend_length_mismatch_raises(tmp_path: Path) -> None:
