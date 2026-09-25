@@ -508,7 +508,7 @@ def test_missing_sentencepiece_cleans_partial(
 def test_runtime_dependencies_do_not_include_convert_stack() -> None:
     text = (ROOT / "engine" / "pyproject.toml").read_text(encoding="utf-8")
     runtime, _, optional = text.partition("[project.optional-dependencies]")
-    assert "dependencies = []" in runtime
+    assert "py3langid>=" in runtime
     runtime_code = "\n".join(
         line for line in runtime.splitlines() if line.strip() and not line.strip().startswith("#")
     )

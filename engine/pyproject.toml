@@ -9,9 +9,12 @@ description = "随译本地翻译引擎骨架。翻译、HTTP 与模型加载由
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-# 运行时依赖故意留空，不引入 torch / transformers。
-# 翻译推理用的 ctranslate2 由后续 Issue 加入运行时；模型转换只放在 convert 组。
-dependencies = []
+# 运行时目前只有语种检测用的 py3langid（BSD-3-Clause，传递依赖 numpy）。
+# 不引入 torch / transformers。翻译推理用的 ctranslate2 由后续 Issue 加入。
+# 模型转换依赖只放在可选组 convert。
+dependencies = [
+  "py3langid>=0.4.0,<0.5",
+]
 
 [project.optional-dependencies]
 dev = [
