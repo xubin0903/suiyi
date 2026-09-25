@@ -98,8 +98,9 @@ jobs:
         # @pytest.mark.model 由 engine/tests/conftest.py 跳过。
         run: pytest engine
 
-      - name: OCR 依赖审计（干净 venv 安装 engine[ocr]，#51）
-        # 确认 OCR 可选组不带进 torch / paddlepaddle / transformers，并在 Windows / Linux 上各识别一次。
+      - name: OCR 依赖审计与模型测试（干净 venv 安装 engine[ocr]，#51 / #52）
+        # 确认 OCR 可选组不带进 torch / paddlepaddle / transformers，并在 Windows / Linux 上各识别一次，
+        # 再用同一批模型跑 OCR 核心的测试。
         # 不从网络下载模型：用 rapidocr wheel 自带的三个 ONNX（与 engine/ocr_model_manifest.json 的
         # 推荐组合同一字节，check 会校验 sha256）。smoke 在进程内禁止任何网络连接。
         # Windows runner 的管道默认 cp1252，中文输出会 UnicodeEncodeError，所以开 UTF-8 模式。
@@ -113,7 +114,8 @@ jobs:
             PY="$RUNNER_TEMP/ocr-venv/bin/python"
           fi
           "$PY" -m pip install --quiet --upgrade pip
-          "$PY" -m pip install --quiet "./engine[ocr]"
+          # 可编辑安装：OcrEngine 默认从仓库里读 engine/ocr_model_manifest.json；dev 组提供 pytest
+          "$PY" -m pip install --quiet -e "./engine[ocr,dev]"
           "$PY" -m pip list
           "$PY" scripts/download_ocr_models.py audit
           MODELS="$RUNNER_TEMP/ocr-models"
@@ -123,6 +125,9 @@ jobs:
           "$PY" scripts/download_ocr_models.py "${OCR_ARGS[@]}" check
           "$PY" -c "import sys; from PIL import Image, ImageDraw, ImageFont; im = Image.new('RGB', (720, 120), 'white'); ImageDraw.Draw(im).text((20, 30), 'Suiyi offline OCR 2026', font=ImageFont.load_default(size=44), fill='black'); im.save(sys.argv[1])" "$RUNNER_TEMP/ocr.png"
           "$PY" scripts/download_ocr_models.py "${OCR_ARGS[@]}" smoke "$RUNNER_TEMP/ocr.png"
+          # #52 OCR 核心：真实模型上的中英日识别、段落合并、竖排顺序、并发（模型测试不允许跳过）
+          SUIYI_MODELS_DIR="$MODELS" SUIYI_OCR_TESTS_REQUIRED=1 "$PY" -m pytest -rs \
+            engine/tests/test_ocr_layout.py engine/tests/test_ocr_engine.py engine/tests/test_ocr_model.py
 
   # 稳定的汇总检查，供将来分支保护使用。
   # engine 矩阵被跳过时本 job 仍成功；矩阵失败或被取消时本 job 失败。
