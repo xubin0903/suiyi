@@ -30,6 +30,13 @@ convert = [
   "transformers>=4.45",
   "torch>=2.2",
 ]
+# 只用于 scripts/eval_samples.py，不进运行时。CI 安装该组以跑指标单测，不下载模型。
+# 日文 BLEU 的 mecab（mecab-python3 / unidic-lite，或 pip install "sacrebleu[ja]"）可选：
+# 未安装时脚本回退 tokenize=char，并在报告中注明。不写入本列表，避免无词典环境安装失败。
+eval = [
+  "sacrebleu>=2.4,<3",
+  "psutil>=5.9",
+]
 
 [tool.hatch.version]
 path = "src/suiyi_engine/__init__.py"

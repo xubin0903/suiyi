@@ -75,7 +75,8 @@ jobs:
           cache-dependency-path: engine/pyproject.toml
 
       - name: 安装开发依赖
-        run: pip install -e "engine[dev]"
+        # eval 只为指标单测提供 sacrebleu / psutil。不设置 SUIYI_MODELS_DIR，不跑真实评测。
+        run: pip install -e "engine[dev,eval]"
 
       - name: ruff check
         run: ruff check engine

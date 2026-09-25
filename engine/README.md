@@ -131,3 +131,17 @@ python scripts/convert_models.py --manifest engine/model_manifest.example.json -
 ```
 
 正式清单 `engine/model_manifest.json` 由模型选型提供。该文件合并前，用 `--manifest` 指向示例清单。权重写入仓库根 `models/`，不要提交。
+
+## 样例评测
+
+`scripts/eval_samples.py` 直接调用 `Translator`，对固定样例集计算 chrF、BLEU、专名保留率和延迟。依赖在可选组 `eval`（`sacrebleu`、`psutil`），不进运行时。用法、指标含义和 mvp 基线见 [评测](../docs/engine/评测.md)。
+
+```bash
+pip install -e "engine[eval]"
+python scripts/eval_samples.py \
+  --samples tests/samples/zh_core_v1.jsonl \
+  --models-dir models \
+  --out reports/eval-2026-09-25
+```
+
+`reports/` 不进 git。CI 会安装 `engine[dev,eval]` 以运行指标单测，但不会下载模型，也不会跑这份脚本。
