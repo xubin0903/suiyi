@@ -1,7 +1,7 @@
 namespace Suiyi.Core.Engine;
 
 /// <summary>
-/// <c>POST /translate</c> 的客户端超时策略（纯函数）。阈值依据
+/// <c>POST /translate</c>（及 OCR 请求，见 <see cref="OcrMs"/>）的客户端超时策略（纯函数）。阈值依据
 /// <c>docs/engine/性能基线.md</c>「给 M2 客户端」：短句 1500 ms，段落与英文中转 3000 ms；
 /// 首次加载模型另给 10000 ms。
 /// </summary>
@@ -127,6 +127,59 @@ public static class TimeoutPolicy
 
         return count;
     }
+
+    /// <summary>
+    /// OCR 请求（<c>/ocr</c>、<c>/ocr_translate</c>）在 OCR 与翻译模型都已加载时的超时（毫秒）。
+    /// 取 Issue #56 建议的 15 s：目前没有 OCR 性能基线（等 #52），框选区域一般不超过一屏，
+    /// OCR 本身按 CPU 秒级估计，其余留给多段翻译（每段已加载时 ≤ <see cref="ParagraphMs"/>）。有了基线后按 P95 调整。
+    /// </summary>
+    public const int OcrMs = 15000;
+
+    /// <summary>
+    /// OCR 模型或候选翻译模型可能需要冷加载时的超时（毫秒）：<see cref="OcrMs"/> 加上 OCR 模型冷加载的余量，
+    /// 再留 <see cref="LazyLoadMs"/> 给翻译模型懒加载。<c>/health</c> 不可知（旧引擎没有 <c>ocr_loaded</c>）时也用此值。
+    /// </summary>
+    public const int OcrColdMs = 30000;
+
+    /// <summary>计算一次 <c>/ocr_translate</c> 的超时（毫秒）。</summary>
+    /// <remarks>
+    /// <see cref="OcrMs"/> 的条件：<paramref name="ocrLoaded"/> 为 <see langword="true"/>，<c>/languages</c> 与已加载模型已知，
+    /// 且 <c>source→target</c> 的候选路线（见 <see cref="CandidateRoutes"/>）和 <c>target→fallbackTarget</c> 路线需要的模型都已加载；
+    /// 否则 <see cref="OcrColdMs"/>。
+    /// </remarks>
+    /// <param name="source">原文语种或 <c>"auto"</c>。</param>
+    /// <param name="target">目标语种。</param>
+    /// <param name="fallbackTarget">次目标；没有时为 <see langword="null"/>。</param>
+    /// <param name="ocrLoaded"><c>/health.ocr_loaded</c>（或之后成功识别过）；未知时为 <see langword="null"/>。</param>
+    /// <param name="languages"><c>/languages</c> 缓存；未知时传 <see langword="null"/>。</param>
+    /// <param name="loadedModels">已加载的翻译模型；未知时传 <see langword="null"/>。</param>
+    public static int ComputeOcrTranslateMilliseconds(
+        string source,
+        string target,
+        string? fallbackTarget,
+        bool? ocrLoaded,
+        LanguagesResponse? languages,
+        IReadOnlyCollection<string>? loadedModels)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        if (ocrLoaded != true || languages is null || loadedModels is null)
+        {
+            return OcrColdMs;
+        }
+
+        var candidates = CandidateRoutes(source, target, languages).ToList();
+        if (!string.IsNullOrWhiteSpace(fallbackTarget))
+        {
+            candidates.AddRange(CandidateRoutes(target, fallbackTarget, languages));
+        }
+
+        return candidates.Any(pair => pair.Models.Any(model => !loadedModels.Contains(model))) ? OcrColdMs : OcrMs;
+    }
+
+    /// <summary>计算一次 <c>/ocr</c>（只识别）的超时（毫秒）：OCR 模型已加载时 <see cref="OcrMs"/>，否则 <see cref="OcrColdMs"/>。</summary>
+    /// <param name="ocrLoaded"><c>/health.ocr_loaded</c>；未知时为 <see langword="null"/>。</param>
+    public static int ComputeOcrMilliseconds(bool? ocrLoaded) => ocrLoaded == true ? OcrMs : OcrColdMs;
 
     private static int ParagraphTimeout(int length)
     {

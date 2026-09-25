@@ -28,6 +28,13 @@ public sealed record HealthResponse
     /// <summary>自开始监听起的秒数。</summary>
     [JsonPropertyName("uptime_s")]
     public double UptimeSeconds { get; init; }
+
+    /// <summary>
+    /// OCR 模型是否已加载（⚠ #53 草案新增字段）。旧版引擎没有该字段时为 <see langword="null"/>。
+    /// 只表示是否已预热，不表示 OCR 可用：模型缺失要到 <c>/ocr_translate</c> 返回 <c>ocr_unavailable</c> 才知道。
+    /// </summary>
+    [JsonPropertyName("ocr_loaded")]
+    public bool? OcrLoaded { get; init; }
 }
 
 /// <summary><c>GET /languages</c> 的响应：当前模型目录实际能翻译的语向。</summary>

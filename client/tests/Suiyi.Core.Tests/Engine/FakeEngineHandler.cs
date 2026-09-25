@@ -5,7 +5,14 @@ using System.Text;
 namespace Suiyi.Core.Tests.Engine;
 
 /// <summary>一次被拦截的请求。</summary>
-internal sealed record RecordedRequest(HttpMethod Method, string Path, string? Body, string? ContentType, string? CharSet);
+internal sealed record RecordedRequest(HttpMethod Method, string Path, string? Body, string? ContentType, string? CharSet)
+{
+    /// <summary>查询串（不含 <c>?</c>）。</summary>
+    public string Query { get; init; } = string.Empty;
+
+    /// <summary>请求体原始字节。</summary>
+    public byte[]? BodyBytes { get; init; }
+}
 
 /// <summary>按路径应答的假 HTTP 处理器，不监听任何端口。</summary>
 internal sealed class FakeEngineHandler : HttpMessageHandler
@@ -40,7 +47,17 @@ internal sealed class FakeEngineHandler : HttpMessageHandler
     public Func<string, CancellationToken, Task<HttpResponseMessage>> Translate { get; set; } =
         (_, _) => Task.FromResult(Json(HttpStatusCode.OK, """{"text":"","source":"en","detected":true,"target":"zh","route":[],"elapsed_ms":0}"""));
 
+    /// <summary>处理 <c>/ocr_translate</c>；参数为请求记录与取消令牌。默认返回空结果。</summary>
+    public Func<RecordedRequest, CancellationToken, Task<HttpResponseMessage>> OcrTranslate { get; set; } =
+        (_, _) => Task.FromResult(Json(HttpStatusCode.OK, """{"lines":[],"paragraphs":[],"text":"","image":{"width":10,"height":10},"translation":{"results":[]},"elapsed_ms":{"ocr":1,"translate":0,"total":1}}"""));
+
+    /// <summary>处理 <c>/ocr</c>。</summary>
+    public Func<RecordedRequest, CancellationToken, Task<HttpResponseMessage>> Ocr { get; set; } =
+        (_, _) => Task.FromResult(Json(HttpStatusCode.OK, """{"lines":[],"paragraphs":[],"text":"","image":{"width":10,"height":10},"elapsed_ms":1}"""));
+
     public IReadOnlyList<RecordedRequest> Requests => [.. _requests];
+
+    public IReadOnlyList<RecordedRequest> OcrRequests => [.. _requests.Where(r => r.Path is "/ocr_translate" or "/ocr")];
 
     public IReadOnlyList<RecordedRequest> TranslateRequests => [.. _requests.Where(r => r.Path == "/translate")];
 
@@ -53,16 +70,24 @@ internal sealed class FakeEngineHandler : HttpMessageHandler
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+        var bytes = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+        var body = bytes is null ? null : Encoding.UTF8.GetString(bytes);
         var path = request.RequestUri!.AbsolutePath;
-        _requests.Enqueue(new RecordedRequest(
+        var recorded = new RecordedRequest(
             request.Method,
             path,
             body,
             request.Content?.Headers.ContentType?.MediaType,
-            request.Content?.Headers.ContentType?.CharSet));
+            request.Content?.Headers.ContentType?.CharSet)
+        {
+            Query = request.RequestUri.Query.TrimStart('?'),
+            BodyBytes = bytes,
+        };
+        _requests.Enqueue(recorded);
         return path switch
         {
+            "/ocr_translate" => await OcrTranslate(recorded, cancellationToken),
+            "/ocr" => await Ocr(recorded, cancellationToken),
             "/health" => Json(HttpStatusCode.OK, Health),
             "/languages" => Json(HttpStatusCode.OK, Languages),
             "/translate" => await Translate(body ?? string.Empty, cancellationToken),
@@ -77,6 +102,9 @@ internal sealed class HangingTranslate
     private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public Task Started => _started.Task;
+
+    public Task<HttpResponseMessage> HandleRecorded(RecordedRequest _, CancellationToken cancellationToken) =>
+        Handle(string.Empty, cancellationToken);
 
     public async Task<HttpResponseMessage> Handle(string _, CancellationToken cancellationToken)
     {
