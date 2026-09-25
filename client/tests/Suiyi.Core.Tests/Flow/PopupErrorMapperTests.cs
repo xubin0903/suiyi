@@ -7,7 +7,7 @@ namespace Suiyi.Core.Tests.Flow;
 public sealed class PopupErrorMapperTests
 {
     [Theory]
-    [InlineData(EngineErrorKind.Unavailable, PopupErrorKind.ServiceUnavailable, "翻译服务未运行或已退出")]
+    [InlineData(EngineErrorKind.Unavailable, PopupErrorKind.ServiceUnavailable, "翻译服务未运行或已退出，点「重试」会重启翻译服务")]
     [InlineData(EngineErrorKind.Timeout, PopupErrorKind.Timeout, "翻译超时，请重试")]
     [InlineData(EngineErrorKind.UnsupportedPair, PopupErrorKind.MissingModels, "未安装该语向的模型")]
     [InlineData(EngineErrorKind.TextTooLong, PopupErrorKind.TextTooLong, "文本过长")]
