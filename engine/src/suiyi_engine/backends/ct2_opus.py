@@ -13,7 +13,13 @@ import re
 from collections.abc import Sequence
 from typing import Protocol
 
-from suiyi_engine.registry import ModelRecord
+from suiyi_engine.registry import (
+    DEFAULT_BEAM_SIZE,
+    DEFAULT_INTER_THREADS,
+    DEFAULT_MAX_BATCH_SIZE,
+    DEFAULT_MAX_DECODING_LENGTH,
+    ModelRecord,
+)
 
 __all__ = [
     "Ct2OpusBackend",
@@ -107,11 +113,11 @@ class Ct2OpusBackend:
         *,
         device: str = "cpu",
         compute_type: str = "int8",
-        inter_threads: int = 1,
+        inter_threads: int = DEFAULT_INTER_THREADS,
         intra_threads: int = 1,
-        beam_size: int = 2,
-        max_batch_size: int = 32,
-        max_decoding_length: int = 512,
+        beam_size: int = DEFAULT_BEAM_SIZE,
+        max_batch_size: int = DEFAULT_MAX_BATCH_SIZE,
+        max_decoding_length: int = DEFAULT_MAX_DECODING_LENGTH,
     ) -> None:
         self._record = record
         self._device = _require_text("device", device)

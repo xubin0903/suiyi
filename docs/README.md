@@ -25,7 +25,7 @@
 
 ## 引擎文档
 
-[docs/engine/](engine/README.md) 存放引擎设计、HTTP API、模型清单与第三方模型署名。已有 [模型目录约定](engine/模型目录约定.md)（转换脚本的输出布局）、[语种检测](engine/语种检测.md)、[翻译核心](engine/翻译核心.md) 和 [HTTP API](engine/HTTP-API.md)。其余文档由后续 Issue 加在该目录，不在调研目录里另起一份。
+[docs/engine/](engine/README.md) 存放引擎设计、HTTP API、模型清单与第三方模型署名。已有 [模型目录约定](engine/模型目录约定.md)（转换脚本的输出布局）、[语种检测](engine/语种检测.md)、[翻译核心](engine/翻译核心.md)、[HTTP API](engine/HTTP-API.md) 和 [性能基线](engine/性能基线.md)。其余文档由后续 Issue 加在该目录，不在调研目录里另起一份。
 
 ## 代码目录说明
 

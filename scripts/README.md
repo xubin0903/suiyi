@@ -7,3 +7,4 @@
 | 脚本 | 用途 |
 |------|------|
 | `scripts/convert_models.py` | 按清单把 OPUS-MT 下载并转为 CTranslate2。说明见 [模型目录约定](../docs/engine/模型目录约定.md)。 |
+| `scripts/bench_service.py` | 经本机 HTTP 服务测量冷启动、延迟与内存。说明见 [性能基线](../docs/engine/性能基线.md)。 |

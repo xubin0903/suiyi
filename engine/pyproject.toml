@@ -36,6 +36,10 @@ convert = [
   "transformers>=4.45",
   "torch>=2.2",
 ]
+# 只用于 scripts/bench_service.py。不进运行时。CI 不安装这个组，也不跑基准。
+bench = [
+  "psutil>=5.9",
+]
 
 [tool.hatch.version]
 path = "src/suiyi_engine/__init__.py"
