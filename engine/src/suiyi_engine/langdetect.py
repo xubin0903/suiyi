@@ -2,12 +2,14 @@
 
 先按文字（Unicode 脚本、中英混排占比、少量拉丁正字法与短词表）判断，
 判断不了的拉丁文本再交给统计模型。统计模型懒加载，且进程内只有一份。
+加载约需 0.4～0.5 秒，服务启动时用 :func:`warmup` 提前加载，避免落在第一次请求上。
 
 纯汉字日语（如「東京大学」）没有假名，会判成 ``zh``。这是规则层的已知局限。
 """
 
 import re
 import threading
+import time
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -297,6 +299,24 @@ def _latin_phrase_key(text: str) -> str:
     decomposed = unicodedata.normalize("NFD", text)
     stripped = "".join(char for char in decomposed if unicodedata.category(char) != "Mn")
     return " ".join(_LATIN_WORD.findall(stripped)).lower()
+
+
+def warmup() -> float:
+    """加载统计模型并跑一次检测，返回耗时（毫秒）。
+
+    ``detect`` 第一次走到统计模型时才加载 py3langid 的模型（约 0.4～0.5 秒），
+    ``serve`` 在开始监听前调用本函数，把这段时间挪到启动阶段。线程安全，重复调用几乎不耗时。
+    """
+
+    start = time.perf_counter()
+    _model_detect("warm up the language identifier", set(_LATIN_MODEL_LANGS))
+    return (time.perf_counter() - start) * 1000.0
+
+
+def is_warm() -> bool:
+    """统计模型是否已经加载。"""
+
+    return _identifier is not None
 
 
 def _get_identifier():

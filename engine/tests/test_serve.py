@@ -400,3 +400,84 @@ def _ipv4_listeners(port: int) -> set[str]:
             continue
         found.add(socket.inet_ntoa(bytes.fromhex(ip_hex)[::-1]))
     return found
+
+
+def test_detector_is_warmed_before_listening(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    order: list[str] = []
+
+    def fake_warmup() -> float:
+        order.append("warmup")
+        return 123.4
+
+    def fake_uvicorn(*_args: object, **_kwargs: object) -> None:
+        order.append("listen")
+
+    monkeypatch.setattr("suiyi_engine.serve.langdetect.warmup", fake_warmup)
+    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fake_uvicorn)
+    code = run_server(
+        host="127.0.0.1",
+        port=_free_port(),
+        models_dir=tmp_path,
+        preload_pairs=[],
+        max_text_chars=100,
+        dev=False,
+    )
+    assert code == 0
+    assert order == ["warmup", "listen"]
+    assert "语种检测已预热 123 ms" in capsys.readouterr().out
+
+
+def test_detector_warmup_failure_does_not_block_startup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    listened: list[bool] = []
+
+    def broken() -> float:
+        raise RuntimeError("model file missing")
+
+    monkeypatch.setattr("suiyi_engine.serve.langdetect.warmup", broken)
+    monkeypatch.setattr(
+        "suiyi_engine.serve._serve_uvicorn", lambda *_a, **_k: listened.append(True)
+    )
+    code = run_server(
+        host="127.0.0.1",
+        port=_free_port(),
+        models_dir=tmp_path,
+        preload_pairs=[],
+        max_text_chars=100,
+        dev=False,
+    )
+    assert code == 0
+    assert listened == [True]
+    captured = capsys.readouterr()
+    assert "语种检测预热失败" in captured.err
+    assert "model file missing" in captured.err
+    assert "语种检测已预热" not in captured.out
+
+
+def test_port_in_use_skips_detector_warmup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def boom() -> float:
+        raise AssertionError("端口被占用时不应预热")
+
+    monkeypatch.setattr("suiyi_engine.serve.langdetect.warmup", boom)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    try:
+        code = run_server(
+            host="127.0.0.1",
+            port=int(sock.getsockname()[1]),
+            models_dir=tmp_path,
+            preload_pairs=[],
+            max_text_chars=10,
+            dev=False,
+        )
+    finally:
+        sock.close()
+    assert code == 1

@@ -12,6 +12,7 @@ import socket
 import sys
 from pathlib import Path
 
+from suiyi_engine import langdetect
 from suiyi_engine.api import ApiSettings, create_app
 from suiyi_engine.errors import UnsupportedPairError
 from suiyi_engine.registry import (
@@ -177,18 +178,34 @@ def run_server(
         print(str(exc), file=sys.stderr)
         return exc.code
 
+    detector_ms = warmup_detector()
+
     app = create_app(
         translator,
         None,
         ApiSettings(max_text_chars=max_text_chars, dev=dev),
     )
-    _print_startup(host, port, translator, decode)
+    _print_startup(host, port, translator, decode, detector_ms)
     try:
         _serve_uvicorn(app, host, port)
     except OSError as exc:
         print(f"无法在 {host}:{port} 启动服务：{exc}", file=sys.stderr)
         return 1
     return 0
+
+
+def warmup_detector() -> float | None:
+    """开始监听前加载语种检测的统计模型，返回耗时毫秒；失败时返回 ``None``。
+
+    不预热的话，第一次需要统计模型的 ``source=auto`` 请求要多等约 0.5 秒，
+    而这段时间不在 ``elapsed_ms`` 里（见 #40）。预热失败不阻止启动，检测会在第一次使用时再加载。
+    """
+
+    try:
+        return langdetect.warmup()
+    except Exception as exc:  # 预热失败只告警，不影响翻译
+        print(f"语种检测预热失败，将在首次使用时加载：{exc}", file=sys.stderr, flush=True)
+        return None
 
 
 def _serve_uvicorn(app: object, host: str, port: int) -> None:
@@ -225,6 +242,7 @@ def _print_startup(
     port: int,
     translator: Translator,
     decode: dict[str, int],
+    detector_ms: float | None = None,
 ) -> None:
     print(f"监听 {_listen_url(host, port)}", flush=True)
     print(f"模型目录 {translator.registry.models_dir}", flush=True)
@@ -236,6 +254,8 @@ def _print_startup(
         f"max_batch_size={decode['max_batch_size']}",
         flush=True,
     )
+    if detector_ms is not None:
+        print(f"语种检测已预热 {detector_ms:.0f} ms", flush=True)
 
 
 def _listen_url(host: str, port: int) -> str:

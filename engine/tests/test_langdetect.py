@@ -400,3 +400,31 @@ def test_optional_zh_core_sample_accuracy() -> None:
     if checked == 0:
         pytest.skip("样例集里没有可检查的中英日句子")
     assert not misses, misses
+
+
+def test_warmup_loads_model_once_and_keeps_results() -> None:
+    script = """
+import time
+import suiyi_engine.langdetect as langdetect
+assert not langdetect.is_warm()
+first = langdetect.warmup()
+assert langdetect.is_warm()
+identifier = langdetect._identifier
+second = langdetect.warmup()
+assert langdetect._identifier is identifier
+assert second < first
+start = time.perf_counter()
+result = langdetect.detect("Good morning, everyone.")
+detect_ms = (time.perf_counter() - start) * 1000
+assert result.lang == "en" and result.method == "model", result
+assert detect_ms < 200, detect_ms
+print(f"{first:.1f} {second:.3f} {detect_ms:.3f}")
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert completed.returncode == 0, completed.stderr
