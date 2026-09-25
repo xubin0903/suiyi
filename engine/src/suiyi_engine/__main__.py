@@ -1,9 +1,9 @@
-"""`python -m suyi_engine --version` 打印版本后退出。"""
+"""`python -m suiyi_engine --version` 打印版本后退出。"""
 
 import argparse
 import sys
 
-from suyi_engine import __version__
+from . import __version__
 
 
 def main(argv: list[str] | None = None) -> int:

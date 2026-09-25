@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from suyi_engine import __version__
+from suiyi_engine import __version__
 
 
 def test_version_is_scaffold() -> None:
