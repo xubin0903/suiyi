@@ -36,10 +36,13 @@ public partial class App : Application
     private TrayController? _tray;
     private NotifyIconTrayView? _trayView;
     private DispatcherTimer? _trayDemoTimer;
+    private FileLogger? _engineLog;
+    private JobObject? _engineJob;
+    private EngineClient? _engineClient;
+    private EngineSupervisor? _engine;
     private DispatcherTimer? _popupDemoTimer;
     private PopupViewModel? _popup;
     private PopupWindow? _popupWindow;
-    private EngineClient? _engine;
     private Win32ClipboardSource? _clipboardSource;
     private ClipboardMonitor? _clipboardMonitor;
     private Win32HotkeyRegistrar? _hotkeyRegistrar;
@@ -93,7 +96,6 @@ public partial class App : Application
         WireTray(_tray, _clipboardMonitor);
         _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? HotkeyParser.DefaultTranslate);
 
-        _engine = new EngineClient();
         if (e.Args.Contains("--popup-demo"))
         {
             StartPopupDemo(_popup);
@@ -105,7 +107,7 @@ public partial class App : Application
         }
         else
         {
-            _ = ProbeEngineAsync();
+            StartEngine(_tray);
         }
     }
 
@@ -113,6 +115,14 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayDemoTimer?.Stop();
+
+        // 先结束托管的翻译服务（外部服务不动），再关闭 Job 句柄兜底。
+        if (_engine is { } engine && !Task.Run(engine.StopAsync).Wait(TimeSpan.FromSeconds(3)))
+        {
+            _logger?.Warn("停止翻译服务超时");
+        }
+
+        _engineJob?.Dispose();
         _popupDemoTimer?.Stop();
         _popupWindow?.CloseForExit();
         _popup?.Dispose();
@@ -120,7 +130,8 @@ public partial class App : Application
         _hotkeyRegistrar?.Dispose();
         _clipboardMonitor?.Dispose();
         _clipboardSource?.Dispose();
-        _engine?.Dispose();
+        _engineClient?.Dispose();
+        _engineLog?.Dispose();
         _activation?.Dispose();
         _trayView?.Dispose();
         _instanceGuard?.Dispose();
@@ -150,11 +161,10 @@ public partial class App : Application
             }
         };
 
-        // 引擎进程管理（#32）接入前只重新探测一次服务状态。
         tray.RestartEngineRequested += (_, _) =>
         {
-            _logger?.Info("托盘：重启翻译服务（#32 接入前仅重新探测）");
-            _ = ProbeEngineAsync();
+            _logger?.Info("托盘：重启翻译服务");
+            _ = _engine?.RestartAsync();
         };
 
         tray.OpenSettingsRequested += (_, _) => OpenSettings();
@@ -203,28 +213,39 @@ public partial class App : Application
         _popupDemoTimer.Start();
     }
 
-    private async Task ProbeEngineAsync()
+    private void StartEngine(TrayController tray)
     {
-        var tray = _tray!;
-        tray.SetStatus(TrayStatus.Preparing);
+        // 翻译服务进程（#32）。配置暂取默认值 + SUIYI_ENGINE_* 环境变量，设置（#27）接入后改为从设置映射。
+        var options = EngineOptionsOverrides.Apply(new EngineOptions(), Environment.GetEnvironmentVariable);
+        _engineLog = new FileLogger(LogPaths.ResolveDirectory(), LogPaths.EnginePrefix);
         try
         {
-            var health = await _engine!.GetHealthAsync().ConfigureAwait(true);
-            _logger?.Info($"翻译服务状态：{health.Status}");
-            tray.SetStatus(TrayStatus.Ready);
+            _engineJob = JobObject.CreateKillOnClose();
         }
-        catch (EngineException ex)
+        catch (Win32Exception ex)
         {
-            _logger?.Warn($"翻译服务不可用：{ex.Message}");
-            tray.SetStatus(TrayStatus.Error, ex.UserMessage);
+            _logger?.Warn("无法创建 Job Object，客户端被强杀时翻译服务可能残留", ex);
         }
-#pragma warning disable CA1031 // 探测失败只影响托盘状态，不能让异常逃逸到消息循环。
-        catch (Exception ex)
-#pragma warning restore CA1031
+
+        _engineClient = new EngineClient(options.Port);
+        _engine = new EngineSupervisor(
+            options,
+            new ProcessEngineLauncher(process => _engineJob?.Assign(process)),
+            new EngineClientEndpoint(_engineClient),
+            logger: _logger,
+            outputLogger: _engineLog);
+
+        // 状态事件在线程池线程上触发，切回 UI 线程更新托盘。
+        _engine.StateChanged += (_, change) => Dispatcher.BeginInvoke(() =>
         {
-            _logger?.Error("探测翻译服务时出现异常", ex);
-            tray.SetStatus(TrayStatus.Error, "无法连接翻译服务");
-        }
+            var (status, detail) = EngineTrayStatus.Map(change);
+            tray.SetStatus(status, detail);
+            if (EngineTrayStatus.ShouldNotify(change))
+            {
+                tray.ShowNotification(AppTitle, change.Detail);
+            }
+        });
+        _engine.Start();
     }
 
     private void StartTrayDemo(TrayController tray)
