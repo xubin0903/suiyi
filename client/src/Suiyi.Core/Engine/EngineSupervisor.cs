@@ -12,7 +12,7 @@ namespace Suiyi.Core.Engine;
 /// <b>事件在线程池线程上触发</b>，界面需自行切回 UI 线程。</para>
 /// <para>进程启动器、HTTP 探测、时钟均通过构造参数注入，单测用假实现与 FakeTimeProvider。</para>
 /// </remarks>
-public sealed class EngineSupervisor : IAsyncDisposable
+public sealed class EngineSupervisor : IEngineStatus, IAsyncDisposable
 {
     private readonly EngineOptions _options;
     private readonly IEngineProcessLauncher _launcher;
@@ -32,6 +32,7 @@ public sealed class EngineSupervisor : IAsyncDisposable
     private EngineOwnership _ownership = EngineOwnership.None;
     private EngineFailure? _failure;
     private EngineCommand? _lastCommand;
+    private TaskCompletionSource _wakeUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>创建监管器。</summary>
     /// <param name="options">配置。</param>
@@ -164,6 +165,13 @@ public sealed class EngineSupervisor : IAsyncDisposable
     /// 最多等待 <see cref="EngineOptions.StopTimeout"/>；外部服务不动。
     /// </summary>
     public Task StopAsync() => StopCoreAsync(raiseStopped: true);
+
+    /// <summary>请求看门狗立即做一次健康检查（不等 <see cref="EngineOptions.WatchdogInterval"/>）。未就绪时无效果。</summary>
+    public void RequestHealthCheck()
+    {
+        var previous = Interlocked.Exchange(ref _wakeUp, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+        previous.TrySetResult();
+    }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -300,7 +308,7 @@ public sealed class EngineSupervisor : IAsyncDisposable
         var failures = 0;
         while (failures < _options.WatchdogFailureThreshold)
         {
-            await Task.Delay(_options.WatchdogInterval, _timeProvider, ct).ConfigureAwait(false);
+            await WatchdogDelayAsync(null, ct).ConfigureAwait(false);
             if (await _endpoint.IsHealthyAsync(ct).ConfigureAwait(false))
             {
                 failures = 0;
@@ -415,8 +423,7 @@ public sealed class EngineSupervisor : IAsyncDisposable
         var failures = 0;
         while (true)
         {
-            await Task.WhenAny(exitTask, Task.Delay(_options.WatchdogInterval, _timeProvider, ct)).ConfigureAwait(false);
-            ct.ThrowIfCancellationRequested();
+            await WatchdogDelayAsync(exitTask, ct).ConfigureAwait(false);
             if (exitTask.IsCompleted || process.HasExited)
             {
                 var code = process.ExitCode;
@@ -444,6 +451,17 @@ public sealed class EngineSupervisor : IAsyncDisposable
                 return Invariant($"健康检查连续 {failures} 次失败，已结束无响应的服务");
             }
         }
+    }
+
+    /// <summary>等待看门狗间隔，或进程退出，或 <see cref="RequestHealthCheck"/>，先到者为准。</summary>
+    private async Task WatchdogDelayAsync(Task? exitTask, CancellationToken ct)
+    {
+        var wake = Volatile.Read(ref _wakeUp).Task;
+        using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var delay = Task.Delay(_options.WatchdogInterval, _timeProvider, delayCts.Token);
+        await (exitTask is null ? Task.WhenAny(delay, wake) : Task.WhenAny(delay, wake, exitTask)).ConfigureAwait(false);
+        delayCts.Cancel();
+        ct.ThrowIfCancellationRequested();
     }
 
     private void StartWarmUp(CancellationToken ct)

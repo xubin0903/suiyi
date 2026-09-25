@@ -356,4 +356,16 @@ public sealed class ClipboardMonitorTests : IDisposable
         // 第一次读取遇到占用，重试时剪贴板已是第二次内容；随后的重跑因序号未变而跳过。
         Assert.Equal("第二次复制的内容", _captured[0].Text);
     }
+
+    [Fact]
+    public void Captured_CarriesTimestampOfClipboardChange()
+    {
+        var changedAt = _clock.GetTimestamp();
+
+        CopyAndSettle("A sentence to translate");
+        WaitUntil(() => _captured.Count == 1);
+
+        Assert.Equal(changedAt, _captured[0].Timestamp);
+        Assert.Equal(Debounce, _clock.GetElapsedTime(_captured[0].Timestamp));
+    }
 }

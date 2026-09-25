@@ -1,0 +1,32 @@
+using Suiyi.Core.Engine;
+using Suiyi.Core.Popup;
+
+namespace Suiyi.Core.Flow;
+
+/// <summary><see cref="EngineException"/> → 浮窗错误（纯函数）。</summary>
+public static class PopupErrorMapper
+{
+    /// <summary>翻译服务启动失败时的浮窗提示。</summary>
+    public const string EngineFailedMessage = "翻译服务启动失败，可在托盘菜单「重启翻译服务」重试";
+
+    /// <summary>映射引擎错误。</summary>
+    public static PopupError Map(EngineException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        return exception.Kind switch
+        {
+            EngineErrorKind.Unavailable => new PopupError(PopupErrorKind.ServiceUnavailable),
+            EngineErrorKind.Timeout => new PopupError(PopupErrorKind.Timeout),
+            EngineErrorKind.UnsupportedPair => new PopupError(PopupErrorKind.MissingModels)
+            {
+                MissingModels = exception.MissingModels,
+            },
+            EngineErrorKind.TextTooLong => new PopupError(PopupErrorKind.TextTooLong) { Limit = exception.Limit, Length = exception.Length },
+            EngineErrorKind.DetectFailed => new PopupError(PopupErrorKind.DetectFailed),
+            _ => new PopupError(PopupErrorKind.Other) { Detail = exception.UserMessage },
+        };
+    }
+
+    /// <summary>服务处于 <see cref="EngineState.Failed"/> 时的浮窗错误。</summary>
+    public static PopupError EngineFailed() => new(PopupErrorKind.ServiceUnavailable) { Detail = EngineFailedMessage };
+}

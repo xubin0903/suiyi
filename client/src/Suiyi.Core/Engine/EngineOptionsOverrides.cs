@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Suiyi.Core.Engine;
 
 /// <summary>
-/// 开发用的环境变量覆盖。设置（#27）接入前，手测可以用它们代替 <c>engine.*</c>：
+/// 开发用的环境变量覆盖，优先于设置文件里的 <c>engine.*</c>（<c>EngineSettings.ToEngineOptions</c> 之后应用），便于临时换端口、解释器等：
 /// <c>SUIYI_ENGINE_PORT</c>、<c>SUIYI_ENGINE_PRELOAD</c>、<c>SUIYI_ENGINE_PYTHON</c>、
 /// <c>SUIYI_ENGINE_MODELS_DIR</c>、<c>SUIYI_ENGINE_COMMAND</c>。
 /// </summary>

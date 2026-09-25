@@ -27,6 +27,7 @@ public sealed class ClipboardMonitor : IDisposable
     private bool _paused;
     private bool _processing;
     private bool _rerun;
+    private long _lastChangeTimestamp;
     private uint? _lastSequence;
     private bool _disposed;
 
@@ -221,6 +222,7 @@ public sealed class ClipboardMonitor : IDisposable
 
     private void OnSourceChanged(object? sender, EventArgs e)
     {
+        Interlocked.Exchange(ref _lastChangeTimestamp, _timeProvider.GetTimestamp());
         if (IsRunning)
         {
             _debouncer.Signal();
@@ -332,7 +334,7 @@ public sealed class ClipboardMonitor : IDisposable
         }
 
         _logger.Info($"剪贴板：接受 {result.Length} 字，耗时 {FormatMs(started)} ms");
-        TextCaptured?.Invoke(this, new ClipboardTextCapturedEventArgs(result.Text!, ClipboardTrigger.Monitor));
+        TextCaptured?.Invoke(this, new ClipboardTextCapturedEventArgs(result.Text!, ClipboardTrigger.Monitor, Interlocked.Read(ref _lastChangeTimestamp)));
     }
 
     private void Reject(RejectReason reason, int length, long started)
