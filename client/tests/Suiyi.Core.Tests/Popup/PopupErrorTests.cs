@@ -11,7 +11,7 @@ public sealed class PopupErrorTests
     [InlineData(PopupErrorKind.DetectFailed, "无法识别原文语种，请点击语种标签手动指定")]
     [InlineData(PopupErrorKind.TextTooLong, "文本过长")]
     [InlineData(PopupErrorKind.Other, "翻译失败，请重试")]
-    [InlineData(PopupErrorKind.EngineStartTimeout, "翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」")]
+    [InlineData(PopupErrorKind.EngineStartTimeout, "翻译服务启动超时，点「重试」会重启翻译服务")]
     public void DefaultMessages(PopupErrorKind kind, string expected)
     {
         Assert.Equal(expected, new PopupError(kind).Message);

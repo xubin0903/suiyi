@@ -206,7 +206,7 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
         Assert.False(_flow.IsWaitingForEngine);
         Assert.Equal(PopupKind.Error, _popup.Kind);
         Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
-        Assert.Equal("翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」", _popup.ErrorMessage);
+        Assert.Equal("翻译服务启动超时，点「重试」会重启翻译服务", _popup.ErrorMessage);
         Assert.True(_popup.CanRetry);
 
         _engine.Raise(EngineState.Ready); // 超时后才就绪：不再自动翻译，等用户重试
@@ -417,7 +417,9 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
         _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
         Assert.Equal(PopupKind.Preparing, _popup.Kind);
 
-        _time.Advance(TimeSpan.FromSeconds(30));
+        _time.Advance(TimeSpan.FromSeconds(4.9));
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        _time.Advance(TimeSpan.FromSeconds(0.1));
 
         Assert.Equal(PopupKind.Error, _popup.Kind);
         Assert.Equal(PopupErrorKind.ServiceUnavailable, _popup.Error!.Kind);
@@ -434,6 +436,221 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
 
         Assert.Equal(PopupErrorMapper.EngineFailedMessage, _popup.ErrorMessage);
         Assert.False(_flow.IsWaitingForEngine);
+    }
+
+    // ---- 重试时重启服务 ----
+
+    [Fact]
+    public void Failed_Retry_RestartsEngine_ThenTranslatesWhenReady()
+    {
+        _engine.State = EngineState.Failed;
+        _engine.OnRestart = () => _engine.Raise(EngineState.Starting);
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        Assert.Equal(PopupErrorMapper.EngineFailedMessage, _popup.ErrorMessage);
+        Assert.Equal(0, _engine.Restarts); // 普通触发不重启，只提示
+
+        _popup.RequestRetry();
+
+        Assert.Equal(1, _engine.Restarts);
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        Assert.True(_flow.IsWaitingForEngine);
+
+        _engine.Raise(EngineState.Ready);
+        _translator.Complete(0);
+
+        Assert.Equal("Hello", Assert.Single(_translator.Calls).Text);
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+    }
+
+    [Fact]
+    public void Failed_Retry_RestartFailsAgain_ShowsError()
+    {
+        _engine.State = EngineState.Failed;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _popup.RequestRetry();
+
+        _engine.Raise(EngineState.Starting);
+        _engine.Raise(EngineState.Failed, new EngineFailure(EngineFailureReason.ExitedBeforeReady, "缺少模型"));
+
+        Assert.Equal(PopupErrorMapper.EngineFailedMessage, _popup.ErrorMessage);
+        Assert.Empty(_translator.Calls);
+    }
+
+    [Fact]
+    public void EngineStartupTimeout_Retry_RestartsEngine_ThenTranslates()
+    {
+        _engine.State = EngineState.Starting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
+        _engine.Raise(EngineState.Failed, new EngineFailure(EngineFailureReason.StartupTimeout, "启动超时"));
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+
+        _popup.RequestRetry();
+        Assert.Equal(1, _engine.Restarts);
+        _engine.Raise(EngineState.Starting);
+        _engine.Raise(EngineState.Ready);
+        _translator.Complete(0);
+
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+    }
+
+    [Fact]
+    public void FlowStartTimeout_Retry_RestartsEngineEvenIfStillStarting()
+    {
+        _engine.State = EngineState.Restarting;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
+        _time.Advance(TimeSpan.FromSeconds(30));
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+
+        _popup.RequestRetry();
+
+        Assert.Equal(1, _engine.Restarts);
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+    }
+
+    [Fact]
+    public void OtherErrors_Retry_DoesNotRestart()
+    {
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Timeout, "slow"));
+
+        _popup.RequestRetry();
+
+        Assert.Equal(0, _engine.Restarts);
+        Assert.Equal(2, _translator.Calls.Count);
+    }
+
+    [Fact]
+    public void RetryWhileRestartInProgress_RestartsOnlyOnce()
+    {
+        _engine.State = EngineState.Failed; // 重启请求发出后状态暂未变化
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+
+        _flow.Retry();
+        _flow.Retry();
+        _flow.Retry();
+
+        Assert.Equal(1, _engine.Restarts);
+        Assert.True(_flow.IsWaitingForEngine);
+    }
+
+    [Fact]
+    public void RestartSettled_NextFailureRetryRestartsAgain()
+    {
+        _engine.State = EngineState.Failed;
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _flow.Retry();
+        _engine.Raise(EngineState.Starting);
+        _engine.Raise(EngineState.Failed, new EngineFailure(EngineFailureReason.StartupTimeout, "启动超时"));
+
+        _flow.Retry();
+
+        Assert.Equal(2, _engine.Restarts);
+    }
+
+    [Fact]
+    public void RestartThrows_IsLoggedAndCanBeRetried()
+    {
+        var engine = new ThrowingRestartEngine { State = EngineState.Failed };
+        using var popup = new PopupViewModel(timeProvider: _time);
+        using var flow = new TranslateFlowCoordinator(_translator, engine, popup, _tray, _logger, _time);
+        flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+
+        flow.Retry();
+        flow.Retry();
+
+        Assert.Equal(2, engine.Restarts);
+        Assert.Contains(_logger.Messages, m => m.Contains("重启翻译服务失败", StringComparison.Ordinal));
+    }
+
+    // ---- 连接被拒后的确认 ----
+
+    [Fact]
+    public void Unavailable_HealthCheckTurnsRestarting_Waits30Seconds()
+    {
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+        Assert.Equal(1, _engine.HealthChecks);
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+
+        _time.Advance(TimeSpan.FromSeconds(2));
+        _engine.Raise(EngineState.Restarting); // 监管器察觉进程已退出
+
+        _time.Advance(TimeSpan.FromSeconds(10)); // 超过 5 s 确认期，仍在等
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        Assert.True(_flow.IsWaitingForEngine);
+
+        _engine.Raise(EngineState.Ready);
+        _translator.Complete(1);
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+    }
+
+    [Fact]
+    public void Unavailable_RestartingButNeverReady_TimesOutAfter30Seconds()
+    {
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+        _time.Advance(TimeSpan.FromSeconds(1));
+        _engine.Raise(EngineState.Restarting);
+
+        _time.Advance(TimeSpan.FromSeconds(29.9));
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        _time.Advance(TimeSpan.FromSeconds(0.1));
+
+        Assert.Equal(PopupErrorKind.EngineStartTimeout, _popup.Error!.Kind);
+    }
+
+    [Fact]
+    public void Unavailable_ReadyEventWithinConfirmWindow_Retranslates()
+    {
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+
+        _engine.Raise(EngineState.Ready); // 例如外部服务被换成自己拉起的服务
+
+        Assert.Equal(2, _translator.Calls.Count);
+    }
+
+    [Fact]
+    public void Unavailable_StateChangedWithoutEventWithinWindow_FallsBackToReadyWait()
+    {
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+        _engine.State = EngineState.Starting; // 没有收到事件（例如事件还在排队）
+
+        _time.Advance(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(PopupKind.Preparing, _popup.Kind);
+        Assert.True(_flow.IsWaitingForEngine);
+    }
+
+    [Fact]
+    public void Unavailable_ConfirmTimeout_IsConfigurable()
+    {
+        using var popup = new PopupViewModel(timeProvider: _time);
+        using var flow = new TranslateFlowCoordinator(
+            _translator, _engine, popup, _tray, timeProvider: _time, options: new TranslateFlowOptions { UnavailableConfirmTimeout = TimeSpan.FromSeconds(2) });
+        flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+
+        _time.Advance(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(PopupErrorKind.ServiceUnavailable, popup.Error!.Kind);
+        Assert.Equal(TimeSpan.FromSeconds(5), new TranslateFlowOptions().UnavailableConfirmTimeout);
+    }
+
+    [Fact]
+    public void Unavailable_UserClosesPopupDuringConfirm_Cancels()
+    {
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, new EngineException(EngineErrorKind.Unavailable, "refused"));
+
+        _popup.Close(PopupCloseReason.User);
+        _engine.Raise(EngineState.Restarting);
+        _engine.Raise(EngineState.Ready);
+        _time.Advance(TimeSpan.FromSeconds(10));
+
+        Assert.Single(_translator.Calls);
+        Assert.False(_popup.IsVisible);
     }
 
     // ---- 最新优先 ----
@@ -719,6 +936,32 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => new TranslateFlowCoordinator(_translator, null!, _popup, _tray));
         Assert.Throws<ArgumentNullException>(() => new TranslateFlowCoordinator(_translator, _engine, null!, _tray));
         Assert.Throws<ArgumentNullException>(() => new TranslateFlowCoordinator(_translator, _engine, _popup, null!));
+    }
+
+    /// <summary>重启直接抛异常的服务状态。</summary>
+    private sealed class ThrowingRestartEngine : IEngineStatus
+    {
+        public event EventHandler<EngineStateChangedEventArgs>? StateChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public EngineState State { get; set; }
+
+        public EngineFailure? Failure => null;
+
+        public int Restarts { get; private set; }
+
+        public void RequestHealthCheck()
+        {
+        }
+
+        public Task RestartAsync()
+        {
+            Restarts++;
+            return Task.FromException(new InvalidOperationException("boom"));
+        }
     }
 
     /// <summary>不理会取消令牌的翻译服务。</summary>

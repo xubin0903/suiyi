@@ -81,6 +81,18 @@ internal sealed class FakeEngineStatus : IEngineStatus
         OnHealthCheck?.Invoke();
     }
 
+    public int Restarts { get; private set; }
+
+    /// <summary>重启被请求时执行（模拟监管器进入 Starting）。</summary>
+    public Action? OnRestart { get; set; }
+
+    public Task RestartAsync()
+    {
+        Restarts++;
+        OnRestart?.Invoke();
+        return Task.CompletedTask;
+    }
+
     public void Raise(EngineState state, EngineFailure? failure = null)
     {
         State = state;

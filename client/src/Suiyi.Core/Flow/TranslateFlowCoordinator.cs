@@ -14,7 +14,9 @@ namespace Suiyi.Core.Flow;
 /// <item>服务启动中 / 重启中：浮窗「正在准备翻译服务…」，在 <see cref="TranslateFlowOptions.ReadyWaitTimeout"/>（默认 30 s）内就绪则自动补译最后一次请求；
 /// 超时显示「翻译服务启动超时」（可重试）；服务失败时立即提示可在托盘重启。浮窗不会一直停在「正在准备」。</item>
 /// <item>最新优先：新请求取消旧请求，旧请求的结果或错误一律丢弃。</item>
-/// <item>连接被拒（服务刚退出）：催监管器做健康检查，按「未就绪」处理，恢复后自动重译。</item>
+/// <item>连接被拒（服务刚退出）：催监管器做健康检查；状态转为启动中 / 重启中则按「未就绪」等待并自动重译，
+/// <see cref="TranslateFlowOptions.UnavailableConfirmTimeout"/> 内仍自称就绪则报「服务未运行」。</item>
+/// <item>服务失败或启动超时后点「重试」：顺带重启服务（重启中不重复触发），再等待就绪并自动补译。</item>
 /// <item>暂停监听时忽略 <see cref="ClipboardTrigger.Monitor"/>，快捷键与托盘仍可翻译。</item>
 /// <item>自动监听遇到过长文本不弹窗，只在托盘提示一次（每次运行最多一次）。</item>
 /// </list>
@@ -39,6 +41,8 @@ public sealed class TranslateFlowCoordinator : IDisposable
     private CancellationTokenSource? _cts;
     private int _generation;
     private bool _tooLongNotified;
+    private bool _confirmingUnavailable;
+    private bool _restartRequested;
     private bool _disposed;
 
     /// <summary>创建编排器。</summary>
@@ -182,12 +186,21 @@ public sealed class TranslateFlowCoordinator : IDisposable
     }
 
     /// <summary>重试上一次请求（浮窗「重试」）。</summary>
+    /// <remarks>
+    /// 服务已失败，或上一次是「启动超时」且服务仍未就绪时，顺带重启服务（与托盘「重启翻译服务」同一条路径），
+    /// 然后按正常流程等待就绪并自动补译。重启进行中不会重复触发。
+    /// </remarks>
     public void Retry()
     {
-        if (_last is { } last && !_disposed)
+        if (_last is not { } last || _disposed)
         {
-            Start(last with { Started = _timeProvider.GetTimestamp(), WaitSince = null });
+            return;
         }
+
+        var state = _engine.State;
+        var startTimedOut = _popup.Kind == PopupKind.Error && _popup.Error?.Kind == PopupErrorKind.EngineStartTimeout;
+        var restart = state == EngineState.Failed || (startTimedOut && state != EngineState.Ready);
+        Start(last with { Started = _timeProvider.GetTimestamp(), WaitSince = null }, restart);
     }
 
     /// <summary>以指定原文语种重新翻译上一次文本（浮窗语种标签）。</summary>
@@ -216,11 +229,18 @@ public sealed class TranslateFlowCoordinator : IDisposable
         _readyWait.Dispose();
     }
 
-    private void Start(FlowRequest request)
+    private void Start(FlowRequest request, bool restartEngine = false)
     {
         CancelInFlight();
         _last = request;
         var state = _engine.State;
+        if (restartEngine)
+        {
+            RequestRestart();
+            WaitForEngine(request);
+            return;
+        }
+
         if (state == EngineState.Ready)
         {
             _ = RunAsync(request, waitedForEngine: false);
@@ -239,12 +259,76 @@ public sealed class TranslateFlowCoordinator : IDisposable
         WaitForEngine(request);
     }
 
+    private void RequestRestart()
+    {
+        if (_restartRequested)
+        {
+            _logger.Info("翻译：重启已在进行，继续等待");
+            return;
+        }
+
+        _restartRequested = true;
+        _logger.Info("翻译：重试时顺带重启翻译服务");
+        _ = RestartEngineAsync();
+    }
+
+    private async Task RestartEngineAsync()
+    {
+        try
+        {
+            await _engine.RestartAsync().ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // 重启失败只记日志，状态由监管器事件反映。
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _logger.Error("翻译：重启翻译服务失败", ex);
+            _dispatch(() => _restartRequested = false);
+        }
+    }
+
+    /// <summary>
+    /// 连接被拒但服务仍自称就绪：已催过健康检查，在 <see cref="TranslateFlowOptions.UnavailableConfirmTimeout"/> 内观察。
+    /// 状态转为启动中 / 重启中则改为正常的就绪等待；就绪事件到达则补译；到时仍自称就绪则报「服务未运行」。
+    /// </summary>
+    private void ConfirmUnavailable(FlowRequest request)
+    {
+        _pending = request;
+        _confirmingUnavailable = true;
+        _popup.ShowPreparing();
+        _readyWait.Start(Options.UnavailableConfirmTimeout, () =>
+        {
+            if (_pending is not { } pending || !_confirmingUnavailable)
+            {
+                return;
+            }
+
+            _confirmingUnavailable = false;
+            switch (_engine.State)
+            {
+                case EngineState.Ready:
+                    _pending = null;
+                    _logger.Warn($"翻译：服务自称就绪但连接仍被拒（{Options.UnavailableConfirmTimeout.TotalSeconds:0} 秒）");
+                    _popup.ShowError(new PopupError(PopupErrorKind.ServiceUnavailable));
+                    break;
+                case EngineState.Failed:
+                    _pending = null;
+                    _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
+                    break;
+                default:
+                    WaitForEngine(pending);
+                    break;
+            }
+        });
+    }
+
     /// <summary>
     /// 进入「等服务就绪」：浮窗显示「正在准备」，就绪后补译 <paramref name="request"/>。
     /// 同一请求的多次等待（例如就绪后连接又被拒）共用一个时限，从第一次等待算起，保证在上限内进入结果或错误。
     /// </summary>
     private void WaitForEngine(FlowRequest request)
     {
+        _confirmingUnavailable = false;
         var since = request.WaitSince ?? _timeProvider.GetTimestamp();
         _pending = request with { WaitSince = since };
         _popup.ShowPreparing();
@@ -360,13 +444,17 @@ public sealed class TranslateFlowCoordinator : IDisposable
         {
             // 服务多半刚退出、监管器还没察觉：催一次健康检查，浮窗显示「正在准备」，恢复后自动重译。
             _engine.RequestHealthCheck();
-            if (_engine.State == EngineState.Failed)
+            switch (_engine.State)
             {
-                _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
-            }
-            else
-            {
-                WaitForEngine(request);
+                case EngineState.Failed:
+                    _popup.ShowError(PopupErrorMapper.EngineFailed(_engine.Failure));
+                    break;
+                case EngineState.Ready:
+                    ConfirmUnavailable(request);
+                    break;
+                default:
+                    WaitForEngine(request);
+                    break;
             }
 
             return;
@@ -377,14 +465,27 @@ public sealed class TranslateFlowCoordinator : IDisposable
 
     private void OnEngineStateChanged(object? sender, EngineStateChangedEventArgs e) => _dispatch(() =>
     {
+        if (e.State is EngineState.Ready or EngineState.Failed or EngineState.Stopped)
+        {
+            _restartRequested = false;
+        }
+
         if (_disposed || _pending is not { } pending)
         {
+            return;
+        }
+
+        if (_confirmingUnavailable && e.State is EngineState.Starting or EngineState.Restarting)
+        {
+            _logger.Info($"翻译：服务正在重启（{e.State}），等待就绪");
+            WaitForEngine(pending);
             return;
         }
 
         if (e.State == EngineState.Ready)
         {
             _pending = null;
+            _confirmingUnavailable = false;
             _readyWait.Stop();
             _logger.Info("翻译：服务已就绪，继续翻译等待中的文本");
             _ = RunAsync(pending, waitedForEngine: true);
@@ -392,6 +493,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
         else if (e.State == EngineState.Failed)
         {
             _pending = null;
+            _confirmingUnavailable = false;
             _readyWait.Stop();
             _popup.ShowError(PopupErrorMapper.EngineFailed(e.Failure ?? _engine.Failure));
         }
@@ -414,6 +516,7 @@ public sealed class TranslateFlowCoordinator : IDisposable
     {
         _generation++;
         _pending = null;
+        _confirmingUnavailable = false;
         _readyWait.Stop();
         if (_cts is { } cts)
         {

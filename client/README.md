@@ -116,8 +116,9 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 **行为：**
 
 - **目标语言：** `TranslationService` 每次请求读取 `settings.primaryTarget` / `secondaryTarget`，检测到原文等于主目标时改译为次目标；托盘切换目标后下一次翻译即生效。
-- **服务未就绪**（`IEngineStatus.State` 为 Starting / Restarting / Stopped）：浮窗「正在准备翻译服务…」（不自动消失）。只要浮窗没关，服务就绪后自动补译最后一次请求；新请求替换等待中的旧请求，用户关闭浮窗则取消。最多等 `TranslateFlowOptions.ReadyWaitTimeout`（默认 30 s），超时显示「翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」」，重试会重新等待 30 s。服务变为 **Failed** 时立即显示「翻译服务启动失败，可在托盘菜单「重启翻译服务」重试」。浮窗不会一直停在「正在准备」（#50）。
-- **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，并按未就绪处理，恢复后自动重译。同一请求的多次等待共用一个时限（从第一次等待算起），到时服务仍自称就绪则报「翻译服务未运行或已退出」，否则报启动超时（都可重试）。
+- **服务未就绪**（`IEngineStatus.State` 为 Starting / Restarting / Stopped）：浮窗「正在准备翻译服务…」（不自动消失）。只要浮窗没关，服务就绪后自动补译最后一次请求；新请求替换等待中的旧请求，用户关闭浮窗则取消。最多等 `TranslateFlowOptions.ReadyWaitTimeout`（默认 30 s），超时显示「翻译服务启动超时，点「重试」会重启翻译服务」。服务变为 **Failed** 时立即显示「翻译服务启动失败，点「重试」会重启翻译服务」（监管器因启动超时而失败时显示前一条）。浮窗不会一直停在「正在准备」（#50）。
+- **重试时重启服务：** 服务 Failed，或上一次是启动超时且服务仍未就绪时，点「重试」调用 `IEngineStatus.RestartAsync()`（与托盘「重启翻译服务」同一条路径），再按上面的规则等待就绪、自动补译。`EngineSupervisor` 把一次重启算到服务再次进入 Ready / Failed / Stopped 为止，期间再点重试或托盘重启都被忽略，不会叠加。其他错误的重试只重发请求。
+- **连接被拒**（`EngineErrorKind.Unavailable`，多半服务刚退出）：调用 `IEngineStatus.RequestHealthCheck()` 让看门狗立即探测，浮窗显示「正在准备」。状态转为 Starting / Restarting 则按上面的 30 s 就绪等待处理，恢复后自动重译；`TranslateFlowOptions.UnavailableConfirmTimeout`（默认 5 s）内服务仍自称就绪，则报「翻译服务未运行或已退出」（可重试）。同一请求的多次就绪等待共用一个 30 s 时限（从第一次等待算起）。
 - **最新优先：** 新请求取消旧请求（`CancellationToken`），并用代次号丢弃旧请求晚到的结果或错误。用户关闭浮窗也会取消进行中的请求。
 - **暂停监听：** 忽略 `ClipboardTrigger.Monitor`，快捷键和托盘照常翻译。
 
@@ -125,13 +126,13 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 
 | `EngineErrorKind` | 浮窗 |
 |---|---|
-| `Unavailable` | 先按未就绪处理（见上）；映射表本身为 `ServiceUnavailable` |
+| `Unavailable` | 先催健康检查并观察（见上）；映射表本身为 `ServiceUnavailable` |
 | `Timeout` | `Timeout`「翻译超时，请重试」 |
 | `UnsupportedPair` | `MissingModels`（带缺失模型 id） |
 | `TextTooLong` | `TextTooLong`（带 `Limit` / `Length`，不可重试） |
 | `DetectFailed` | `DetectFailed`「无法识别原文语种，请点击语种标签手动指定」 |
 | `InvalidRequest` / `Internal` / `Unknown` / 其他异常 | `Other`，文案为 `EngineException.UserMessage` |
-| 等待服务就绪超时 | `EngineStartTimeout`「翻译服务启动超时，可点「重试」，或在托盘菜单「重启翻译服务」」（可重试） |
+| 等待服务就绪超时 | `EngineStartTimeout`「翻译服务启动超时，点「重试」会重启翻译服务」 |
 | 服务 Failed（启动超时，`EngineFailureReason.StartupTimeout`） | 同「等待服务就绪超时」 |
 | 服务 Failed（其他原因） | `ServiceUnavailable`，文案 `PopupErrorMapper.EngineFailedMessage` |
 
@@ -405,7 +406,7 @@ Ready(Managed) → Restarting → Ready      进程意外退出或看门狗连�
 
 - 就绪后在后台发一条 zh→en 短句预热并丢弃结果，失败不影响状态。
 - 看门狗：`Ready` 期间每 10 s 探测 `/health`，连续 3 次失败且进程仍在 → 结束进程并按崩溃处理。外部服务连续 3 次失败 → 改为自己拉起。
-- `RestartAsync()`（托盘「重启翻译服务」）结束托管进程并清零崩溃计数；`StopAsync()` 用 `Kill(entireProcessTree: true)` 结束托管进程，最多等 2 s；外部服务不动。
+- `RestartAsync()`（托盘「重启翻译服务」、浮窗「重试」）结束托管进程并清零崩溃计数；一次重启持续到再次进入 Ready / Failed / Stopped，期间重复调用被忽略（`IsRestarting`）；`StopAsync()` 用 `Kill(entireProcessTree: true)` 结束托管进程，最多等 2 s；外部服务不动。
 - 所有探测都用 #28 的 `EngineClient.GetHealthAsync`。
 
 **日志**：服务的 stdout / stderr 写入 `%LOCALAPPDATA%\suiyi\logs\engine-YYYYMMDD.log`（stderr 行带 `[stderr]` 前缀），状态变化写客户端日志 `client-YYYYMMDD.log`。内存里保留最后 50 行，用于失败提示。

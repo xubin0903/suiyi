@@ -7,7 +7,7 @@ namespace Suiyi.Core.Flow;
 public static class PopupErrorMapper
 {
     /// <summary>翻译服务启动失败时的浮窗提示。</summary>
-    public const string EngineFailedMessage = "翻译服务启动失败，可在托盘菜单「重启翻译服务」重试";
+    public const string EngineFailedMessage = "翻译服务启动失败，点「重试」会重启翻译服务";
 
     /// <summary>映射引擎错误。</summary>
     public static PopupError Map(EngineException exception)
@@ -27,7 +27,7 @@ public static class PopupErrorMapper
         };
     }
 
-    /// <summary>服务处于 <see cref="EngineState.Failed"/> 时的浮窗错误：启动超时显示「翻译服务启动超时」（#50），其余提示在托盘重启。</summary>
+    /// <summary>服务处于 <see cref="EngineState.Failed"/> 时的浮窗错误：启动超时显示「翻译服务启动超时」（#50），其余提示点「重试」重启服务。</summary>
     /// <param name="failure">失败原因（<see cref="IEngineStatus.Failure"/>），未知时为 <see langword="null"/>。</param>
     public static PopupError EngineFailed(EngineFailure? failure = null) => failure?.Reason == EngineFailureReason.StartupTimeout
         ? new PopupError(PopupErrorKind.EngineStartTimeout)
