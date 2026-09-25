@@ -98,7 +98,11 @@ public static class OcrResultMapper
                 Length = Int(details, "actual"),
             },
             OcrErrorCodes.UnsupportedMediaType or OcrErrorCodes.InvalidImage => new PopupError(PopupErrorKind.InvalidImage),
-            OcrErrorCodes.OcrUnavailable => new PopupError(PopupErrorKind.OcrUnavailable) { MissingModels = Strings(details, "missing_models") },
+            OcrErrorCodes.OcrUnavailable => new PopupError(PopupErrorKind.OcrUnavailable)
+            {
+                MissingModels = Strings(details, "missing_models"),
+                OcrReason = Text(details, "reason"),
+            },
             OcrErrorCodes.UnsupportedPair => new PopupError(PopupErrorKind.MissingModels) { MissingModels = Strings(details, "missing_models") },
             OcrErrorCodes.TextTooLong => new PopupError(PopupErrorKind.TextTooLong) { Limit = Int(details, "limit"), Length = Int(details, "length") },
             OcrErrorCodes.DetectFailed => new PopupError(PopupErrorKind.DetectFailed),
@@ -121,6 +125,12 @@ public static class OcrResultMapper
         details.ValueKind == JsonValueKind.Object && details.TryGetProperty(name, out var value)
         && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var result)
             ? result
+            : null;
+
+    private static string? Text(JsonElement details, string name) =>
+        details.ValueKind == JsonValueKind.Object && details.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text
+            ? text
             : null;
 
     private static string[] Strings(JsonElement details, string name) =>

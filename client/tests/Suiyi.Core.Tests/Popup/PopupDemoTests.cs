@@ -109,4 +109,19 @@ public sealed class PopupDemoTests
         Assert.True(PopupDemo.Ocr(PopupDemo.SampleEmptyJson, "en").IsEmpty);
         Assert.Equal(10, PopupDemo.LongOcrResult().TranslationParagraphs.Count);
     }
+
+    [Fact]
+    public void PartialStep_ShowsUntranslatedHint()
+    {
+        using var popup = new PopupViewModel();
+        var found = false;
+        for (var step = 0; step < PopupDemo.StepCount && !found; step++)
+        {
+            PopupDemo.ApplyStep(popup, step);
+            found = popup.Kind == PopupKind.Result && popup.HasUntranslatedHint;
+        }
+
+        Assert.True(found);
+        Assert.Equal("第 2 段未能翻译，显示为原文", popup.UntranslatedHint);
+    }
 }

@@ -20,7 +20,7 @@ public class EngineCommandResolverTests
         PathVariable = path,
     };
 
-    private static readonly string[] ServeDefault = ["serve", "--port", "18780", "--preload", "zh-en,en-zh"];
+    private static readonly string[] ServeDefault = ["serve", "--port", "18780", "--preload", "zh-en,en-zh", "--preload-ocr"];
 
     [Fact]
     public void Level1_ConfiguredCommand_WinsAndAppendsServeArgs()
@@ -108,7 +108,7 @@ public class EngineCommandResolverTests
     {
         var args = EngineCommandResolver.ServeArguments(new EngineOptions { Port = 18999, Preload = " ", ModelsDir = @"D:\模型 目录" });
 
-        Assert.Equal(["serve", "--port", "18999", "--models-dir", @"D:\模型 目录"], args);
+        Assert.Equal(["serve", "--port", "18999", "--preload-ocr", "--models-dir", @"D:\模型 目录"], args);
     }
 
     [Fact]
@@ -116,13 +116,14 @@ public class EngineCommandResolverTests
     {
         var args = EngineCommandResolver.ServeArguments(new EngineOptions { Preload = "fr-de" });
 
-        Assert.Equal(["serve", "--port", "18780", "--preload", "fr-de"], args);
+        Assert.Equal(["serve", "--port", "18780", "--preload", "fr-de", "--preload-ocr"], args);
     }
 
     [Fact]
-    public void ServeArguments_PreloadOcrOffByDefault()
+    public void ServeArguments_PreloadOcrOnByDefault_OffWhenDisabled()
     {
-        Assert.DoesNotContain(EngineCommandResolver.PreloadOcrArgument, EngineCommandResolver.ServeArguments(new EngineOptions()));
+        Assert.Contains(EngineCommandResolver.PreloadOcrArgument, EngineCommandResolver.ServeArguments(new EngineOptions()));
+        Assert.DoesNotContain(EngineCommandResolver.PreloadOcrArgument, EngineCommandResolver.ServeArguments(new EngineOptions { PreloadOcr = false }));
     }
 
     [Fact]

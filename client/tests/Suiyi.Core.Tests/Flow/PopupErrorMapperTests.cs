@@ -84,4 +84,39 @@ public sealed class PopupErrorMapperTests
         Assert.Equal(PopupErrorKind.EngineStartTimeout, error.Kind);
         Assert.True(error.CanRetry);
     }
+
+    [Fact]
+    public void Map_OcrUnavailable_DetailsReasonWinsOverHealth()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse("""{ "reason": "models_invalid", "missing_models": [] }""");
+        var ex = new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable", Details = doc.RootElement.Clone() };
+        var health = new OcrHealthError { Reason = "dependency_missing", MissingModels = ["det"] };
+
+        var error = PopupErrorMapper.Map(ex, health);
+
+        Assert.Equal("models_invalid", error.OcrReason);
+        Assert.Equal(["det"], error.MissingModels); // details 没列模型时用 health 补
+    }
+
+    [Fact]
+    public void Map_OcrUnavailable_NoDetails_FallsBackToHealth()
+    {
+        var ex = new EngineException(EngineErrorKind.OcrUnavailable, "x");
+
+        var error = PopupErrorMapper.Map(ex, new OcrHealthError { Reason = "models_missing", MissingModels = ["rec"] });
+
+        Assert.Equal(PopupErrorKind.OcrUnavailable, error.Kind);
+        Assert.Equal("models_missing", error.OcrReason);
+        Assert.Equal(["rec"], error.MissingModels);
+        Assert.NotNull(error.Hint);
+    }
+
+    [Fact]
+    public void Map_NonOcrError_IgnoresHealth()
+    {
+        var error = PopupErrorMapper.Map(new EngineException(EngineErrorKind.Timeout, "x"), new OcrHealthError { Reason = "models_missing" });
+
+        Assert.Equal(PopupErrorKind.Timeout, error.Kind);
+        Assert.Null(error.OcrReason);
+    }
 }

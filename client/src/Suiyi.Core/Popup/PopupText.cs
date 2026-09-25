@@ -25,6 +25,15 @@ public static class PopupText
     /// <summary>原文摘要的最大字符数。</summary>
     public const int SourcePreviewLength = 80;
 
+    /// <summary>
+    /// 下载 OCR 模型的命令（Windows，在仓库根目录执行）。与服务端提示 <c>python scripts/download_ocr_models.py download</c> 同一条，
+    /// 模型写入默认模型目录；模型不在仓库根 <c>models</c> 时需另加 <c>--models-dir</c>（见 docs/engine/OCR选型与许可证.md）。
+    /// </summary>
+    public const string OcrDownloadCommand = @"python scripts\download_ocr_models.py download";
+
+    /// <summary>安装 OCR 依赖的命令（在仓库根目录、已激活 .venv 时执行），与服务端提示一致。</summary>
+    public const string OcrInstallCommand = "pip install -e \"engine[ocr]\"";
+
     /// <summary>全部段落都没有译文时的提示。</summary>
     public const string AllUntranslatedHint = "未能翻译，以上为识别出的原文";
 

@@ -88,6 +88,9 @@ public static class PopupDemo
             p.ToggleOriginal();
         },
         p => p.ShowOcrResult(Ocr(SampleJaZhJson, "zh"), DemoSelectionNearCorner),
+
+        // 第 2 段服务端没有给出译文：以原文代替，译文下方灰色小字提示（#58）。
+        p => p.ShowOcrResult(Ocr(SamplePartialJson, "zh"), DemoSelection),
         p =>
         {
             p.ShowOcrResult(LongOcrResult(), DemoSelectionNearCorner);
@@ -107,9 +110,18 @@ public static class PopupDemo
         p =>
         {
             p.ShowOcrLoading(DemoSelection);
-            p.ShowError(OcrResultMapper.MapError(OcrErrorCodes.OcrUnavailable, Details("""{ "missing_models": ["ch_PP-OCRv4_det", "ch_PP-OCRv4_rec"] }""")));
+            p.ShowError(OcrResultMapper.MapError(OcrErrorCodes.OcrUnavailable, Details("""{ "reason": "models_missing", "missing_models": ["PP-OCRv6_det_small", "PP-OCRv6_rec_small"] }""")));
         },
     ];
+
+    /// <summary>演示用：两段识别结果，只有第 1 段有译文。</summary>
+    public const string SamplePartialJson = """
+        {
+          "paragraphs": [{ "text": "Suiyi runs entirely on your computer." }, { "text": "Ctrl+Alt+S" }],
+          "text": "Suiyi runs entirely on your computer.\nCtrl+Alt+S",
+          "translation": { "results": [{ "text": "随译完全在你的电脑上运行。", "source": "en", "detected": true, "target": "zh", "route": ["opus-mt-en-zh"], "elapsed_ms": 40 }] }
+        }
+        """;
 
     /// <summary>演示用：解析草案 JSON 并映射为浮窗结果。</summary>
     public static PopupOcrResult Ocr(string json, string target) => OcrResultMapper.Map(OcrDraftContract.ParseResponse(json), target);

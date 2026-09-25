@@ -12,4 +12,7 @@ public interface IOcrTranslationService
 
     /// <summary>取消当前未完成的调用（如用户关闭浮窗、重新框选）。</summary>
     void CancelCurrent();
+
+    /// <summary>最近一次 <c>/health.ocr_error</c>（OCR 不可用的原因）；未知或可用时为 <see langword="null"/>。</summary>
+    OcrHealthError? KnownOcrError => null;
 }

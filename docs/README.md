@@ -29,7 +29,7 @@
 
 ## 客户端文档
 
-[docs/client/](client/README.md) 存放 Windows 客户端的使用与测试文档。已有 [M2 实机测试](client/M2-实机测试.md)：在 Windows 上从源码运行服务和客户端，并按清单验收、记录延迟。客户端的设计与设置说明见 [client/README.md](../client/README.md)。
+[docs/client/](client/README.md) 存放 Windows 客户端的使用与测试文档。已有 [M2 实机测试](client/M2-实机测试.md)：在 Windows 上从源码运行服务和客户端，并按清单验收、记录延迟；[M3 实机测试](client/M3-实机测试.md)：在 M2 环境上升级到框选翻译并验收。客户端的设计与设置说明见 [client/README.md](../client/README.md)。
 
 ## 代码目录说明
 

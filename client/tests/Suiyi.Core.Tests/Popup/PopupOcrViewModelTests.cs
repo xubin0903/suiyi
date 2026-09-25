@@ -319,7 +319,7 @@ public sealed class PopupOcrViewModelTests : IDisposable
         _popup.RequestRetry();
 
         Assert.Equal(1, retries);
-        Assert.Equal("OCR 模型未安装：det", _popup.ErrorMessage);
+        Assert.Equal("OCR 模型未安装：det\n请在随译仓库根目录运行 python scripts\\download_ocr_models.py download 下载，完成后点「重试」", _popup.ErrorMessage);
     }
 
     [Fact]
@@ -358,6 +358,31 @@ public sealed class PopupOcrViewModelTests : IDisposable
 
         Assert.DoesNotContain(true, _shown);
         Assert.Equal(PopupKind.Error, _popup.Kind);
+    }
+
+    [Fact]
+    public void RetryAvailability_PerMode_HidesRetryAndRaisesCanRetry()
+    {
+        _popup.ShowOcrLoading(Selection);
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout));
+        var retries = 0;
+        _popup.RetryRequested += (_, _) => retries++;
+        Assert.True(_popup.CanRetry); // 默认可用
+        _changed.Clear();
+
+        _popup.SetRetryAvailability(text: true, ocr: false);
+
+        Assert.False(_popup.CanRetry);
+        Assert.Contains(nameof(PopupViewModel.CanRetry), _changed);
+        _popup.RequestRetry();
+        Assert.Equal(0, retries);
+
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout), PopupContentMode.Text);
+        Assert.True(_popup.CanRetry); // 文本模式有上一次文本
+
+        _changed.Clear();
+        _popup.SetRetryAvailability(text: true, ocr: false);
+        Assert.DoesNotContain(nameof(PopupViewModel.CanRetry), _changed); // 未变化不通知
     }
 
     [Fact]

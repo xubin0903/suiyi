@@ -2,7 +2,7 @@
 
 C# **.NET 8** WPF 客户端。一期只做 **Windows**：托盘常驻、全局热键、剪贴板翻译，以及快捷键裁剪后的 OCR 翻译（M3）。翻译本身调用 `engine/` 的本机 HTTP 服务（见 [HTTP API](../docs/engine/HTTP-API.md)），不在客户端内嵌模型。
 
-在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)。
+在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)；升级到 M3 框选翻译并验收见 [M3 实机测试](../docs/client/M3-实机测试.md)。
 
 ## 目录
 
@@ -165,23 +165,26 @@ TranslateRegionAsync(trigger)
 | 成员 | 说明 |
 |---|---|
 | `TranslateRegionAsync(RegionTranslateTrigger trigger, CancellationToken)` | `Hotkey` / `Tray`；只在 UI 线程调用 |
-| `IsRegionTranslateEnabled` / `HasRetainedScreenshot` | 是否接了 OCR 与框选；当前是否还持有可重试的截图 |
+| `IsRegionTranslateEnabled` / `HasRetainedScreenshot` / `RetainedScreenshotBytes` | 是否接了 OCR 与框选；是否保留着截图（最多一张，语义见下方「截图生命周期」）及其字节数 |
 | `OcrLatency`（`LatencyStats`） | 最近 20 次框选 `ocr_e2e_ms`，「关于」里显示 |
 | `RegionCompleted`（`RegionTranslateCompletedEventArgs`） | 一次框选翻译显示完成（`Trigger`、`Outcome`、`Result`、`EndToEnd`、`WaitedForEngine`） |
 | `RegionCaptureTrigger.Failed`（`RegionCaptureFailedEventArgs`） | 截屏异常（与用户取消区分） |
 | `ITrayService.TranslateRegionRequested` / `SetRegionHotkey(string?)`、`TrayCommand.TranslateRegion`、`TrayState.RegionHotkey` / `RegionMenuText` | 托盘菜单项 |
 | `PopupViewModel.ShowError(error, mode, anchor)` | 可选参数：编排器按请求类型指定 `Mode` 与选区锚点 |
+| `PopupViewModel.SetRetryAvailability(text, ocr)` | 两种来源是否有可重发的请求；`CanRetry` 按当前 `Mode` 取值（默认都可用） |
 | `PopupOcrResult.UntranslatedParagraphs` / `HasUntranslated` / `IsUntranslated(i)`；`PopupViewModel.UntranslatedHint` / `HasUntranslatedHint` | 译文缺失、以原文代替的段落 |
 
 **行为：**
 
 - **最新优先、互相取消：** 文本请求和框选请求共用一个代次号与 `CancellationTokenSource`，谁后来谁生效，旧请求晚到的结果被丢弃，不会互相覆盖。开始框选即取消进行中的请求并隐藏浮窗（截图里不会有随译浮窗）；遮罩显示期间忽略剪贴板监听、翻译快捷键、托盘「翻译剪贴板」。
 - **重试按 `PopupViewModel.Mode` 分流：** `Ocr` 用原来那张 PNG 重发（不重新框选）；`Text` 走原来的文本重试。服务 Failed / 未运行 / 启动超时后的重试同样会先 `RestartAsync()`。
-- **截图生命周期：** PNG 只在内存，保留到本次识别成功、或浮窗被关闭且没有进行中的请求为止（失败时留着给重试用）；只丢引用，不主动清零。`--region-demo` 另存一份到临时目录，正式流程不落盘。
+- **截图生命周期：** PNG 只在内存，内存里最多一张：跟着对应浮窗的内容一直保留（识别成功、失败、浮窗关闭后都还在），直到被下一次框选**成功拿到的**新截图替换（框选途中按 Esc 取消不影响旧截图）。托盘左键重新显示旧的框选错误浮窗时，点「重试」仍用这张 PNG 重发。浮窗改为显示复制翻译的内容（新的文本请求、「文本过长」提示等，即 `Mode` 变为 `Text`）时旧的框选内容不会再显示，截图随即丢弃；被忽略的文本捕获（暂停监听、遮罩期间）不影响。只丢引用，不主动清零。`--region-demo` 另存一份到临时目录，正式流程不落盘。
+- **「重试」不会点了没反应：** 编排器通过 `PopupViewModel.SetRetryAvailability(text, ocr)` 告知两种来源是否还有可重发的请求，`CanRetry` 按当前 `Mode` 取值，没有截图（或没有上一次文本）时隐藏「重试」。
 - **关闭浮窗即取消**进行中或等待服务的框选请求。
 - **暂停监听不影响框选**（Issue 要求）。
 - **目标语言：** 与复制翻译一样读 `primaryTarget` / `secondaryTarget`，识别出的主要语种等于主目标时由 `OcrTranslationService` 改译为次目标。
-- **错误：** OCR 错误码经 `PopupErrorMapper` → `OcrResultMapper.MapError`：`image_too_large`「选区过大…」（不可重试）、`invalid_image` / `unsupported_media_type`「截图无法识别，请重新框选」、`ocr_unavailable`「OCR 模型未安装：…」（可重试，不触发重启）；`Unavailable` / 超时 / 服务 Failed 与复制翻译一致（催健康检查、30 s 就绪等待、重试重启）。
+- **错误：** OCR 错误码经 `PopupErrorMapper` → `OcrResultMapper.MapError`：`image_too_large`「选区过大…」（不可重试）、`invalid_image` / `unsupported_media_type`「截图无法识别，请重新框选」、`ocr_unavailable`「OCR 模型未安装：…」+ 第二行修复方法（可重试，不触发重启，见下）；`Unavailable` / 超时 / 服务 Failed 与复制翻译一致（催健康检查、30 s 就绪等待、重试重启）。
+- **OCR 不可用（`ocr_unavailable`）与 `/health.ocr_error`：** 原因取 503 `details.reason`，缺时取最近一次 `/health.ocr_error.reason`（`EngineClient.KnownOcrError`，由监管器就绪探测与看门狗的 `/health` 刷新，成功识别或 `Invalidate()` 后清空；缺失模型列表同理补齐）。浮窗第一行说明问题、第二行（`PopupError.Hint`）给命令：`models_missing` / 未知原因「OCR 模型未安装：…」+「请在随译仓库根目录运行 `python scripts\download_ocr_models.py download` 下载，完成后点「重试」」（服务端不缓存失败，补齐模型后重试即可，不用重启）；`models_invalid`「OCR 模型文件不完整或已损坏」+ 同一条命令重新下载（脚本会重下校验不过的文件）；`dependency_missing`「OCR 组件未安装」+「运行 `pip install -e "engine[ocr]"`，然后在托盘点「重启翻译服务」」；`manifest_unavailable`「OCR 模型清单不可用」+「请更新随译源码（git pull）后重启随译」。服务端 `message` 含服务端路径，只写日志不显示。服务就绪时若 `ocr_error` 非空，编排器写一行 Warning（只记 `reason` 与模型 id）。复制翻译的错误不受 `ocr_error` 影响。
 - **未翻译段落：** 服务某段 `translation` 为空时用原文代替，`PopupOcrResult.UntranslatedParagraphs` 记下标，浮窗译文下方显示灰色小字「第 2、3 段未能翻译，显示为原文」（全部未翻译时「未能翻译，以上为识别出的原文」），复制内容不含提示。
 - **隐私：** 日志不记识别出的原文和译文，也不记服务端错误说明；只记尺寸、字节数、段落数、语种、耗时、错误类别。
 
@@ -225,7 +228,7 @@ TranslateRegionAsync(trigger)
     "args": null,
     "modelsDir": null,
     "preload": "zh-en,en-zh",
-    "preloadOcr": false
+    "preloadOcr": true
   },
   "startWithWindows": false
 }
@@ -248,7 +251,7 @@ TranslateRegionAsync(trigger)
 | `engine.command` / `engine.args` | `null` | 高级：直接指定服务可执行文件与参数数组（为 M4 打包 exe 预留） |
 | `engine.modelsDir` | `null` | 不填则不传 `--models-dir` |
 | `engine.preload` | `"zh-en,en-zh"` | `""` 表示不预加载 |
-| `engine.preloadOcr` | `false` | 启动时预热 OCR 模型（#58），`true` 时追加 `--preload-ocr`（#53 草案）；环境变量 `SUIYI_ENGINE_PRELOAD_OCR=1/0` 可覆盖。**暂时默认关闭**：当前服务还不认这个参数，打开会导致启动失败；#53 定稿、服务支持后改为默认开启。关闭时首次框选多一次 OCR 冷加载（超时按 `TimeoutPolicy` 放宽到 30 s） |
+| `engine.preloadOcr` | `true` | 启动时预热 OCR 模型（#58），`true` 时追加 `--preload-ocr`（#53）；环境变量 `SUIYI_ENGINE_PRELOAD_OCR=1/0` 可覆盖。缺 OCR 依赖或模型时服务只告警、照常启动，文本翻译不受影响，`/health.ocr_error` 带上原因（见[框选翻译](#框选翻译)的错误说明）。关掉可省内存（OCR 模型加载后服务内存增加，见 #54），代价是首次框选多一次 OCR 冷加载（超时按 `TimeoutPolicy` 放宽到 30 s） |
 | `startWithWindows` | `false` | 预留，M2 不实现 |
 
 **读取规则：**
@@ -277,13 +280,13 @@ TranslateRegionAsync(trigger)
 | `PopupResult` | Core | `Translation`、`Source`、`Target`、`SourceDetected`、`Elapsed` |
 | `PopupOcrResult` | Core | 框选翻译结果（#57）：`SourceParagraphs` / `TranslationParagraphs`（一一对应）、`Source`、`Target`、`SourceDetected`、`Elapsed`；`SourceText` / `TranslationText`（段落间空一行）、`IsEmpty`、`Empty(target)` |
 | `PopupPlacement.CalculateAroundRect` | Core | 以选区为锚点：右下外侧 → 下方 → 上方 → 左侧 → 都放不下时压住选区（下 / 上空间大的一侧），最后夹紧到工作区；返回位置与 `RectPlacementSide` |
-| `OcrDraftContract` / `OcrTranslateResponse` / `OcrErrorCodes` | Core（`Ocr/`） | ⚠ 按 #53 **草案**的 `/ocr_translate` 响应 DTO、错误码与解析 |
-| `Flow/OcrResultMapper` | Core | 草案响应 → `PopupOcrResult`、草案错误码 → `PopupError`。与上一行、`Engine/EngineClient.Ocr.cs`、`HealthResponse.OcrLoaded` 是客户端里依赖草案的全部地方（见「OCR 调用」），#53 定稿后同步 |
+| `OcrDraftContract` / `OcrTranslateResponse` / `OcrErrorCodes` | Core（`Ocr/`） | 按 #53 草案实现、已与定稿核对一致的 `/ocr_translate` 响应 DTO、错误码与解析 |
+| `Flow/OcrResultMapper` | Core | 草案响应 → `PopupOcrResult`、草案错误码 → `PopupError`。与上一行、`Engine/EngineClient.Ocr.cs`、`HealthResponse.OcrLoaded` 是客户端里依赖草案的全部地方（见「OCR 调用」），接口变化时同步改这几处 |
 | `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）、`EngineStartTimeout`（等服务就绪超时）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 `Flow/PopupErrorMapper` 映射 |
 | `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
 | `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
 | `PopupText` | Core | 语种标签（`中文 → English`、`English（自动） → 中文`）、耗时、原文摘要、按语种的字体回退链 |
-| `PopupDemo` | Core | `--popup-demo` 步骤（后半段为框选翻译：草案 JSON 经映射后显示，含展开原文、长文本、空结果、OCR 错误，选区锚点为固定坐标） |
+| `PopupDemo` | Core | `--popup-demo` 步骤（后半段为框选翻译：草案 JSON 经映射后显示，含展开原文、长文本、部分段落未翻译、空结果、OCR 错误，选区锚点为固定坐标；演示里没有可重发的请求，错误步骤不显示「重试」） |
 | `PopupWindow` / `PopupTheme` | App | 无边框圆角阴影、置顶、不进任务栏；`WS_EX_NOACTIVATE \| WS_EX_TOOLWINDOW`；`MonitorFromPoint` + `GetMonitorInfo` 取工作区；跟随 `AppsUseLightTheme` |
 
 **行为：**
@@ -449,9 +452,10 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
   - 结果 `TranslationOutcome`：译文、原文语种、是否自动检测、实际目标、是否改译、`route`、服务端 `elapsed_ms`（改译为两次之和）、客户端往返耗时、请求次数。
   - 不自动重试，重试由界面决定。
 
-### OCR 调用（#56，⚠ 按 #53 草案）
+### OCR 调用（#56，#53）
 
-`docs/engine/HTTP-API.md` 的 OCR 部分尚未定稿，客户端按 Issue #53 草案实现。依赖草案的代码集中在：`Ocr/OcrDraftContract.cs`（DTO、错误码、路径/参数名、上限常量）、`Engine/EngineClient.Ocr.cs`（请求构造、错误映射、预检）、`Flow/OcrResultMapper.cs`（→ 浮窗），外加 `HealthResponse.OcrLoaded` 一个字段。定稿后只改这几处。
+客户端最初按 Issue #53 草案实现，#53（PR #69）合入后的 `docs/engine/HTTP-API.md` 与草案的路径、参数、请求体、响应字段和错误码一致。相关代码集中在：`Ocr/OcrDraftContract.cs`（DTO、错误码、路径/参数名、上限常量）、`Engine/EngineClient.Ocr.cs`（请求构造、错误映射、预检）、`Flow/OcrResultMapper.cs`（→ 浮窗），外加 `HealthResponse.OcrLoaded`、`HealthResponse.OcrError`（`OcrHealthError`：`reason`、`missing_models`、`message`）两个字段。
+- **`EngineClient.KnownOcrError`**：最近一次 `/health.ocr_error`；成功识别或 `Invalidate()` 后为 `null`。`IOcrTranslationService.KnownOcrError` 转发它（默认接口实现返回 `null`），编排器用它补全 `ocr_unavailable` 的原因。
 
 - **`EngineClient.OcrTranslateAsync(png, source, target, fallbackTarget, ct)`** → `POST /ocr_translate?source=…&target=…[&fallback_target=…]`，请求体为**原始 PNG 字节**，`Content-Type: image/png`（草案不用 multipart / base64）。`fallbackTarget` 为空或与 `target` 同语种时不发。成功后记 OCR 已加载、各段 `route` 模型已加载。识别为空是正常结果（`paragraphs: []`）。
 - **`EngineClient.OcrAsync(png, lang = "auto", ct)`** → `POST /ocr?lang=…`，只识别。
@@ -493,7 +497,7 @@ OCR 请求（暂无 OCR 性能基线，等 #52 后按 P95 调整）：
 | `ImageTooLarge` | 413 `image_too_large`（带 `Limit`=`details.limit`、`Length`=`details.actual`），或客户端预检拦截（`IsClientPrecheck`） | 选区过大，请缩小后重试 |
 | `UnsupportedMediaType` | 415 `unsupported_media_type` | 截图格式不受支持 |
 | `InvalidImage` | 422 `invalid_image` | 截图无法解码 |
-| `OcrUnavailable` | 503 `ocr_unavailable`，带 `MissingModels` | OCR 模型未安装：ppocr-det（无列表时：OCR 模型未安装） |
+| `OcrUnavailable` | 503 `ocr_unavailable`，带 `MissingModels`（`details.reason` 由 `OcrResultMapper` 读取） | OCR 模型未安装：ppocr-det（无列表时：OCR 模型未安装）；浮窗另加修复命令，见[框选翻译](#框选翻译) |
 | `InvalidRequest` | `invalid_request` | 翻译请求无效 |
 | `Internal` | `internal_error`，或 5xx 且正文不是错误信封 / 错误码未知 | 翻译服务内部错误 |
 | `Unknown` | 框架 404 等非信封 4xx、未知 4xx 错误码、200 但 JSON 无法解析 | 翻译服务返回了无法识别的响应 |
@@ -520,7 +524,7 @@ OCR 联调（`EngineOcrLiveTests`，需 #53 服务端实现）另需 `SUIYI_ENGI
 3. 从客户端 exe 所在目录向上找仓库根（含 `engine/pyproject.toml`），用 `<仓库根>\.venv\Scripts\python.exe`
 4. `py -3.11`（Windows Python Launcher），再退到 PATH 上的 `python`
 
-Python 参数：`-m suiyi_engine serve --port <engine.port，默认 18780> --preload <engine.preload，默认 zh-en,en-zh> [--models-dir <engine.modelsDir>]`；工作目录为仓库根（找不到时为 exe 所在目录）。进程以 `CreateNoWindow` 启动，不弹控制台，并加入 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object（`Suiyi.App/Interop/JobObject.cs`），客户端被任务管理器强杀时服务随之退出。
+Python 参数：`-m suiyi_engine serve --port <engine.port，默认 18780> --preload <engine.preload，默认 zh-en,en-zh> [--preload-ocr，engine.preloadOcr 为 true 时，默认带] [--models-dir <engine.modelsDir>]`；工作目录为仓库根（找不到时为 exe 所在目录）。进程以 `CreateNoWindow` 启动，不弹控制台，并加入 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object（`Suiyi.App/Interop/JobObject.cs`），客户端被任务管理器强杀时服务随之退出。
 
 以上 `engine.*` 取自设置文件（见「设置文件」）；开发时也可用环境变量临时覆盖（优先于设置）：`SUIYI_ENGINE_PORT`、`SUIYI_ENGINE_PRELOAD`、`SUIYI_ENGINE_PYTHON`、`SUIYI_ENGINE_MODELS_DIR`、`SUIYI_ENGINE_COMMAND`。
 

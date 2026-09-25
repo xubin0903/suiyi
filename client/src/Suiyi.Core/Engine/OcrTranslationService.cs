@@ -25,6 +25,9 @@ public sealed class OcrTranslationService : IOcrTranslationService, IDisposable
     private CancellationTokenSource? _current;
     private bool _disposed;
 
+    /// <inheritdoc />
+    public OcrHealthError? KnownOcrError => _client.KnownOcrError;
+
     /// <summary>创建框选翻译服务。</summary>
     /// <param name="client">引擎客户端（不随本服务释放）。</param>
     /// <param name="targets">每次调用时读取当前的主、次目标语种，例如从设置读取。</param>

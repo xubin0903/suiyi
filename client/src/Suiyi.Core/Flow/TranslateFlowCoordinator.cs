@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using Suiyi.Core.Capture;
 using Suiyi.Core.Clipboard;
@@ -40,7 +41,18 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
     private readonly Action<Action> _afterRender;
     private readonly OneShotTimer _readyWait;
 
-    private TextRequest? _lastText;
+    private TextRequest? _lastTextRequest;
+
+    /// <summary>最近一次复制翻译请求；赋值时同步浮窗「重试」是否可用。</summary>
+    private TextRequest? _lastText
+    {
+        get => _lastTextRequest;
+        set
+        {
+            _lastTextRequest = value;
+            UpdateRetryAvailability();
+        }
+    }
     private FlowRequest? _pending;
     private CancellationTokenSource? _cts;
     private int _generation;
@@ -97,6 +109,8 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         _popup.RetryRequested += OnRetryRequested;
         _popup.SourceLanguageOverride += OnSourceLanguageOverride;
         _popup.Closed += OnPopupClosed;
+        _popup.PropertyChanged += OnPopupPropertyChanged;
+        UpdateRetryAvailability();
     }
 
     /// <summary>一次翻译完成并显示结果（端到端计时之后）。</summary>
@@ -264,6 +278,7 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         _popup.RetryRequested -= OnRetryRequested;
         _popup.SourceLanguageOverride -= OnSourceLanguageOverride;
         _popup.Closed -= OnPopupClosed;
+        _popup.PropertyChanged -= OnPopupPropertyChanged;
         if (_region is not null)
         {
             _region.Failed -= OnRegionCaptureFailed;
@@ -280,7 +295,7 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         if (request is TextRequest text)
         {
             _lastText = text;
-            _lastOcr = null; // 截图用完即丢：新的复制翻译开始后不再需要。
+            _lastOcr = null; // 浮窗改显示复制翻译，旧的框选结果不会再显示，截图不再需要。
         }
         else if (request is OcrRequest ocr)
         {
@@ -550,7 +565,7 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
             return;
         }
 
-        ShowError(request, PopupErrorMapper.Map(ex));
+        ShowError(request, PopupErrorMapper.Map(ex, request is OcrRequest ? _ocr?.KnownOcrError : null));
     }
 
     private void LogFailure(FlowRequest request, EngineException ex)
@@ -576,6 +591,14 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         if (e.State is EngineState.Ready or EngineState.Failed or EngineState.Stopped)
         {
             _restartRequested = false;
+        }
+
+        if (e.State == EngineState.Ready && !_disposed && _ocr?.KnownOcrError is { } ocrError)
+        {
+            // 开启 engine.preloadOcr 时服务启动即尝试加载 OCR：缺模型在第一次框选前就能在日志里看到。只记原因与模型 id。
+            _logger.Warn(string.Create(
+                CultureInfo.InvariantCulture,
+                $"框选翻译：OCR 不可用 reason={ocrError.Reason ?? "-"} missing={(ocrError.MissingModels.Count > 0 ? string.Join(",", ocrError.MissingModels) : "-")}，框选时浮窗会提示下载命令"));
         }
 
         if (_disposed || _pending is not { } pending)
@@ -619,12 +642,20 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
             CancelInFlight();
         }
 
-        // 浮窗已不可见、也没有进行中的识别：截图用完即丢（不再能重试）。
-        if (_cts is null && _pending is null)
+        // 截图不随浮窗关闭丢弃：托盘左键重新显示时仍可重试。
+    }
+
+    private void OnPopupPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // 浮窗改为复制翻译的内容（包括「文本过长」等不经过请求的提示）：旧的框选内容再也不会显示，丢掉截图。
+        if (e.PropertyName == nameof(PopupViewModel.Mode) && _popup.Mode == PopupContentMode.Text && _lastOcrRequest is not null)
         {
             _lastOcr = null;
         }
     }
+
+    private void UpdateRetryAvailability() =>
+        _popup.SetRetryAvailability(text: _lastTextRequest is not null, ocr: _lastOcrRequest is not null);
 
     private void CancelInFlight()
     {

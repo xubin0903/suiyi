@@ -76,7 +76,8 @@ public sealed class RegionTranslateFlowTests : IDisposable
         Assert.Equal("机密第一段\n\n机密第二段", _popup.OriginalText);
         Assert.Equal("300 ms", _popup.ElapsedText);
         Assert.Empty(_translator.Calls);
-        Assert.False(_flow.HasRetainedScreenshot);
+        Assert.True(_flow.HasRetainedScreenshot); // 跟着这次结果保留，直到下一次框选
+        Assert.Equal(png.Length, _flow.RetainedScreenshotBytes);
     }
 
     [Fact]
@@ -166,7 +167,53 @@ public sealed class RegionTranslateFlowTests : IDisposable
         await SelectAsync();
         _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable", MissingModels = ["PP-OCRv6_det_small"] });
 
-        Assert.Equal("OCR 模型未安装：PP-OCRv6_det_small", _popup.ErrorMessage);
+        Assert.StartsWith("OCR 模型未安装：PP-OCRv6_det_small\n", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(@"python scripts\download_ocr_models.py download", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.True(_popup.CanRetry);
+    }
+
+    [Fact]
+    public async Task OcrUnavailable_WithoutDetails_UsesHealthOcrError()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "models_missing", MissingModels = ["PP-OCRv6_rec_small"], Message = "服务端说明" };
+        await SelectAsync();
+        _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable" });
+
+        Assert.StartsWith("OCR 模型未安装：PP-OCRv6_rec_small\n请在随译仓库根目录运行", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("服务端说明", _popup.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OcrUnavailable_DependencyMissing_ShowsPipInstall()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "dependency_missing" };
+        await SelectAsync();
+        _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable" });
+
+        Assert.Equal("OCR 组件未安装\n请在随译仓库根目录运行 pip install -e \"engine[ocr]\"，然后在托盘点「重启翻译服务」", _popup.ErrorMessage);
+    }
+
+    [Fact]
+    public void EngineReady_WithHealthOcrError_LogsReasonOnly()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "models_missing", MissingModels = ["PP-OCRv6_det_small"], Message = "目录 /secret/path" };
+
+        _engine.Raise(EngineState.Ready);
+
+        var line = Assert.Single(_logger.Messages, m => m.Contains("OCR 不可用", StringComparison.Ordinal));
+        Assert.Contains("reason=models_missing", line, StringComparison.Ordinal);
+        Assert.Contains("PP-OCRv6_det_small", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("/secret/path", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TextRequestFailure_IgnoresHealthOcrError()
+    {
+        _ocr.KnownOcrError = new OcrHealthError { Reason = "models_missing" };
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
+        _translator.Fail(0, Error(EngineErrorKind.Timeout));
+
+        Assert.Equal("翻译超时，请重试", _popup.ErrorMessage);
     }
 
     [Fact]
@@ -221,7 +268,7 @@ public sealed class RegionTranslateFlowTests : IDisposable
 
         _ocr.Complete(1);
         Assert.Equal(PopupKind.Result, _popup.Kind);
-        Assert.False(_flow.HasRetainedScreenshot);
+        Assert.True(_flow.HasRetainedScreenshot);
     }
 
     [Fact]
@@ -269,27 +316,145 @@ public sealed class RegionTranslateFlowTests : IDisposable
         Assert.False(_flow.HasRetainedScreenshot);
     }
 
-    [Fact]
-    public async Task Retry_AfterPopupClosed_ScreenshotDiscarded_NoOp()
+    // ---- 截图保留：跟着浮窗内容，直到被下一次框选替换 ----
+
+    [Theory]
+    [InlineData(PopupCloseReason.User)]
+    [InlineData(PopupCloseReason.AutoHide)]
+    public async Task OldErrorPopup_ClosedThenShownFromTray_RetrySucceedsWithSamePng(PopupCloseReason reason)
     {
-        await SelectAsync();
+        var png = await SelectAsync();
         _ocr.Fail(0, Error(EngineErrorKind.Timeout));
-        _popup.Close(PopupCloseReason.User);
+        _popup.Close(reason);
 
-        Assert.False(_flow.HasRetainedScreenshot);
-        _flow.Retry();
+        Assert.True(_flow.HasRetainedScreenshot);
+        Assert.True(_popup.ShowLast()); // 托盘左键
+        Assert.Equal(PopupKind.Error, _popup.Kind);
+        Assert.Equal(PopupContentMode.Ocr, _popup.Mode);
+        Assert.True(_popup.CanRetry);
 
-        Assert.Single(_ocr.Calls);
+        _popup.RequestRetry();
+
+        Assert.Equal(1, _capture.Calls);
+        Assert.Equal(2, _ocr.Calls.Count);
+        Assert.True(_ocr.Calls[1].Png.Span.SequenceEqual(png));
+        _ocr.Complete(1);
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+        Assert.Equal(SampleAnchor, _popup.AnchorRect);
     }
 
     [Fact]
-    public async Task AutoHideAfterError_DiscardsScreenshot()
+    public async Task OldErrorPopup_AfterCanceledNewSelection_StillRetriesOldPng()
+    {
+        var png = await SelectAsync([0x89, 1]);
+        _ocr.Fail(0, Error(EngineErrorKind.Timeout));
+
+        var run = _flow.TranslateRegionAsync();
+        _capture.Complete(null); // Esc
+        await run;
+
+        Assert.True(_flow.HasRetainedScreenshot);
+        Assert.True(_popup.ShowLast());
+        _popup.RequestRetry();
+
+        Assert.True(_ocr.Calls[1].Png.Span.SequenceEqual(png));
+    }
+
+    [Fact]
+    public async Task NewSelection_ReplacesScreenshot_OnlyOneKept()
+    {
+        await SelectAsync([0x89, 1, 1, 1, 1, 1, 1, 1]);
+        _ocr.Fail(0, Error(EngineErrorKind.Timeout));
+        Assert.Equal(8, _flow.RetainedScreenshotBytes);
+
+        var second = await SelectAsync([0x89, 2, 2]);
+
+        Assert.Equal(3, _flow.RetainedScreenshotBytes); // 只剩新的一张
+        _ocr.Fail(1, Error(EngineErrorKind.Timeout));
+        _popup.RequestRetry();
+        Assert.True(_ocr.Calls[2].Png.Span.SequenceEqual(second));
+    }
+
+    [Fact]
+    public async Task ResultPopup_ClosedAndReshown_KeepsScreenshotUntilNextSelection()
+    {
+        await SelectAsync();
+        _ocr.Complete(0);
+        _popup.Close(PopupCloseReason.User);
+
+        Assert.True(_popup.ShowLast());
+        Assert.Equal(PopupKind.Result, _popup.Kind);
+        Assert.True(_flow.HasRetainedScreenshot);
+    }
+
+    [Fact]
+    public async Task TextRequest_DropsScreenshot_BecauseOcrContentReplaced()
     {
         await SelectAsync();
         _ocr.Fail(0, Error(EngineErrorKind.Timeout));
-        _popup.Close(PopupCloseReason.AutoHide);
+
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Hotkey);
 
         Assert.False(_flow.HasRetainedScreenshot);
+        Assert.Equal(0, _flow.RetainedScreenshotBytes);
+    }
+
+    [Fact]
+    public async Task TextTooLongPopup_DropsScreenshot()
+    {
+        await SelectAsync();
+        _ocr.Fail(0, Error(EngineErrorKind.Timeout));
+
+        _flow.OnTextRejected(RejectReason.TooLong, 20000, ClipboardTrigger.Hotkey);
+
+        Assert.Equal(PopupContentMode.Text, _popup.Mode);
+        Assert.False(_flow.HasRetainedScreenshot);
+    }
+
+    [Fact]
+    public async Task IgnoredMonitorText_KeepsScreenshot()
+    {
+        await SelectAsync();
+        _ocr.Fail(0, Error(EngineErrorKind.Timeout));
+        _tray.SetPaused(true);
+
+        _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor); // 暂停时被忽略，浮窗内容不变
+
+        Assert.True(_flow.HasRetainedScreenshot);
+        Assert.True(_popup.CanRetry);
+    }
+
+    [Fact]
+    public void OcrErrorWithoutScreenshot_RetryHidden()
+    {
+        // 例如从未框选过（演示或外部直接显示）：不出现点了没反应的「重试」。
+        _popup.ShowOcrLoading(SampleAnchor);
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout));
+
+        Assert.False(_flow.HasRetainedScreenshot);
+        Assert.False(_popup.CanRetry);
+    }
+
+    [Fact]
+    public void TextErrorWithoutTextRequest_RetryHidden()
+    {
+        _popup.ShowLoading("x");
+        _popup.ShowError(new PopupError(PopupErrorKind.Timeout));
+
+        Assert.False(_popup.CanRetry);
+    }
+
+    [Fact]
+    public async Task Dispose_DropsScreenshot_AndHidesRetry()
+    {
+        await SelectAsync();
+        _ocr.Fail(0, Error(EngineErrorKind.Timeout));
+        Assert.True(_popup.CanRetry);
+
+        _flow.Dispose();
+
+        Assert.False(_flow.HasRetainedScreenshot);
+        Assert.False(_popup.CanRetry);
     }
 
     // ---- 服务未就绪 / 重启 ----
@@ -542,7 +707,7 @@ public sealed class RegionTranslateFlowTests : IDisposable
         _popup.Close(PopupCloseReason.User);
 
         Assert.True(_ocr.Calls[0].Token.IsCancellationRequested);
-        Assert.False(_flow.HasRetainedScreenshot);
+        Assert.True(_flow.HasRetainedScreenshot); // 托盘左键重新显示后仍可重试
         Assert.False(_popup.IsVisible);
         Assert.Empty(_completed);
     }
