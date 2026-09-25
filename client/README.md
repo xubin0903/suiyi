@@ -2,6 +2,8 @@
 
 C# **.NET 8** WPF 客户端。一期只做 **Windows**：托盘常驻、全局热键、剪贴板翻译，以及快捷键裁剪后的 OCR 翻译（M3）。翻译本身调用 `engine/` 的本机 HTTP 服务（见 [HTTP API](../docs/engine/HTTP-API.md)），不在客户端内嵌模型。
 
+在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)。
+
 ## 目录
 
 ```
