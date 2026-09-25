@@ -14,6 +14,10 @@ from pathlib import Path
 from suiyi_engine.backends.base import TranslationBackend
 from suiyi_engine.errors import UnsupportedPairError
 from suiyi_engine.registry import (
+    DEFAULT_BEAM_SIZE,
+    DEFAULT_INTER_THREADS,
+    DEFAULT_MAX_BATCH_SIZE,
+    DEFAULT_MAX_DECODING_LENGTH,
     BackendFactory,
     ModelRegistry,
     default_intra_threads,
@@ -60,11 +64,11 @@ class Translator:
         backend_factory: BackendFactory | None = None,
         device: str = "cpu",
         compute_type: str = "int8",
-        inter_threads: int = 1,
+        inter_threads: int = DEFAULT_INTER_THREADS,
         intra_threads: int | None = None,
-        beam_size: int = 2,
-        max_batch_size: int = 32,
-        max_decoding_length: int = 512,
+        beam_size: int = DEFAULT_BEAM_SIZE,
+        max_batch_size: int = DEFAULT_MAX_BATCH_SIZE,
+        max_decoding_length: int = DEFAULT_MAX_DECODING_LENGTH,
     ) -> None:
         intra = default_intra_threads() if intra_threads is None else intra_threads
         options: dict[str, object] = {

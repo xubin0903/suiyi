@@ -422,7 +422,7 @@ def test_models_dir_and_thread_defaults(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setenv("SUIYI_MODELS_DIR", str(tmp_path))
     assert default_models_dir() == tmp_path
     assert Translator().registry.models_dir == tmp_path
-    assert 1 <= default_intra_threads() <= 4
+    assert 1 <= default_intra_threads() <= 2
 
     with pytest.raises(ValueError, match="beam_size"):
         Translator(tmp_path, beam_size=0)
@@ -441,7 +441,14 @@ def test_ct2_backend_rejects_bad_files_before_loading(tmp_path: Path) -> None:
 
 
 def test_runtime_modules_do_not_import_torch() -> None:
-    for name in ("translator.py", "registry.py", "backends/ct2_opus.py", "backends/base.py"):
+    for name in (
+        "translator.py",
+        "registry.py",
+        "backends/ct2_opus.py",
+        "backends/base.py",
+        "api.py",
+        "serve.py",
+    ):
         source = (_ENGINE_SRC / name).read_text(encoding="utf-8")
         assert "import torch" not in source
         assert "import transformers" not in source
