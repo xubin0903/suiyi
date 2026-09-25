@@ -135,6 +135,57 @@ WM_HOTKEY（RegisterHotKey + MOD_NOREPEAT，长按不连发）
 - **管理员窗口。** 目标窗口以管理员权限运行而随译没有时，`SendInput` 会被 UIPI 静默拦截，剪贴板不变，此时退化为翻译当前剪贴板，并写日志。
 - 部分终端、远程桌面等程序对模拟 Ctrl+C 的处理不同，同样会退化为翻译当前剪贴板。
 
+## 与引擎通信
+
+代码在 `Suiyi.Core/Engine/`，契约见 [HTTP API](../docs/engine/HTTP-API.md)，超时阈值依据 [性能基线](../docs/engine/性能基线.md)「给 M2 客户端」。
+
+- **`EngineClient`**：整个进程一个实例，连接 `http://127.0.0.1:{port}`（默认 18780）。内部只有一个长寿命 `HttpClient`，处理器为 `SocketsHttpHandler { UseProxy = false }`（系统代理不能拦截回环地址），`HttpClient.Timeout` 为无限，每次请求由 `TimeoutPolicy` 算出超时并用 `CancellationTokenSource`（基于注入的 `TimeProvider`）取消。
+  - `GetHealthAsync()`：刷新已加载模型；`GetLanguagesAsync()`：结果缓存；服务重启或模型目录变化后调用 `Invalidate()`。
+  - `TranslateAsync(text, source = "auto", target)`：缓存未知时先各取一次 `/languages`、`/health`（失败按「可能懒加载」处理），请求体为 UTF-8 JSON；成功后把 `route` 里的模型记为已加载。
+  - 响应 DTO 忽略未知字段（服务 0.0.x 内字段只增不改），不要打开 `UnmappedMemberHandling.Disallow`。
+- **`TranslationService`**：界面调用的入口。目标语言由注入的 `Func<(primary, secondary)>` 每次读取。
+  - 默认 `auto → 主目标`；服务检测到原文就是主目标语种（`route` 为空、原样返回）时，再以 `检测结果 → 第二目标` 请求一次。
+  - `sourceOverride`：用户手动指定原文语种（如纯汉字日语被检测成 zh），不再自动检测；指定语种等于主目标时直接译为第二目标。
+  - **最新请求优先**：新调用会取消上一条未完成的调用；被取消的调用抛 `OperationCanceledException`，不是错误，界面直接丢弃即可。
+  - 结果 `TranslationOutcome`：译文、原文语种、是否自动检测、实际目标、是否改译、`route`、服务端 `elapsed_ms`（改译为两次之和）、客户端往返耗时、请求次数。
+  - 不自动重试，重试由界面决定。
+
+### 超时（`TimeoutPolicy`，纯函数）
+
+候选路线：`source` 明确时为该语向；`auto` 时为 {zh, en, ja} 去掉 `target` 后到 `target` 的全部**可用**语向。按顺序取第一条命中的规则：
+
+| 条件 | 超时 |
+|------|------|
+| 任一候选路线的模型不在 `loaded_models`（会懒加载），或 `/languages`、`/health` 未知 | 10000 ms（且不低于下面第 3 行对同一文本的值） |
+| 文本 ≤ 120 字符、不含换行，且候选路线全部直连 | 1500 ms |
+| 其他（段落、英文中转） | 3000 ms；超过 2000 字符后每字符 +1 ms，封顶 15000 ms |
+
+字符数按 Unicode 码位计（与服务端 Python `len` 一致）。`/health`、`/languages` 固定 2000 ms。
+
+### 错误
+
+失败统一抛 `EngineException`，按 `Kind`（`EngineErrorKind`）处理，界面显示 `UserMessage`；技术细节在 `Message`，只写日志。调用方自己取消时抛 `OperationCanceledException`，不是 `EngineException`。
+
+| Kind | 来源 | UserMessage |
+|------|------|-------------|
+| `Unavailable` | 连接被拒绝、连接中断 | 翻译服务未运行或已退出 |
+| `Timeout` | 超过 `TimeoutPolicy` 的时间（区别于调用方取消） | 翻译超时（N 毫秒），请重试 |
+| `UnsupportedPair` | `unsupported_pair`，带 `MissingModels`、`SourceLanguage`、`TargetLanguage` | 未安装语向模型：opus-mt-en-zh（无缺失模型时：不支持该语向：ko→zh） |
+| `TextTooLong` | `text_too_long`，带 `Limit`、`Length` | 文本过长：N 字，上限 M 字 |
+| `DetectFailed` | `detect_failed` | 无法识别原文语种，请手动指定 |
+| `InvalidRequest` | `invalid_request` | 翻译请求无效 |
+| `Internal` | `internal_error`，或 5xx 且正文不是错误信封 / 错误码未知 | 翻译服务内部错误 |
+| `Unknown` | 框架 404 等非信封 4xx、未知 4xx 错误码、200 但 JSON 无法解析 | 翻译服务返回了无法识别的响应 |
+
+### 联调测试
+
+`tests/Suiyi.Core.Tests/Engine/EngineLiveTests.cs` 标记 `[Trait("Category", "Engine")]`，默认跳过。先启动引擎，再设置端口运行：
+
+```bash
+python -m suiyi_engine serve --preload zh-en,en-zh
+SUIYI_ENGINE_PORT=18780 dotnet test client/Suiyi.sln -c Release --filter Category=Engine
+```
+
 ## 环境
 
 - .NET 8 SDK（`global.json` 允许 8.0 下更高的特性带）
