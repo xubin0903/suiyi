@@ -11,3 +11,6 @@
 | `scripts/eval_samples.py` | 对固定样例集跑 chrF / BLEU、专名保留率与延迟，写出报告。说明见 [评测](../docs/engine/评测.md)。 |
 | `scripts/bench_service.py` | 经本机 HTTP 服务测量冷启动、延迟与内存。说明见 [性能基线](../docs/engine/性能基线.md)。 |
 | `scripts/download_ocr_models.py` | 下载并校验 OCR 模型、检查本地模型、离线冒烟。说明见 [OCR 选型与许可证](../docs/engine/OCR选型与许可证.md)。 |
+| `scripts/eval_ocr.py` | OCR 评测与性能基线：CER、段落切分、P50/P95、内存，对比检测模型。说明见 [OCR 评测](../docs/engine/OCR评测.md)。 |
+| `scripts/eval_ocr.ps1` | Windows 一条命令跑 OCR 评测（`-Setup` 时建 venv、装依赖、下载模型）。 |
+| `scripts/make_ocr_samples.py` | 重新生成 `engine/eval/ocr_samples/` 的 OCR 样例图与标注（CC0）。 |

@@ -130,6 +130,31 @@ jobs:
           SUIYI_MODELS_DIR="$MODELS" SUIYI_OCR_TESTS_REQUIRED=1 "$PY" -m pytest -rs \
             engine/tests/test_ocr_layout.py engine/tests/test_ocr_engine.py engine/tests/test_ocr_model.py \
             engine/tests/test_ocr_http.py
+          # 供下一步复用同一个 venv 与模型目录
+          echo "OCR_PY=$PY" >> "$GITHUB_ENV"
+          echo "OCR_MODELS=$MODELS" >> "$GITHUB_ENV"
+
+      - name: OCR 评测快速子集（CI 环境数据，#54）
+        # 验证 scripts/eval_ocr.py 在 Windows / Linux 上一条命令能跑通并写出报告与 JSON。
+        # 只有 wheel 自带的 det small（不下载 tiny）；另跑一个调优变体，验证实验开关在两个平台可用。
+        # 耗时是 GitHub 托管 runner 的数据，只用于确认脚本可用，不作为性能基线。
+        # psutil 在审计之后单独装，不影响上一步的依赖审计。
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          "$OCR_PY" -m pip install --quiet "psutil>=5.9"
+          "$OCR_PY" scripts/eval_ocr.py --quick --det small,small@960+rb1+nomp \
+            --models-dir "$OCR_MODELS" --label "CI ${RUNNER_OS}（GitHub 托管 runner）" \
+            --out "$RUNNER_TEMP/ocr-eval"
+          cat "$RUNNER_TEMP/ocr-eval/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传 OCR 评测报告
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-eval-${{ matrix.os }}
+          path: ${{ runner.temp }}/ocr-eval
+          if-no-files-found: ignore
 
   # 稳定的汇总检查，供将来分支保护使用。
   # engine 矩阵被跳过时本 job 仍成功；矩阵失败或被取消时本 job 失败。
