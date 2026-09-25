@@ -30,7 +30,7 @@ client/
   | 目录 | 内容 |
   |------|------|
   | `Engine/` | HTTP 客户端（已有）与服务进程管理逻辑 |
-  | `Settings/` | 设置模型与读写 |
+  | `Settings/` | 设置模型、校验、原子读写（已有） |
   | `Clipboard/` | 剪贴板监听、过滤规则、自身写入抑制（已有） |
   | `Popup/` | 浮窗 ViewModel、状态机、位置计算（已有） |
   | `Hotkeys/` | 快捷键解析、注册管理、取词流程（已有） |
@@ -83,7 +83,7 @@ client/
 
 **菜单：** 状态行（灰）、翻译剪贴板、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。
 
-**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused`；快捷键注册失败 → 托盘气泡；启动与「重启翻译服务」时用 `EngineClient.GetHealthAsync` 探测一次，成功为就绪，失败为异常（真正的进程管理由 #32 接管）；目标语言只存在托盘状态里（设置 #27 持久化，#34 翻译时读取 `State.Target`）；翻译剪贴板暂时只写日志（#34 接线）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：`%APPDATA%\suiyi\settings.json`（`SUIYI_CONFIG_DIR` 可覆盖），不存在时打开目录。
+**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused` 并写回 `clipboard.monitorEnabled`；快捷键注册失败 → 托盘气泡；启动与「重启翻译服务」时用 `EngineClient.GetHealthAsync` 探测一次，成功为就绪，失败为异常（真正的进程管理由 #32 接管）；目标语言写回 `primaryTarget`（启动时从设置恢复，#34 翻译时读取设置）；翻译剪贴板暂时只写日志（#34 接线）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：用记事本打开 `SettingsStore.FilePath`，文件不存在时先写出默认设置。
 
 **手测：**
 
@@ -95,6 +95,73 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 再启动一次会看到「随译已在运行」气泡，第二个进程立即退出。
 
 **DPI：** `Suiyi.App/app.manifest` 声明 PerMonitorV2（回退 `true/pm`）。WinForms 分析器的 WFAC010 建议改用 `Application.SetHighDpiMode`，但这是 WPF 应用，只能用 manifest，已在 csproj 中忽略。
+
+## 设置文件
+
+`Suiyi.Core/Settings`（#27）。路径 `%APPDATA%\suiyi\settings.json`（漫游配置），环境变量 `SUIYI_CONFIG_DIR` 可覆盖目录（测试、便携模式）；路径规则只在 `SettingsPaths` 一处。
+
+默认内容（UTF-8 无 BOM、两空格缩进、camelCase；托盘「打开设置文件」在文件不存在时会写出这份）：
+
+```json
+{
+  "schemaVersion": 1,
+  "primaryTarget": "zh",
+  "secondaryTarget": "en",
+  "clipboard": {
+    "monitorEnabled": true,
+    "debounceMs": 150,
+    "minChars": 2,
+    "maxChars": 2000
+  },
+  "hotkey": {
+    "translate": "Ctrl+Alt+T"
+  },
+  "popup": {
+    "autoHideSeconds": 8,
+    "maxWidth": 480
+  },
+  "engine": {
+    "port": 18780,
+    "pythonPath": null,
+    "command": null,
+    "args": null,
+    "modelsDir": null,
+    "preload": "zh-en,en-zh"
+  },
+  "startWithWindows": false
+}
+```
+
+| 字段 | 默认 | 取值 / 说明 |
+|------|------|-------------|
+| `schemaVersion` | `1` | 设置文件版本，以后迁移用 |
+| `primaryTarget` | `"zh"` | 目标语言 `zh` / `en` / `ja`；托盘「目标语言」写回这里 |
+| `secondaryTarget` | `"en"` | 检测到的原文语种等于 `primaryTarget` 时改译为它；与 `primaryTarget` 相同时自动取 `primary == "zh" ? "en" : "zh"`（`SettingsRules.ResolveTargets`） |
+| `clipboard.monitorEnabled` | `true` | 是否监听剪贴板；托盘「暂停监听」写回这里 |
+| `clipboard.debounceMs` | `150` | 50–1000 |
+| `clipboard.minChars` / `maxChars` | `2` / `2000` | 1–10000，且 `minChars ≤ maxChars`（否则两者都回落默认值） |
+| `hotkey.translate` | `"Ctrl+Alt+T"` | 快捷键字符串，`""` 表示禁用；格式由 `HotkeyParser` 解析，这里不校验 |
+| `popup.autoHideSeconds` | `8` | 0–60，0 表示不自动消失 |
+| `popup.maxWidth` | `480` | 240–1920（设备无关像素） |
+| `engine.port` | `18780` | 1–65535 |
+| `engine.pythonPath` | `null` | 不填则按进程管理（#32）的查找顺序 |
+| `engine.command` / `engine.args` | `null` | 高级：直接指定服务可执行文件与参数数组（为 M4 打包 exe 预留） |
+| `engine.modelsDir` | `null` | 不填则不传 `--models-dir` |
+| `engine.preload` | `"zh-en,en-zh"` | `""` 表示不预加载 |
+| `startWithWindows` | `false` | 预留，M2 不实现 |
+
+**读取规则：**
+
+- 文件不存在：使用默认值，不落盘；首次写入时创建目录。
+- 允许 `//` 注释和尾逗号；未知字段忽略；缺失字段取默认值；属性名大小写不敏感。
+- 单个字段类型不对或越界（如 `"primaryTarget": "fr"`、`"debounceMs": -1`）：只有该字段回落默认值，写一条 Warning 日志，其余字段保留；读取时不改写文件。
+- 不是合法 JSON，或 `schemaVersion` 高于当前版本：原文件改名为 `settings.json.bad-yyyyMMddHHmmss`（重名时加 `-1`、`-2`），使用默认值并写日志，不崩溃。
+
+**写入：** 先写同目录临时文件并刷盘，再 `File.Replace` / `File.Move` 替换，写到一半失败不会破坏旧文件。`SettingsStore.Update(Func<AppSettings, AppSettings>)` 线程安全：校验 → 值有变化才写盘并触发 `Changed`（`OldSettings` / `NewSettings`）；写盘失败只记日志，内存中的值照样生效。
+
+**生效时机：** M2 不做热重载，手工编辑后需**重启**生效。托盘改设置写回前，如果发现文件被外部修改过，会先重新读取再应用这次修改，不会覆盖手工编辑的内容（但其他字段仍要重启才生效）。
+
+**当前接线（`App.xaml.cs`）：** 启动时 `Load()`，用 `clipboard.*` 构造监听器（含暂停状态），用 `hotkey.translate` 注册快捷键，用 `popup.*` 构造浮窗，用 `engine.port` 构造 `EngineClient`，用 `primaryTarget`、`monitorEnabled` 初始化托盘；托盘「暂停监听」「目标语言」通过 `Update` 写回。`engine.pythonPath` / `command` / `args` / `modelsDir` / `preload` 由进程管理（#32）读取。
 
 ## 译文浮窗
 
@@ -203,7 +270,7 @@ WM_HOTKEY（RegisterHotKey + MOD_NOREPEAT，长按不连发）
 
 **快捷键写法：** 修饰键 `Ctrl`（`Control`）、`Alt`、`Shift`、`Win`（`Windows`）加一个按键，用 `+` 连接，大小写与空格不敏感，例如 `Ctrl+Alt+T`、`Ctrl+Shift+F1`、`Win+Alt+Y`。按键可以是 `A`–`Z`、`0`–`9`、`F1`–`F24`、`NumPad0`–`NumPad9`、`Space`、`Enter`、`Tab`、`Esc`、`Backspace`、`Insert`、`Delete`、`Home`、`End`、`PageUp`、`PageDown`、方向键、`Pause`、`PrintScreen`。除 `F1`–`F24` 外必须带 `Ctrl`、`Alt` 或 `Win`（`Shift+T` 会打出大写字母，不允许）。空字符串表示禁用。
 
-**修改：** 设置（#27）接入前，用命令行 `dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"` 指定（启动时调用 `HotkeyManager.Update`）。接入设置后改 `settings.json` 的 `hotkey.translate`。
+**修改：** 改 `settings.json` 的 `hotkey.translate` 后重启（启动时调用 `HotkeyManager.Update`）。命令行 `dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"` 可临时覆盖，不写回设置。
 
 **被占用：** 注册失败时发 `RegistrationFailed`，提示「快捷键 Ctrl+Alt+T 已被其他程序占用，请在设置中修改」，程序继续运行；托盘弹气泡显示该提示并写日志。
 

@@ -13,6 +13,7 @@ using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Lifecycle;
 using Suiyi.Core.Logging;
 using Suiyi.Core.Popup;
+using Suiyi.Core.Settings;
 using Suiyi.Core.Tray;
 
 namespace Suiyi.App;
@@ -33,6 +34,7 @@ public partial class App : Application
     private SingleInstanceGuard? _instanceGuard;
     private InstanceActivation? _activation;
     private FileLogger? _logger;
+    private SettingsStore? _settings;
     private TrayController? _tray;
     private NotifyIconTrayView? _trayView;
     private DispatcherTimer? _trayDemoTimer;
@@ -63,8 +65,16 @@ public partial class App : Application
         _logger.Info($"客户端启动，版本 {GetVersion()}");
         DispatcherUnhandledException += OnDispatcherUnhandledException;
 
+        // 设置（#27）：启动时读一次；托盘改动时写回。手工编辑 settings.json 后需重启生效。
+        _settings = new SettingsStore(logger: _logger);
+        var settings = _settings.Load();
+
         // 托盘（#29）。所有回调在 UI 线程上执行。
-        _tray = new TrayController();
+        _tray = new TrayController(TrayState.Initial with
+        {
+            Target = settings.PrimaryTarget,
+            Paused = !settings.Clipboard.MonitorEnabled,
+        });
         _trayView = new NotifyIconTrayView(_tray);
         _activation = new InstanceActivation(
             () => Dispatcher.BeginInvoke(() => _tray?.ShowNotification(AppTitle, "随译已在运行")));
@@ -74,11 +84,14 @@ public partial class App : Application
         var selfWrites = new SelfWriteTracker();
         _clipboardSource = new Win32ClipboardSource(_logger);
         var clipboardWriter = new ClipboardWriter(_clipboardSource, selfWrites, _logger);
-        _clipboardMonitor = new ClipboardMonitor(_clipboardSource, selfWrites, logger: _logger);
+        _clipboardMonitor = new ClipboardMonitor(_clipboardSource, selfWrites, settings.Clipboard.ToMonitorOptions(), logger: _logger)
+        {
+            Paused = !settings.Clipboard.MonitorEnabled,
+        };
         _clipboardMonitor.Start();
 
         // 全局快捷键（#33）。暂停剪贴板监听不影响快捷键。模拟复制引起的变化由 SuppressNext 让监听忽略。
-        // 设置（#27）接入前，可用命令行 --hotkey "Ctrl+Shift+Y" 指定；空字符串表示禁用。
+        // 快捷键取自设置 hotkey.translate；命令行 --hotkey "Ctrl+Shift+Y" 可临时覆盖（不写回设置）；空字符串表示禁用。
         _hotkeyAction = new HotkeyTranslateAction(_clipboardSource, clipboardWriter, new Win32KeyboardInput(), logger: _logger);
         _hotkeyRegistrar = new Win32HotkeyRegistrar();
         _hotkeyManager = new HotkeyManager(_hotkeyRegistrar, _logger);
@@ -86,14 +99,14 @@ public partial class App : Application
         _hotkeyManager.RegistrationFailed += (_, args) => _tray?.ShowNotification(AppTitle, args.Message);
 
         // 译文浮窗（#31）。翻译流程由集成 Issue（#34）调用 ShowLoading / ShowResult / ShowError。
-        _popup = new PopupViewModel(dispatch: action => Dispatcher.BeginInvoke(action));
+        _popup = new PopupViewModel(settings.Popup.ToPopupOptions(), dispatch: action => Dispatcher.BeginInvoke(action));
         _popupWindow = new PopupWindow(_popup);
         WirePopup(_popup, clipboardWriter);
 
         WireTray(_tray, _clipboardMonitor);
-        _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? HotkeyParser.DefaultTranslate);
+        _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? settings.Hotkey.Translate);
 
-        _engine = new EngineClient();
+        _engine = new EngineClient(settings.Engine.Port);
         if (e.Args.Contains("--popup-demo"))
         {
             StartPopupDemo(_popup);
@@ -135,10 +148,15 @@ public partial class App : Application
         {
             monitor.Paused = args.Paused;
             _logger?.Info(args.Paused ? "托盘：暂停剪贴板监听" : "托盘：恢复剪贴板监听");
+            _settings?.Update(s => s with { Clipboard = s.Clipboard with { MonitorEnabled = !args.Paused } });
         };
 
-        // 设置（#27）接入前目标语言只在内存里；#34 翻译时读取 tray.State.Target。
-        tray.TargetChanged += (_, args) => _logger?.Info($"托盘：目标语言切换为 {args.Language}");
+        // 目标语言写回 primaryTarget（secondaryTarget 按 ResolveTargets 保持不同）；#34 翻译时读取设置。
+        tray.TargetChanged += (_, args) =>
+        {
+            _logger?.Info($"托盘：目标语言切换为 {args.Language}");
+            _settings?.Update(s => s.WithPrimaryTarget(args.Language));
+        };
 
         // 由集成 Issue（#34）接到翻译流程。
         tray.TranslateClipboardRequested += (_, _) => _logger?.Info("托盘：翻译剪贴板（待 #34 接线）");
@@ -239,19 +257,23 @@ public partial class App : Application
 
     private void OpenSettings()
     {
-        // 与设置 Issue（#27）约定的位置；文件还不存在时打开所在目录。
-        var directory = Environment.GetEnvironmentVariable("SUIYI_CONFIG_DIR") is { Length: > 0 } overridden
-            ? overridden
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "suiyi");
-        var file = Path.Combine(directory, "settings.json");
-        if (File.Exists(file))
+        // 文件还不存在时先写出默认设置，方便手工编辑。
+        var file = _settings!.FilePath;
+        if (!File.Exists(file))
         {
-            StartProcess("notepad.exe", file);
+            try
+            {
+                _settings.Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger?.Error($"无法创建设置文件 {file}", ex);
+                OpenFolder(Path.GetDirectoryName(file)!);
+                return;
+            }
         }
-        else
-        {
-            OpenFolder(directory);
-        }
+
+        StartProcess("notepad.exe", file);
     }
 
     private void OpenFolder(string directory)
