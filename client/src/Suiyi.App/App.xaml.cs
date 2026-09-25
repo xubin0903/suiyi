@@ -5,12 +5,14 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Suiyi.App.Interop;
+using Suiyi.App.Popup;
 using Suiyi.App.Tray;
 using Suiyi.Core.Clipboard;
 using Suiyi.Core.Engine;
 using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Lifecycle;
 using Suiyi.Core.Logging;
+using Suiyi.Core.Popup;
 using Suiyi.Core.Tray;
 
 namespace Suiyi.App;
@@ -38,6 +40,9 @@ public partial class App : Application
     private JobObject? _engineJob;
     private EngineClient? _engineClient;
     private EngineSupervisor? _engine;
+    private DispatcherTimer? _popupDemoTimer;
+    private PopupViewModel? _popup;
+    private PopupWindow? _popupWindow;
     private Win32ClipboardSource? _clipboardSource;
     private ClipboardMonitor? _clipboardMonitor;
     private Win32HotkeyRegistrar? _hotkeyRegistrar;
@@ -83,8 +88,18 @@ public partial class App : Application
         _hotkeyManager.Pressed += (_, _) => _ = RunHotkeyActionAsync();
         _hotkeyManager.RegistrationFailed += (_, args) => _tray?.ShowNotification(AppTitle, args.Message);
 
+        // 译文浮窗（#31）。翻译流程由集成 Issue（#34）调用 ShowLoading / ShowResult / ShowError。
+        _popup = new PopupViewModel(dispatch: action => Dispatcher.BeginInvoke(action));
+        _popupWindow = new PopupWindow(_popup);
+        WirePopup(_popup, clipboardWriter);
+
         WireTray(_tray, _clipboardMonitor);
         _hotkeyManager.Update(GetOptionValue(e.Args, "--hotkey") ?? HotkeyParser.DefaultTranslate);
+
+        if (e.Args.Contains("--popup-demo"))
+        {
+            StartPopupDemo(_popup);
+        }
 
         if (e.Args.Contains("--tray-demo"))
         {
@@ -108,6 +123,9 @@ public partial class App : Application
         }
 
         _engineJob?.Dispose();
+        _popupDemoTimer?.Stop();
+        _popupWindow?.CloseForExit();
+        _popup?.Dispose();
         _hotkeyManager?.Dispose();
         _hotkeyRegistrar?.Dispose();
         _clipboardMonitor?.Dispose();
@@ -133,9 +151,15 @@ public partial class App : Application
         // 设置（#27）接入前目标语言只在内存里；#34 翻译时读取 tray.State.Target。
         tray.TargetChanged += (_, args) => _logger?.Info($"托盘：目标语言切换为 {args.Language}");
 
-        // 以下两项由集成 Issue（#34）接到翻译与浮窗（#31）。
+        // 由集成 Issue（#34）接到翻译流程。
         tray.TranslateClipboardRequested += (_, _) => _logger?.Info("托盘：翻译剪贴板（待 #34 接线）");
-        tray.ShowLastPopupRequested += (_, _) => _logger?.Info("托盘：左键单击，重新显示上次浮窗（待 #34 接线）");
+        tray.ShowLastPopupRequested += (_, _) =>
+        {
+            if (_popup?.ShowLast() != true)
+            {
+                _logger?.Info("托盘：左键单击，暂无可显示的浮窗");
+            }
+        };
 
         tray.RestartEngineRequested += (_, _) =>
         {
@@ -151,6 +175,42 @@ public partial class App : Application
             MessageBoxButton.OK,
             MessageBoxImage.Information);
         tray.ExitRequested += (_, _) => Shutdown();
+    }
+
+    private void WirePopup(PopupViewModel popup, ClipboardWriter clipboardWriter)
+    {
+        // 复制译文走 ClipboardWriter（登记自身写入），不会触发剪贴板监听。
+        popup.CopyTranslationRequested += (_, args) =>
+        {
+            if (!clipboardWriter.SetText(args.Text))
+            {
+                _tray?.ShowNotification(AppTitle, "复制失败：剪贴板被其他程序占用");
+            }
+        };
+
+        // 以下两项由集成 Issue（#34）接到翻译流程。
+        popup.RetryRequested += (_, _) => _logger?.Info("浮窗：重试（待 #34 接线）");
+        popup.SourceLanguageOverride += (_, args) => _logger?.Info($"浮窗：指定原文语种 {args.Language}（待 #34 接线）");
+    }
+
+    private void StartPopupDemo(PopupViewModel popup)
+    {
+        // 跑一轮后停在最后一个状态，便于继续手测自动消失、悬停、钉住；托盘左键可重新显示。
+        _logger?.Info("--popup-demo：每 3 秒切换一个浮窗状态，共一轮");
+        var step = 0;
+        PopupDemo.ApplyStep(popup, step);
+        _popupDemoTimer = new DispatcherTimer { Interval = PopupDemo.Interval };
+        _popupDemoTimer.Tick += (_, _) =>
+        {
+            if (++step >= PopupDemo.StepCount)
+            {
+                _popupDemoTimer.Stop();
+                return;
+            }
+
+            PopupDemo.ApplyStep(popup, step);
+        };
+        _popupDemoTimer.Start();
     }
 
     private void StartEngine(TrayController tray)

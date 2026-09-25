@@ -32,7 +32,7 @@ client/
   | `Engine/` | HTTP 客户端（已有）与服务进程管理逻辑 |
   | `Settings/` | 设置模型与读写 |
   | `Clipboard/` | 剪贴板监听、过滤规则、自身写入抑制（已有） |
-  | `Popup/` | 浮窗 ViewModel 与状态机 |
+  | `Popup/` | 浮窗 ViewModel、状态机、位置计算（已有） |
   | `Hotkeys/` | 快捷键解析、注册管理、取词流程（已有） |
   | `Tray/` | 托盘状态、菜单模型、托盘控制器（已有） |
   | `Lifecycle/` | 单实例等进程生命周期逻辑（已有） |
@@ -83,7 +83,7 @@ client/
 
 **菜单：** 状态行（灰）、翻译剪贴板、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。
 
-**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言只存在托盘状态里（设置 #27 持久化，#34 翻译时读取 `State.Target`）；翻译剪贴板与左键单击暂时只写日志（#34 接线）。打开设置文件：`%APPDATA%\suiyi\settings.json`（`SUIYI_CONFIG_DIR` 可覆盖），不存在时打开目录。
+**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言只存在托盘状态里（设置 #27 持久化，#34 翻译时读取 `State.Target`）；翻译剪贴板暂时只写日志（#34 接线）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：`%APPDATA%\suiyi\settings.json`（`SUIYI_CONFIG_DIR` 可覆盖），不存在时打开目录。
 
 **手测：**
 
@@ -95,6 +95,41 @@ dotnet run --project client/src/Suiyi.App -- --hotkey "Ctrl+Shift+Y"
 再启动一次会看到「随译已在运行」气泡，第二个进程立即退出。
 
 **DPI：** `Suiyi.App/app.manifest` 声明 PerMonitorV2（回退 `true/pm`）。WinForms 分析器的 WFAC010 建议改用 `Application.SetHighDpiMode`，但这是 WPF 应用，只能用 manifest，已在 csproj 中忽略。
+
+## 译文浮窗
+
+光标旁的轻量浮窗（#31）。状态机、计时、位置计算在 `Suiyi.Core/Popup`（注入 `TimeProvider` 单测），窗口与 Win32 在 `Suiyi.App/Popup`、`Suiyi.App/Interop/PopupNativeMethods`。
+
+| 类型 | 位置 | 作用 |
+|------|------|------|
+| `PopupViewModel` | Core | 集成方调用 `ShowPreparing()`、`ShowLoading(sourceText)`、`ShowResult(PopupResult)`、`ShowError(PopupError)`、`ShowLast()`、`Close(reason)`；事件 `CopyTranslationRequested(Text)`、`RetryRequested`、`SourceLanguageOverride(Language)`、`Closed(Reason)`；窗口用 `Shown(Reposition)`、`PropertyChanged`、`TogglePin()`、`SetHovered()`、`RequestCopy()`、`RequestRetry()`、`RequestSourceOverride()` |
+| `PopupKind` | Core | `None` / `Preparing` / `Loading` / `Result` / `Error` |
+| `PopupResult` | Core | `Translation`、`Source`、`Target`、`SourceDetected`、`Elapsed` |
+| `PopupError` / `PopupErrorKind` | Core | `ServiceUnavailable`、`Timeout`、`MissingModels`（`MissingModels` 列表）、`DetectFailed`、`TextTooLong`（`Limit`/`Length`）、`Other`（`Detail`）；`Message` 为中文短提示，`CanRetry`（文本过长为否）。不依赖 `EngineException`，由 #34 映射 |
+| `PopupOptions` | Core | `MaxWidth` 480、`AutoHideSeconds` 8（0 不消失）、`CursorOffset` 16、`LoadingIndicatorDelay` 300 ms、`CopiedFeedbackDuration` 1 s |
+| `PopupPlacement.Calculate` | Core | 光标点 + 窗口尺寸 + 工作区 → 左上角（物理像素，支持负坐标）：右下偏移，放不下翻到左 / 上，再夹紧 |
+| `PopupText` | Core | 语种标签（`中文 → English`、`English（自动） → 中文`）、耗时、原文摘要、按语种的字体回退链 |
+| `PopupDemo` | Core | `--popup-demo` 步骤 |
+| `PopupWindow` / `PopupTheme` | App | 无边框圆角阴影、置顶、不进任务栏；`WS_EX_NOACTIVATE \| WS_EX_TOOLWINDOW`；`MonitorFromPoint` + `GetMonitorInfo` 取工作区；跟随 `AppsUseLightTheme` |
+
+**行为：**
+
+- **不抢焦点：** 未钉住时带 `WS_EX_NOACTIVATE`，`ShowActivated=false`。钉住后去掉该样式，可以激活窗口、选中文字、拖动标题栏。
+- **Loading：** 浮窗原本隐藏时，整个窗口在 300 ms 后才出现；结果先到就直接显示结果，不闪加载态。浮窗已显示时立即更新原文摘要，300 ms 后出现进度条。
+- **自动消失：** Preparing / Result / Error 显示后 8 s 消失（Loading 不计时）；悬停时暂停，移出后重新计满 8 s；钉住时不消失，取消钉住后重新计时；新内容会重新计时。
+- **位置：** 每次新翻译（且未钉住）移到当前光标旁；钉住时原地更新内容。内容尺寸变化时按同一光标点重新夹紧。
+- **关闭：** 点 ×；Esc 在浮窗获得焦点时（钉住后）生效，未钉住时仅在鼠标悬停于浮窗上期间临时注册全局 Esc（移出即注销，不影响在原应用里按 Esc）。点击浮窗外不关闭。关闭会取消钉住，内容保留，托盘左键可重新显示。
+- **复制：** 发 `CopyTranslationRequested`，`App` 用 `ClipboardWriter.SetText` 写入（登记为自身写入，不触发监听），按钮显示「已复制」1 s。
+- **语种标签：** 点击后可选 中文 / English / 日本語，发 `SourceLanguageOverride`（`DetectFailed` 错误时显示为「指定原文语种 ▾」）。
+- **字体：** 中文 `Microsoft YaHei UI` 优先，日文 `Yu Gothic UI` 优先，英文 `Segoe UI` 优先，彼此互为回退。
+
+**当前接线：** 复制已接 `ClipboardWriter`；托盘左键 → `ShowLast()`；重试和指定语种暂时只写日志，由 #34 接到翻译流程（#34 还需把 `EngineException` 映射为 `PopupError`）。
+
+**手测：**
+
+```powershell
+dotnet run --project client/src/Suiyi.App -- --popup-demo   # 每 3 秒一个状态，共一轮，停在最后一个错误态
+```
 
 ## 剪贴板监听
 
