@@ -118,6 +118,12 @@ public sealed record EngineSettings
     /// <summary>启动时预加载的语向，逗号分隔；<c>""</c> 表示不预加载。</summary>
     public string Preload { get; init; } = EngineOptions.DefaultPreload;
 
+    /// <summary>
+    /// 启动时预热 OCR 模型（#58，对应服务参数 <c>--preload-ocr</c>）；关闭可省内存，代价是首次框选多等一次冷加载。
+    /// 默认关闭：服务端参数随 #53 定稿，当前服务不认识该参数会启动失败。
+    /// </summary>
+    public bool PreloadOcr { get; init; }
+
     /// <summary>映射为进程管理（#32）的 <see cref="EngineOptions"/>；环境变量覆盖由 <c>EngineOptionsOverrides</c> 在其后应用。</summary>
     public EngineOptions ToEngineOptions() => new()
     {
@@ -127,6 +133,7 @@ public sealed record EngineSettings
         Args = Args ?? [],
         ModelsDir = ModelsDir,
         Preload = Preload,
+        PreloadOcr = PreloadOcr,
     };
 
     /// <inheritdoc />
@@ -137,7 +144,8 @@ public sealed record EngineSettings
         && Command == other.Command
         && (ReferenceEquals(Args, other.Args) || (Args is not null && other.Args is not null && Args.SequenceEqual(other.Args)))
         && ModelsDir == other.ModelsDir
-        && Preload == other.Preload;
+        && Preload == other.Preload
+        && PreloadOcr == other.PreloadOcr;
 
     /// <inheritdoc />
     public override int GetHashCode()
@@ -153,6 +161,7 @@ public sealed record EngineSettings
 
         hash.Add(ModelsDir);
         hash.Add(Preload);
+        hash.Add(PreloadOcr);
         return hash.ToHashCode();
     }
 }

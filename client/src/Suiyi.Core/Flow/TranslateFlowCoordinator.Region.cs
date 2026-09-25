@@ -143,9 +143,11 @@ public sealed partial class TranslateFlowCoordinator
         var result = OcrResultMapper.Map(outcome.Response, outcome.Target) with { Elapsed = outcome.ClientElapsed };
         _popup.ShowOcrResult(result, request.Anchor);
 
+        // 回调里只捕获计时与尺寸，不捕获 request，避免 PNG 被闭包多留一帧。
+        var (started, trigger, width, height, bytes) = (request.Started, request.Trigger, request.Width, request.Height, request.Png.Length);
         _afterRender(() =>
         {
-            var e2e = _timeProvider.GetElapsedTime(request.Started);
+            var e2e = _timeProvider.GetElapsedTime(started);
             if (!waitedForEngine)
             {
                 OcrLatency.Add(e2e.TotalMilliseconds);
@@ -154,13 +156,13 @@ public sealed partial class TranslateFlowCoordinator
             var elapsed = outcome.Response.ElapsedMs;
             _logger.Info(string.Create(
                 CultureInfo.InvariantCulture,
-                $"框选翻译完成：trigger={request.Trigger} size={request.Width}x{request.Height} bytes={request.Png.Length}"
+                $"框选翻译完成：trigger={trigger} size={width}x{height} bytes={bytes}"
                 + $" paragraphs={result.SourceParagraphs.Count} empty={result.IsEmpty} untranslated={result.UntranslatedParagraphs.Count}"
                 + $" {result.Source ?? "?"}→{result.Target}{(outcome.Retargeted ? "（改译）" : string.Empty)}"
                 + $" ocr_e2e_ms={e2e.TotalMilliseconds:0} http_ms={outcome.ClientElapsed.TotalMilliseconds:0}"
                 + $" server_ocr_ms={elapsed?.Ocr ?? 0:0} server_translate_ms={elapsed?.Translate ?? 0:0} server_total_ms={elapsed?.Total ?? 0:0}"
                 + $"{(waitedForEngine ? "（含等待服务就绪，不计入统计）" : string.Empty)}；框选{OcrLatency.Summary()}"));
-            RegionCompleted?.Invoke(this, new RegionTranslateCompletedEventArgs(request.Trigger, outcome, result, e2e, waitedForEngine));
+            RegionCompleted?.Invoke(this, new RegionTranslateCompletedEventArgs(trigger, outcome, result, e2e, waitedForEngine));
         });
     }
 

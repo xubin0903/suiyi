@@ -120,6 +120,20 @@ public class EngineCommandResolverTests
     }
 
     [Fact]
+    public void ServeArguments_PreloadOcrOffByDefault()
+    {
+        Assert.DoesNotContain(EngineCommandResolver.PreloadOcrArgument, EngineCommandResolver.ServeArguments(new EngineOptions()));
+    }
+
+    [Fact]
+    public void ServeArguments_PreloadOcr_AppendsFlag()
+    {
+        var args = EngineCommandResolver.ServeArguments(new EngineOptions { PreloadOcr = true, ModelsDir = "m" });
+
+        Assert.Equal(["serve", "--port", "18780", "--preload", EngineOptions.DefaultPreload, "--preload-ocr", "--models-dir", "m"], args);
+    }
+
+    [Fact]
     public void FindRepositoryRoot_NotFound_ReturnsNull()
     {
         Assert.Null(EngineCommandResolver.FindRepositoryRoot(BinDir, _ => false));
