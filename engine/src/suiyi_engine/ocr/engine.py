@@ -10,11 +10,14 @@
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import io
 import os
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -44,6 +47,7 @@ __all__ = [
     "OcrError",
     "OcrModelError",
     "OcrModelsMissingError",
+    "OcrRuntimeOptions",
     "decode_image",
 ]
 
@@ -52,6 +56,53 @@ DEFAULT_MIN_SCORE = 0.5
 
 OCR_LANGS = ("auto", "zh", "en", "ja")
 """接受的语言提示。当前是一个中英日共用的识别模型，提示只做校验，不改变识别行为。"""
+
+
+@dataclass(frozen=True)
+class OcrRuntimeOptions:
+    """RapidOCR / onnxruntime 运行参数（#74 调优后的默认值，依据见 ``docs/engine/OCR评测.md``）。
+
+    - ``det_max_side``：检测前把长边缩到该像素数以内（只缩不放），识别仍从**原图**裁切，
+      小字不受影响。``None`` 表示不缩放（RapidOCR 3.9 的原行为：≤2000 px 的截图按原尺寸检测）。
+    - ``rec_batch``：识别批大小。批内按最宽的行补齐，批越大中间数据越大；1 最省内存，也最快。
+    - ``mem_pattern``：onnxruntime ``enable_mem_pattern``。RapidOCR 不暴露该选项，
+      关闭时在创建会话期间临时替换其会话选项构造函数（只影响本实例的会话）。
+    - ``det_dilation``：检测后处理是否做 2×2 膨胀（RapidOCR 默认开）。
+      缩小检测图时膨胀相对变大、行框变胖；``None`` 表示「缩放时关、不缩放时保持默认」。
+    - ``box_shrink``：缩放补偿（检测图像素）。DB 后处理的外扩在检测图上是常数像素，
+      换回原图后放大 ``1/scale`` 倍，段间空隙被吃掉、分段变差。返回给分段的行框沿短边
+      每侧收回 ``box_shrink × (1/scale − 1)`` 原图像素（不缩放时为 0，行为不变）；
+      识别裁切仍用未收缩的框，不影响 CER。
+    - ``crop_pad``：缩放且关闭膨胀时，识别裁切框沿短边每侧外扩 ``crop_pad / scale`` 原图像素
+      （检测图像素计），补回膨胀原本给的余量，避免下划线、下伸部被切掉。
+    """
+
+    det_max_side: int | None = 1024
+    rec_batch: int = 1
+    mem_pattern: bool = False
+    det_dilation: bool | None = None
+    box_shrink: float = 2.0
+    crop_pad: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.det_max_side is not None and self.det_max_side < 320:
+            raise ValueError(f"det_max_side 至少为 320：{self.det_max_side}")
+        if self.rec_batch < 1:
+            raise ValueError(f"rec_batch 至少为 1：{self.rec_batch}")
+        if self.box_shrink < 0 or self.crop_pad < 0:
+            raise ValueError(f"box_shrink / crop_pad 不能为负：{self.box_shrink} / {self.crop_pad}")
+
+
+DEFAULT_RUNTIME = OcrRuntimeOptions()
+LEGACY_RUNTIME = OcrRuntimeOptions(
+    det_max_side=None,
+    rec_batch=6,
+    mem_pattern=True,
+    det_dilation=True,
+    box_shrink=0.0,
+    crop_pad=0.0,
+)
+"""#74 之前的行为（RapidOCR 默认），供评测对比。"""
 
 RawLine = tuple[Sequence[Sequence[float]], str, float]
 Backend = Callable[["np.ndarray"], list[RawLine]]
@@ -92,6 +143,7 @@ class OcrEngine:
         threads: int | None = None,
         max_pixels: int | None = None,
         layout: LayoutOptions = DEFAULT_OPTIONS,
+        runtime: OcrRuntimeOptions = DEFAULT_RUNTIME,
         backend_factory: BackendFactory | None = None,
     ) -> None:
         if not 0.0 <= min_score <= 1.0:
@@ -102,7 +154,8 @@ class OcrEngine:
         self.threads = threads if threads is not None else default_threads()
         self.max_pixels = max_pixels
         self.layout = layout
-        self._factory = backend_factory or rapidocr_backend
+        self.runtime = runtime
+        self._factory = backend_factory or functools.partial(rapidocr_backend, runtime=runtime)
         self._backend: Backend | None = None
         self._load_lock = threading.Lock()
         self._run_lock = threading.Lock()
@@ -180,30 +233,163 @@ class OcrEngine:
         return OcrLine(text=str(text), box=quad, score=score, low_confidence=score < self.min_score)
 
 
-def rapidocr_backend(paths: dict[str, Path], manifest: OcrManifest, threads: int) -> Backend:
-    """默认后端：RapidOCR + onnxruntime，参数来自 :func:`rapidocr_params`。"""
+def rapidocr_backend(
+    paths: dict[str, Path],
+    manifest: OcrManifest,
+    threads: int,
+    *,
+    runtime: OcrRuntimeOptions = DEFAULT_RUNTIME,
+) -> Backend:
+    """默认后端：RapidOCR + onnxruntime，参数来自 :func:`rapidocr_params` 与 ``runtime``。
+
+    RapidOCR 3.9 没有「只缩小检测图」的参数：``limit_type=max`` 时忽略 ``limit_side_len``、
+    按原图长边选 960/1500/2000；``limit_type=min`` 只放大不缩小；
+    ``Global.max_side_len`` 会连识别裁切一起缩小。
+    所以这里把流程拆成公开的两步：先把缩小后的图交给 RapidOCR 只做检测（``use_rec=False``），
+    框按比例换回原图坐标；再从原图裁切，交给 RapidOCR 的识别器（``text_rec``）。
+    """
 
     try:
+        import cv2
+        import numpy as np
         from rapidocr import RapidOCR
+        from rapidocr.ch_ppocr_rec import TextRecInput
+        from rapidocr.utils.process_img import get_rotate_crop_image
     except ImportError as exc:
         raise OcrError('未安装 OCR 依赖：请执行 pip install -e "engine[ocr]"') from exc
 
     params = rapidocr_params(paths, manifest)
     params["Global.text_score"] = 0.0  # 低置信度由 OcrEngine 标记，不让 RapidOCR 静默丢掉
+    params["Global.use_rec"] = False  # 整体调用只做检测，识别在下面单独调用
+    params["Global.use_cls"] = False
     params["EngineConfig.onnxruntime.intra_op_num_threads"] = threads
     params["EngineConfig.onnxruntime.inter_op_num_threads"] = 1
-    engine = RapidOCR(params=params)
+    params["EngineConfig.onnxruntime.enable_cpu_mem_arena"] = False
+    params["Rec.rec_batch_num"] = runtime.rec_batch
+    use_cls = manifest.use_cls
+    with _session_options(mem_pattern=runtime.mem_pattern):
+        engine = RapidOCR(params=params)
+    post = engine.text_det.postprocess_op
+    default_kernel = post.dilation_kernel
 
     def run(image: np.ndarray) -> list[RawLine]:
-        result = engine(image)
-        if result.boxes is None or result.txts is None or result.scores is None:
+        height, width = image.shape[:2]
+        limit = runtime.det_max_side
+        scale = 1.0
+        det_image = image
+        if limit is not None and max(height, width) > limit:
+            scale = limit / max(height, width)
+            size = (max(1, round(width * scale)), max(1, round(height * scale)))
+            det_image = cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+        dilation = runtime.det_dilation if runtime.det_dilation is not None else scale == 1.0
+        post.dilation_kernel = default_kernel if dilation else None
+        det = engine(det_image)
+        boxes = getattr(det, "boxes", None)
+        if boxes is None or len(boxes) == 0:
             return []
+        boxes = np.asarray(boxes, dtype=np.float32)
+        if scale != 1.0:
+            boxes = boxes / np.float32(scale)
+        boxes[..., 0] = np.clip(boxes[..., 0], 0, width - 1)
+        boxes[..., 1] = np.clip(boxes[..., 1], 0, height - 1)
+        pad = runtime.crop_pad / scale if scale != 1.0 and not dilation else 0.0
+        crops = [get_rotate_crop_image(image, _crop_box(box, pad, width, height)) for box in boxes]
+        if use_cls:
+            crops = list(engine.text_cls(crops).img_list)
+        rec = engine.text_rec(TextRecInput(img=crops))
+        if rec.txts is None or rec.scores is None:
+            return []
+        inset = runtime.box_shrink * (1.0 / scale - 1.0)
         return [
-            (box.tolist(), text, float(score))
-            for box, text, score in zip(result.boxes, result.txts, result.scores, strict=True)
+            (shrink_box(box, inset, text).tolist(), text, float(score))
+            for box, text, score in zip(boxes, rec.txts, rec.scores, strict=True)
+            if text.strip()
         ]
 
     return run
+
+
+def _crop_box(box: np.ndarray, pad: float, width: int, height: int) -> np.ndarray:
+    """识别裁切用的框：沿短边外扩 ``pad`` 像素并限制在图内（``pad=0`` 时原样复制）。"""
+
+    import numpy as np
+
+    out = np.asarray(box, dtype=np.float32).copy()
+    if pad > 0:
+        across = out[1] - out[0]
+        down = out[3] - out[0]
+        across_len = float(np.hypot(*across))
+        down_len = float(np.hypot(*down))
+        if across_len > 0 and down_len > 0:
+            if down_len >= 1.5 * across_len:  # 竖排列：外扩左右
+                step = across / across_len * pad
+                out[[0, 3]] -= step
+                out[[1, 2]] += step
+            else:
+                step = down / down_len * pad
+                out[[0, 1]] -= step
+                out[[2, 3]] += step
+        out[:, 0] = np.clip(out[:, 0], 0, width - 1)
+        out[:, 1] = np.clip(out[:, 1], 0, height - 1)
+    return out
+
+
+def shrink_box(box: np.ndarray, inset: float, text: str) -> np.ndarray:
+    """把四点框（左上、右上、右下、左下）沿短边方向每侧收回 ``inset`` 像素。
+
+    竖排（高 ≥ 1.5 倍宽且至少两个字，与分段的竖排判断一致）收左右，其余收上下；
+    每侧最多收掉该方向长度的 30%，避免把细框收没。
+    """
+
+    if inset <= 0:
+        return box
+    import numpy as np
+
+    pts = np.asarray(box, dtype=np.float32).copy()
+    across = pts[1] - pts[0]  # 沿文字行方向
+    down = pts[3] - pts[0]  # 垂直于文字行
+    across_len = float(np.hypot(*across))
+    down_len = float(np.hypot(*down))
+    if across_len <= 0 or down_len <= 0:
+        return pts
+    vertical = down_len >= 1.5 * across_len and len(text.strip()) >= 2
+    if vertical:
+        step = across / across_len * min(inset, 0.3 * across_len)
+        pts[[0, 3]] += step
+        pts[[1, 2]] -= step
+    else:
+        step = down / down_len * min(inset, 0.3 * down_len)
+        pts[[0, 1]] += step
+        pts[[2, 3]] -= step
+    return pts
+
+
+@contextlib.contextmanager
+def _session_options(*, mem_pattern: bool) -> Iterator[None]:
+    """在创建 RapidOCR 会话期间调整 onnxruntime 会话选项（RapidOCR 只暴露了 arena 与线程数）。"""
+
+    if mem_pattern:
+        yield
+        return
+    from rapidocr.inference_engine.onnxruntime import main as ort_main
+
+    original = ort_main.OrtInferSession.__dict__["_init_sess_opts"]
+    build = original.__func__
+
+    def init_opts(cfg: Any) -> Any:
+        options = build(cfg)
+        options.enable_mem_pattern = False
+        return options
+
+    with _SESSION_PATCH_LOCK:
+        ort_main.OrtInferSession._init_sess_opts = staticmethod(init_opts)
+        try:
+            yield
+        finally:
+            ort_main.OrtInferSession._init_sess_opts = original
+
+
+_SESSION_PATCH_LOCK = threading.Lock()
 
 
 def decode_image(image: ImageInput, *, max_pixels: int | None = None) -> np.ndarray:

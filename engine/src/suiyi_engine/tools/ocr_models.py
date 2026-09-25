@@ -58,7 +58,8 @@ _CHUNK = 1 << 20
 # 400×150 的选区要 547 ms；改为只缩不放后约 90 ms，样例 CER 不变。#52 接入时沿用。
 # 注意（#54 实测）：RapidOCR 3.9 在 limit_type=max 时忽略 limit_side_len，
 # 按原图长边选 960/1500/2000，所以 ≤2000 px 的截图检测时从不缩小，960 实际不起作用。
-# 是否真正限制长边见 docs/engine/OCR评测.md。
+# #74 起长边上限由 OcrRuntimeOptions.det_max_side（默认 1024）在交给 RapidOCR 之前缩图实现；
+# 这里的 limit_type=max 只保证「不放大」（缩好的图长边 ≤1024，RapidOCR 只做 32 对齐）。
 SCREENSHOT_DET_PARAMS: dict[str, object] = {"Det.limit_type": "max", "Det.limit_side_len": 960}
 # 运行时依赖里不允许出现的发行包（#51 验收）。
 FORBIDDEN_DISTRIBUTIONS = ("torch", "paddlepaddle", "paddlepaddle-gpu", "paddleocr", "transformers")
