@@ -148,8 +148,10 @@ def test_health_reports_version_models_dir_and_uptime(tmp_path: Path) -> None:
         "glossary_error",
         "glossary_warnings",
         "model_idle_unload_s",
+        "max_loaded_models",
     }
     assert body["model_idle_unload_s"] == 0  # 直接 create_app 时不卸载（#92）
+    assert body["max_loaded_models"] == 0  # 直接构造 Translator 时不限（#96）
     # 没给术语表的翻译器报告关闭（#83）
     assert body["glossary_enabled"] is False
     assert body["glossary_warnings"] == []

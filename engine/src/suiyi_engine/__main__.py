@@ -102,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
         help="翻译模型空闲这么多秒后卸载，0 不卸载；默认环境变量 SUIYI_MODEL_IDLE_UNLOAD 或 600",
     )
     serve.add_argument(
+        "--max-loaded-models",
+        type=int,
+        default=None,
+        metavar="N",
+        help="同时常驻的翻译模型上限，超出时卸载最久没用的；0 不限。"
+        "默认环境变量 SUIYI_MAX_LOADED_MODELS 或 2",
+    )
+    serve.add_argument(
         "--beam-size",
         type=int,
         default=None,

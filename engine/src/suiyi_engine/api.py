@@ -201,6 +201,7 @@ def create_app(
                 "ocr_error": app.state.ocr.health(),
                 **glossary_status(current),
                 "model_idle_unload_s": app.state.settings.model_idle_unload_s,
+                "max_loaded_models": int(getattr(current.registry, "max_loaded", 0) or 0),
             }
         except Exception:
             logger.exception("读取健康状态失败")

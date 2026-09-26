@@ -77,6 +77,7 @@ class Translator:
         max_batch_size: int = DEFAULT_MAX_BATCH_SIZE,
         max_decoding_length: int = DEFAULT_MAX_DECODING_LENGTH,
         glossary: GlossaryStore | None = None,
+        max_loaded_models: int = 0,
     ) -> None:
         intra = default_intra_threads() if intra_threads is None else intra_threads
         options: dict[str, object] = {
@@ -94,6 +95,7 @@ class Translator:
             manifest_path=manifest_path,
             backend_factory=backend_factory,
             backend_options=options,
+            max_loaded=max_loaded_models,
         )
         self.glossary = glossary
         self.term_stats = TermStats()

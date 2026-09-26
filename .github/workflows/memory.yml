@@ -98,7 +98,7 @@ jobs:
           M="$RUNNER_TEMP/models"; B="$RUNNER_TEMP/baseline/engine/src"; S="$PWD/engine/src"
           HEAD=$(git rev-parse --short HEAD); BASE=$(git -C "$RUNNER_TEMP/baseline" rev-parse --short HEAD)
           echo "## ${RUNNER_OS}：基线 $BASE，当前 $HEAD（GitHub 托管 runner，$(nproc 2>/dev/null || echo "$NUMBER_OF_PROCESSORS") 逻辑 CPU）" >> "$GITHUB_STEP_SUMMARY"
-          run() { "$PY" scripts/measure_serve_memory.py "$@" --summary "$GITHUB_STEP_SUMMARY"; }
+          run() { mode=$1; shift; "$PY" scripts/measure_serve_memory.py "$mode" --summary "$GITHUB_STEP_SUMMARY" "$@"; }
           run breakdown --models-dir "$M" --label "进程内分解（当前 $HEAD）" --out "$OUT/breakdown.json"
           run serve --models-dir "$M" --src "$B" --label "基线 $BASE" --out "$OUT/baseline.json" --port 18801
           CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_PACKED_GEMM=0" --out "$OUT/baseline-nopack.json" --port 18802

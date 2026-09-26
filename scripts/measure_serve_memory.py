@@ -49,6 +49,18 @@ FIRST = {
 # ---------------------------------------------------------------- 内存读数
 
 
+def target_pid(pid: int) -> int:
+    """真正跑 serve 的进程。Windows 的 venv ``python.exe`` 只是个启动器，会再起一个子进程。"""
+
+    import psutil
+
+    try:
+        family = [psutil.Process(pid), *psutil.Process(pid).children(recursive=True)]
+    except psutil.NoSuchProcess:
+        return pid
+    return max(family, key=lambda proc: proc.memory_info().rss).pid
+
+
 def memory(pid: int) -> dict[str, float]:
     """进程内存（MiB）。键名在两个平台上不同，见模块说明。"""
 
@@ -233,7 +245,7 @@ def run_serve(args: argparse.Namespace) -> dict:
 
         def record(name: str, **extra: object) -> None:
             time.sleep(args.settle)
-            mem = memory(proc.pid)
+            mem = memory(target_pid(proc.pid))
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as resp:
                 loaded = json.load(resp)
             entry = {
@@ -274,7 +286,8 @@ def run_serve(args: argparse.Namespace) -> dict:
         if args.idle_wait > 0:
             time.sleep(args.idle_wait)
             record(f"空闲 {args.idle_wait:.0f} 秒后")
-        result["peak"] = {key: round(value, 1) for key, value in memory(proc.pid).items()}
+        result["serve_pid"] = target_pid(proc.pid)
+        result["peak"] = {key: round(value, 1) for key, value in memory(result["serve_pid"]).items()}
     finally:
         proc.terminate()
         try:

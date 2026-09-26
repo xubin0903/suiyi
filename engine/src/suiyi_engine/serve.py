@@ -125,6 +125,31 @@ def resolve_model_idle_unload(cli_value: int | None) -> int:
     return value
 
 
+DEFAULT_MAX_LOADED_MODELS = 2
+
+
+def resolve_max_loaded_models(cli_value: int | None) -> int:
+    """命令行优先，其次 ``SUIYI_MAX_LOADED_MODELS``，默认 2；0 表示不限（#96）。
+
+    上限为 1 时英文中转（ja→zh 要两个模型）每次都要重新加载一段，所以最小允许 2。
+    """
+
+    if cli_value is not None:
+        value, name = cli_value, "--max-loaded-models"
+    else:
+        raw = os.environ.get("SUIYI_MAX_LOADED_MODELS", "").strip()
+        if not raw:
+            return DEFAULT_MAX_LOADED_MODELS
+        name = "SUIYI_MAX_LOADED_MODELS"
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise ServeError(f"{name} 不是整数：{raw}") from exc
+    if isinstance(value, bool) or value < 0 or value == 1:
+        raise ServeError(f"{name} 必须是 0（不限）或 >= 2 的整数，收到 {value}")
+    return value
+
+
 def resolve_max_image_bytes(cli_value: int | None) -> int:
     """命令行优先，其次 ``SUIYI_MAX_IMAGE_BYTES``，默认 8 MiB。"""
 
@@ -212,6 +237,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         user_glossary = resolve_user_glossary(getattr(args, "user_glossary", None))
         intra_threads = resolve_intra_threads(args.intra_threads)
         model_idle_unload_s = resolve_model_idle_unload(getattr(args, "model_idle_unload", None))
+        max_loaded_models = resolve_max_loaded_models(getattr(args, "max_loaded_models", None))
     except ServeError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
@@ -230,6 +256,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         glossary_enabled=glossary_enabled,
         user_glossary=user_glossary,
         model_idle_unload_s=model_idle_unload_s,
+        max_loaded_models=max_loaded_models,
     )
 
 
@@ -249,6 +276,7 @@ def run_server(
     glossary_enabled: bool = True,
     user_glossary: Path | str | None = None,
     model_idle_unload_s: int = DEFAULT_MODEL_IDLE_UNLOAD_S,
+    max_loaded_models: int = DEFAULT_MAX_LOADED_MODELS,
 ) -> int:
     """构建翻译器并阻塞运行，直到进程收到停止信号。
 
@@ -259,7 +287,8 @@ def run_server(
 
     内存（#92）：加载模型前调 :func:`memory.configure_allocator`；监听期间由
     :class:`memory.ModelJanitor` 在翻译空闲时卸载超过 ``model_idle_unload_s`` 秒没用的模型
-    （0 表示不卸载），并把临时内存还给系统。
+    （0 表示不卸载），并把临时内存还给系统。#96 起 OCR 也按同一时长空闲卸载；同时常驻的翻译模型
+    最多 ``max_loaded_models`` 个（0 不限），超出时先卸载最久没用的。
     """
 
     try:
@@ -269,6 +298,8 @@ def run_server(
         max_image_bytes = _require_limit(max_image_bytes, "max_image_bytes")
         if isinstance(model_idle_unload_s, bool) or model_idle_unload_s < 0:
             raise ServeError(f"model_idle_unload_s 必须 >= 0，收到 {model_idle_unload_s!r}")
+        if isinstance(max_loaded_models, bool) or max_loaded_models < 0 or max_loaded_models == 1:
+            raise ServeError(f"max_loaded_models 必须是 0 或 >= 2，收到 {max_loaded_models!r}")
         decode = resolve_decode_options(
             intra_threads=intra_threads,
             beam_size=beam_size,
@@ -281,7 +312,9 @@ def run_server(
     memory.configure_allocator()
     glossary = GlossaryStore(user_glossary, enabled=glossary_enabled)
     try:
-        translator = Translator(models_dir, glossary=glossary, **decode)
+        translator = Translator(
+            models_dir, glossary=glossary, max_loaded_models=max_loaded_models, **decode
+        )
         if preload_pairs:
             translator.preload(preload_pairs)
     except UnsupportedPairError as exc:
@@ -319,14 +352,15 @@ def run_server(
         )
         _print_startup(host, port, translator, decode, detector_ms)
         idle_text = f"{model_idle_unload_s} 秒" if model_idle_unload_s else "关闭"
-        print(f"模型空闲卸载 {idle_text}", flush=True)
+        limit_text = f"最多 {max_loaded_models} 个" if max_loaded_models else "不限"
+        print(f"模型空闲卸载 {idle_text}，同时常驻翻译模型 {limit_text}", flush=True)
         _print_glossary(translator)
         _warn_outdated(translator)
         if ocr_ms is not None:
             print(f"OCR 已预热 {ocr_ms:.0f} ms", flush=True)
         memory.trim()  # 预热的临时内存
         janitor = memory.ModelJanitor(
-            translator.registry, app.state.translate_lock, model_idle_unload_s
+            translator.registry, app.state.translate_lock, model_idle_unload_s, ocr=ocr
         )
         janitor.start()
         try:

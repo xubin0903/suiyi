@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -15,6 +16,8 @@ from pathlib import Path
 
 from suiyi_engine.backends.base import TranslationBackend
 from suiyi_engine.errors import UnsupportedPairError
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "Manifest",
@@ -149,7 +152,11 @@ class ModelRegistry:
         manifest_path: Path | str | None = None,
         backend_factory: BackendFactory | None = None,
         backend_options: Mapping[str, object] | None = None,
+        max_loaded: int = 0,
     ) -> None:
+        if isinstance(max_loaded, bool) or not isinstance(max_loaded, int) or max_loaded < 0:
+            raise ValueError("max_loaded 必须是 >= 0 的整数")
+        self.max_loaded = max_loaded
         self.models_dir = Path(models_dir) if models_dir is not None else default_models_dir()
         self.manifest_path = (
             Path(manifest_path) if manifest_path is not None else default_manifest_path()
@@ -250,10 +257,24 @@ class ModelRegistry:
                 record = self._by_id.get(model_id)
                 if record is None:
                     raise KeyError(f"未安装模型 {model_id}")
+                self._evict_for_new_locked()
                 cached = self._factory(record)
                 self._backends[model_id] = cached
             self._last_used[model_id] = time.monotonic()
             return cached
+
+    def _evict_for_new_locked(self) -> None:
+        """同时常驻的模型数有上限时（#96），先卸载最久没用的，再加载新模型，峰值不叠加。
+
+        中转一次要用两个模型：第一段刚被取用过，是最近用的，不会被第二段挤掉（上限至少为 2 时）。
+        """
+
+        if self.max_loaded <= 0:
+            return
+        while len(self._backends) >= self.max_loaded:
+            victim = min(self._backends, key=lambda item: self._last_used.get(item, 0.0))
+            logger.info("同时常驻模型已达 %d 个，卸载最久没用的 %s", self.max_loaded, victim)
+            self._unload_locked(victim)
 
     def unload_idle(self, idle_s: float, *, now: float | None = None) -> list[str]:
         """卸载超过 ``idle_s`` 秒没用过的模型，返回卸载的 id（#92）。

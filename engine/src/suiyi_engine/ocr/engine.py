@@ -184,6 +184,20 @@ class OcrEngine:
                 self._backend = self._factory(paths, self.manifest, self.threads)
             return self._backend
 
+    def unload(self) -> bool:
+        """卸载模型（#96）。正在识别时不卸载，返回 ``False``；下一次 :meth:`load` 会重新加载。"""
+
+        if not self._run_lock.acquire(blocking=False):
+            return False
+        try:
+            with self._load_lock:
+                if self._backend is None:
+                    return False
+                self._backend = None
+                return True
+        finally:
+            self._run_lock.release()
+
     def warmup(self) -> None:
         """加载模型并跑一次小图，让 onnxruntime 完成首次分配。"""
 
