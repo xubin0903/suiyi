@@ -660,6 +660,13 @@ class LlamaServerBackend:
             "-np",
             "1",
             "--no-webui",
+            # 默认会在内存里缓存最多 8 GiB 的历史提示，RSS 随请求数上涨，不代表模型本身的占用。
+            "--cache-ram",
+            "0",
+            # 不用 mmap：权重整份读进进程内存，RSS 才能和 CTranslate2 候选直接比较
+            # （mmap 时文件页算进 RSS，重排后的权重又占一份匿名内存，会重复计算）。
+            "--load-mode",
+            "none",
         ]
         # 新版 llama-server 默认启用 jinja 模板；completion 模式自己拼提示，关掉模板解析，
         # 以免 TranslateGemma 这类要求结构化 content 的模板在启动时报错。
@@ -992,7 +999,8 @@ def render_report(results: Sequence[Mapping[str, object]], *, title: str = "") -
             f"- 线程：{first['settings']['threads']}；样例数：{first['settings']['samples']}"  # type: ignore[index]
             f"{'（快速子集）' if first['settings'].get('quick') else ''}",  # type: ignore[union-attr]
             "- chrF / BLEU 为 sacrebleu 语料级 0–100；术语准确率 = 译文里按术语表写法出现的术语 / "
-            "原文里出现的术语；延迟为单条 P50 / P95（ms）；内存为进程 RSS（MB）。",
+            "原文里出现的术语；延迟为单条 P50 / P95（ms）；内存为进程 RSS；"
+            "内存与体积单位均为 MiB。",
             "",
         ]
     dirs = [f"{src}-{tgt}" for src, tgt in DIRECTIONS]
@@ -1040,7 +1048,7 @@ def render_report(results: Sequence[Mapping[str, object]], *, title: str = "") -
                 load=_fmt(result["load_ms"], " ms"),
                 res=_fmt(memory["resident"]),  # type: ignore[index]
                 peak=_fmt(memory["peak_over_base"]),  # type: ignore[index]
-                disk=_fmt(result["disk_mb"], " MB"),
+                disk=_fmt(result["disk_mb"]),
                 lic=cand["license"] or "—",  # type: ignore[index]
                 dist=cand["redistributable"] or "—",  # type: ignore[index]
                 com=cand["commercial"] or "—",  # type: ignore[index]
