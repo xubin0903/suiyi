@@ -565,6 +565,15 @@ SUIYI_ENGINE_PORT=18780 dotnet test client/Suiyi.sln -c Release --filter Categor
 
 OCR 联调（`EngineOcrLiveTests`，需 #53 服务端实现）另需 `SUIYI_ENGINE_OCR_PNG=<含中文的 PNG 路径>`，未设置时跳过。
 
+空闲卸载联调（`EngineColdStartLiveTests`，#94）要一个卸载时间很短的引擎，约 12 秒：
+
+```bash
+python -m suiyi_engine serve --port 18791 --preload zh-en --model-idle-unload 8
+SUIYI_ENGINE_PORT=18791 dotnet test client/Suiyi.sln -c Release --filter FullyQualifiedName~EngineColdStartLiveTests
+```
+
+它翻译一次 zh→en，等服务把模型卸载（另起一个客户端看 `/health`），在被测客户端的缓存仍以为已加载时再翻译：断言这次按冷启动超时 10000 ms（原 1500 ms）且成功、没有触发重试。`model_idle_unload_s` 为 0、缺失或超过 60 秒时只打印说明。
+
 ## 开发模式下的翻译服务
 
 客户端启动时由 `EngineSupervisor`（`Suiyi.Core/Engine`，#32）拉起并常驻翻译服务，退出时结束它。M2 仍从源码运行，需要能找到装了 `suiyi_engine` 的 Python。
