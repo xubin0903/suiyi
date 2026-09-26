@@ -1,0 +1,141 @@
+{
+ "schema_version": 1,
+ "note": "模型路径相对 --models-dir。体积、许可证见 docs/engine/专业领域评测.md；本清单只用于评测，不改变默认引擎。",
+ "candidates": [
+  {
+   "name": "opus-mt",
+   "label": "OPUS-MT（现用基线）",
+   "kind": "suiyi",
+   "models": ["opus-mt-en-zh", "opus-mt-zh-en", "opus-mt-ja-en", "opus-mt-zho-jpn-tc-big-2022-07-28", "opus-mt-eng-jpn-2021-02-18"],
+   "license": "CC-BY-4.0",
+   "redistributable": "是（署名）",
+   "commercial": "是",
+   "notes": "现用 5 个 Marian 模型；ja→zh 走 ja→en→zh 中转。"
+  },
+  {
+   "name": "opus-tc-big",
+   "label": "OPUS-MT tc-big 组合",
+   "kind": "ct2",
+   "routes": {
+    "en-zh": [{"model": "cand/opus-tc-big-en-zh", "family": "marian", "prefix": ">>cmn_Hans<<"}],
+    "zh-en": [{"model": "cand/opus-tc-bible-big-zhx-en", "family": "marian"}],
+    "ja-zh": [{"model": "cand/opus-tc-big-ja-zh", "family": "marian", "prefix": ">>cmn_Hans<<"}],
+    "ja-en": [{"model": "opus-mt-ja-en", "family": "marian"}],
+    "zh-ja": [{"model": "opus-mt-zho-jpn-tc-big-2022-07-28", "family": "marian"}],
+    "en-ja": [{"model": "opus-mt-eng-jpn-2021-02-18", "family": "marian"}]
+   },
+   "license": "CC-BY-4.0",
+   "redistributable": "是（署名）",
+   "commercial": "是",
+   "notes": "en→zh：Tatoeba eng-zho opusTCv20210807+bt transformer-big 2022-05-14；zh→en：opus-mt-tc-bible-big-zhx-en；ja→zh：Tatoeba jpn-zho transformer-big 2022-09-15（直连，不再中转）。ja→en / en→ja 没有 tc-big，沿用基线；zh→ja 基线已是 tc-big。"
+  },
+  {
+   "name": "m2m100-418m",
+   "label": "M2M100 418M",
+   "kind": "ct2",
+   "model": "cand/m2m100-418m",
+   "family": "m2m100",
+   "license": "MIT",
+   "redistributable": "是",
+   "commercial": "是",
+   "notes": "facebook/m2m100_418M，CTranslate2 int8。"
+  },
+  {
+   "name": "m2m100-1.2b",
+   "label": "M2M100 1.2B",
+   "kind": "ct2",
+   "model": "cand/m2m100-1.2b",
+   "family": "m2m100",
+   "license": "MIT",
+   "redistributable": "是",
+   "commercial": "是",
+   "notes": "facebook/m2m100_1.2B，CTranslate2 int8。"
+  },
+  {
+   "name": "nllb-600m",
+   "label": "NLLB-200 distilled 600M",
+   "kind": "ct2",
+   "model": "cand/nllb-600m",
+   "family": "nllb",
+   "license": "CC-BY-NC-4.0",
+   "redistributable": "否（NC，项目政策不默认分发）",
+   "commercial": "否",
+   "notes": "facebook/nllb-200-distilled-600M，CTranslate2 int8。"
+  },
+  {
+   "name": "nllb-1.3b",
+   "label": "NLLB-200 distilled 1.3B",
+   "kind": "ct2",
+   "model": "cand/nllb-1.3b",
+   "family": "nllb",
+   "license": "CC-BY-NC-4.0",
+   "redistributable": "否（NC，项目政策不默认分发）",
+   "commercial": "否",
+   "notes": "facebook/nllb-200-distilled-1.3B，CTranslate2 int8。"
+  },
+  {
+   "name": "hy-mt1.5-1.8b",
+   "label": "HY-MT1.5 1.8B Q4_K_M（LLM 对照）",
+   "kind": "llama",
+   "gguf": "gguf/HY-MT1.5-1.8B-Q4_K_M.gguf",
+   "api": "chat",
+   "prompt": "hy-mt",
+   "request": {"repeat_penalty": 1.05},
+   "license": "Tencent HY Community License",
+   "redistributable": "有条件（不适用于欧盟/英国/韩国；须附许可与可接受使用政策）",
+   "commercial": "有条件（月活 > 1 亿需另行授权）",
+   "notes": "tencent/HY-MT1.5-1.8B-GGUF，官方 Q4_K_M；翻译专用模型，官方提示词。"
+  },
+  {
+   "name": "hy-mt1.5-7b",
+   "label": "HY-MT1.5 7B Q4_K_M（LLM 对照）",
+   "kind": "llama",
+   "gguf": "gguf/HY-MT1.5-7B-Q4_K_M.gguf",
+   "api": "chat",
+   "prompt": "hy-mt",
+   "request": {"repeat_penalty": 1.05},
+   "license": "Tencent HY Community License",
+   "redistributable": "有条件（不适用于欧盟/英国/韩国；须附许可与可接受使用政策）",
+   "commercial": "有条件（月活 > 1 亿需另行授权）",
+   "notes": "tencent/HY-MT1.5-7B-GGUF，官方 Q4_K_M。"
+  },
+  {
+   "name": "translategemma-4b",
+   "label": "TranslateGemma 4B Q4_K_M（LLM 对照）",
+   "kind": "llama",
+   "gguf": "gguf/translategemma-4b-it-Q4_K_M.gguf",
+   "api": "completion",
+   "prompt": "gemma-translate",
+   "license": "Gemma Terms of Use",
+   "redistributable": "有条件（须附 Gemma 条款并遵守禁止用途政策）",
+   "commercial": "是（受禁止用途政策约束）",
+   "notes": "google/translategemma-4b-it 的社区 GGUF（bullerwins），按官方聊天模板手工拼提示。"
+  },
+  {
+   "name": "qwen3.5-2b",
+   "label": "Qwen3.5 2B Q4_K_M（LLM 对照）",
+   "kind": "llama",
+   "gguf": "gguf/Qwen3.5-2B-Q4_K_M.gguf",
+   "api": "chat",
+   "prompt": "generic",
+   "request": {"chat_template_kwargs": {"enable_thinking": false}},
+   "license": "Apache-2.0",
+   "redistributable": "是",
+   "commercial": "是",
+   "notes": "unsloth/Qwen3.5-2B-GGUF；通用模型，关闭思考模式。"
+  },
+  {
+   "name": "qwen3.5-4b",
+   "label": "Qwen3.5 4B Q4_K_M（LLM 对照）",
+   "kind": "llama",
+   "gguf": "gguf/Qwen3.5-4B-Q4_K_M.gguf",
+   "api": "chat",
+   "prompt": "generic",
+   "request": {"chat_template_kwargs": {"enable_thinking": false}},
+   "license": "Apache-2.0",
+   "redistributable": "是",
+   "commercial": "是",
+   "notes": "unsloth/Qwen3.5-4B-GGUF；通用模型，关闭思考模式。"
+  }
+ ]
+}
