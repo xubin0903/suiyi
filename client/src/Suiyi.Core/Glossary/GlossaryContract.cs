@@ -1,6 +1,6 @@
 namespace Suiyi.Core.Glossary;
 
-// 与引擎的术语保护约定（#83 接口约定评论 issuecomment-5845549072，2026-09-26 版）。#83 代码尚未合入；
+// 与引擎的术语保护约定（#83 接口约定评论 issuecomment-5845549072，2026-09-26 版）。引擎实现见 PR #85；
 // 约定若有更新，以那条评论的最新内容为准，只需改本文件与 EngineDtos 里 HealthResponse 的 glossary_* 字段（及对应单测）。
 // 客户端依赖约定的地方：本文件、Engine/EngineDtos.cs（TranslateRequest.Glossary、HealthResponse.Glossary*、GlossaryReloadResponse）、
 // Engine/EngineCommandResolver.cs（启动参数 / 环境变量）、Engine/EngineClient.cs（请求字段、POST /glossary/reload）。

@@ -211,7 +211,7 @@ TranslateRegionAsync(trigger)
 
 **状态来源：** `EngineClient.GetHealthAsync` 解析 `/health` 的 `glossary_enabled`、`glossary_builtin_entries`、`glossary_user_path`、`glossary_user_entries`、`glossary_error`、`glossary_warnings`，缓存为 `KnownGlossaryStatus`（`GlossaryStatus`），`GlossarySupported` 为 `false` 表示旧版引擎。看门狗每 10 s 调一次 `/health`，所以状态行最多滞后 10 s；服务就绪时主动取一次，有新的文件级错误时弹一次气泡。`Invalidate()` 清空缓存。「关于」末尾列出开关、条数、错误和全部被跳过的行（`GlossaryStatusText.About`）。
 
-**文件格式**（引擎解析，这里只为写模板和文档）：UTF-8（允许 BOM）TSV，每行 `源词<Tab>目标词[<Tab>en-zh|zh-en]`；不写方向时双向生效，含中文的一列当中文侧；`#` 开头为注释，不支持行内注释；英文不区分大小写（全大写缩写除外），自动匹配常见复数；同词用户条目优先；上限 1 MiB、5000 条。
+**文件格式**（引擎解析，这里只为写模板和文档）：UTF-8（允许 BOM）TSV，每行 `源词<Tab>目标词[<Tab>en-zh|zh-en]`；不写方向时双向生效，含中文的一列当中文侧（两列都不含中文时第 1 列当英文、第 2 列当中文译文里的写法，两列相同即保持原样）；`#` 开头为注释，不支持行内注释；英文不区分大小写（全大写缩写除外），自动匹配常见复数；同词用户条目优先；上限 1 MiB、5000 条。只作用于 zh↔en（引擎按语向忽略 `glossary` 字段）。
 
 **兼容：** main 上的引擎 `TranslateRequest` 设了 `extra="ignore"`（`engine/tests/test_http_api.py` 覆盖了带 `glossary` 字段的请求），所以客户端始终带这个字段，不按 `/health` 判断；环境变量旧引擎也忽略。客户端与 #83 谁先合入都能工作。
 
