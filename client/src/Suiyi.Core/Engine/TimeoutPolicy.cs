@@ -15,6 +15,8 @@ namespace Suiyi.Core.Engine;
 /// </list>
 /// 长度按 Unicode 码位计，与服务端 Python <c>len</c> 一致。懒加载的 10000 ms 不低于第 4 条对同一文本算出的值，
 /// 避免「模型未加载时的超时反而比已加载时短」。
+/// <para>#94：引擎会空闲卸载模型（<c>/health.model_idle_unload_s</c>）。<see cref="EngineClient"/> 传入的 <c>loadedModels</c>
+/// 已按 <see cref="ColdStartRule"/> 去掉可能被卸载的模型，所以冷方向落到规则 2；本类不关心卸载细节。</para>
 /// </remarks>
 public static class TimeoutPolicy
 {
@@ -94,6 +96,17 @@ public static class TimeoutPolicy
         }
 
         return paragraph;
+    }
+
+    /// <summary>
+    /// 冷启动超时（毫秒）：按「模型需要重新加载」处理，即 <c>max(</c><see cref="LazyLoadMs"/><c>, 段落超时)</c>，
+    /// 与规则 2（懒加载）对同一文本的值相同。用于 #94 超时后的自动重试。
+    /// </summary>
+    /// <param name="text">原文。</param>
+    public static int ComputeColdMilliseconds(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return Math.Max(LazyLoadMs, ParagraphTimeout(CountChars(text)));
     }
 
     /// <summary>规则 1：本次请求可能走的语向（只含 <c>/languages</c> 里存在的）。</summary>

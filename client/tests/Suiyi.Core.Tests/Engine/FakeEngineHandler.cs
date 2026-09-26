@@ -118,3 +118,67 @@ internal sealed class HangingTranslate
         throw new InvalidOperationException("unreachable");
     }
 }
+
+/// <summary>
+/// 每次请求都挂起直到令牌取消（超时或调用方取消），并逐次通知测试「第 n 次请求已到达」（#94 超时重试）。
+/// 可用 <see cref="Respond"/> 让第 n 次请求（从 1 开始）直接返回。
+/// </summary>
+internal sealed class HangingRequests
+{
+    private readonly object _gate = new();
+    private readonly List<TaskCompletionSource> _arrivals = [];
+    private int _count;
+
+    /// <summary>第 n 次请求（从 1 开始）不挂起时的应答；为 <see langword="null"/> 或返回 <see langword="null"/> 时挂起。</summary>
+    public Func<int, HttpResponseMessage?>? Respond { get; set; }
+
+    /// <summary>已到达的请求数。</summary>
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _count;
+            }
+        }
+    }
+
+    /// <summary>等第 <paramref name="n"/> 次请求（从 1 开始）到达，最多等 5 秒。</summary>
+    public Task Arrived(int n) => Slot(n).Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+    public Task<HttpResponseMessage> HandleRecorded(RecordedRequest _, CancellationToken cancellationToken) =>
+        Handle(string.Empty, cancellationToken);
+
+    public async Task<HttpResponseMessage> Handle(string _, CancellationToken cancellationToken)
+    {
+        int n;
+        lock (_gate)
+        {
+            n = ++_count;
+        }
+
+        var response = Respond?.Invoke(n);
+        Slot(n).TrySetResult();
+        if (response is not null)
+        {
+            return response;
+        }
+
+        await Task.Delay(Timeout.Infinite, cancellationToken);
+        throw new InvalidOperationException("unreachable");
+    }
+
+    private TaskCompletionSource Slot(int n)
+    {
+        lock (_gate)
+        {
+            while (_arrivals.Count < n)
+            {
+                _arrivals.Add(new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+            }
+
+            return _arrivals[n - 1];
+        }
+    }
+}

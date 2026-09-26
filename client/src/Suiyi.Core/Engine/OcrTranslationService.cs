@@ -11,7 +11,7 @@ namespace Suiyi.Core.Engine;
 /// <list type="bullet">
 /// <item>固定 <c>source=auto</c>（框选模式下语种标签不可点，见 #57）。</item>
 /// <item>最新请求优先：新调用开始时取消上一条未完成的调用。</item>
-/// <item>不重试；失败抛 <see cref="EngineException"/>。</item>
+/// <item>本层不重试；失败抛 <see cref="EngineException"/>。超时的自动重试一次在 <see cref="EngineClient.OcrTranslateAsync"/> 里（#94）。</item>
 /// <item>日志只记图片尺寸、字节数、段落数、耗时、错误码，不记识别文本与服务端错误说明。</item>
 /// </list>
 /// </remarks>

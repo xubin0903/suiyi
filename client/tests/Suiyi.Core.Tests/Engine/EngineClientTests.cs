@@ -151,21 +151,28 @@ public sealed class EngineClientTests : IDisposable
 
     private async Task AssertTimesOutAt(string text, string source, string target, int expectedMs)
     {
-        var hang = new HangingTranslate();
+        var hang = new HangingRequests();
         _handler.Translate = hang.Handle;
 
         var task = _client.TranslateAsync(text, source, target);
-        await hang.Started;
+        await hang.Arrived(1);
 
         _time.Advance(TimeSpan.FromMilliseconds(expectedMs - 1));
         await Task.Yield();
         Assert.False(task.IsCompleted, $"在 {expectedMs - 1} ms 时不应超时");
 
+        // #94：第一次超时后按冷启动超时自动重试一次，仍超时才报错。
         _time.Advance(TimeSpan.FromMilliseconds(1));
+        await hang.Arrived(2);
+        Assert.False(task.IsCompleted, "第一次超时后应自动重试，而不是立即报错");
+
+        var coldMs = TimeoutPolicy.ComputeColdMilliseconds(text);
+        _time.Advance(TimeSpan.FromMilliseconds(coldMs));
         var ex = await Assert.ThrowsAsync<EngineException>(() => task);
         Assert.Equal(EngineErrorKind.Timeout, ex.Kind);
-        Assert.Equal(TimeSpan.FromMilliseconds(expectedMs), ex.Timeout);
-        Assert.Contains(expectedMs.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.UserMessage, StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.FromMilliseconds(coldMs), ex.Timeout);
+        Assert.Contains(coldMs.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.UserMessage, StringComparison.Ordinal);
+        Assert.Equal(2, _handler.TranslateRequests.Count);
     }
 
     [Fact]

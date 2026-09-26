@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 
 using Suiyi.Core.Glossary;
+using Suiyi.Core.Logging;
 
 namespace Suiyi.Core.Engine;
 
@@ -46,6 +47,8 @@ public sealed partial class EngineClient : IDisposable
     private OcrHealthError? _ocrError;
     private GlossaryStatus? _glossary;
     private bool? _glossarySupported;
+    private double? _modelIdleUnloadSeconds;
+    private readonly ModelUsageTracker _usage;
 
     /// <summary>连接 <c>http://127.0.0.1:{port}</c>。</summary>
     /// <param name="port">服务端口，默认 <see cref="DefaultPort"/>。</param>
@@ -57,6 +60,7 @@ public sealed partial class EngineClient : IDisposable
         ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
         BaseAddress = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/"));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _usage = new ModelUsageTracker(_timeProvider);
         _http = new HttpClient(handler ?? CreateDefaultHandler(), disposeHandler: true)
         {
             BaseAddress = BaseAddress,
@@ -94,6 +98,29 @@ public sealed partial class EngineClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// 最近一次 <c>/health</c> 的 <c>model_idle_unload_s</c>（#94）：翻译模型空闲这么多秒后会被服务卸载，0 表示不卸载。
+    /// 未知（未取过 <c>/health</c>、旧引擎没有该字段、或已 <see cref="Invalidate"/>）时为 <see langword="null"/>，此时冷热判断按老逻辑。
+    /// </summary>
+    public double? KnownModelIdleUnloadSeconds
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _modelIdleUnloadSeconds;
+            }
+        }
+    }
+
+    /// <summary>本客户端各翻译模型上次成功使用的时刻，用于判断方向冷热（#94）。</summary>
+    public ModelUsageTracker ModelUsage => _usage;
+
+    /// <summary>
+    /// 日志（#94：方向冷时按冷启动超时、超时后自动重试时各写一行，不含原文）。为 <see langword="null"/> 时不写。
+    /// </summary>
+    public IAppLogger? Logger { get; set; }
+
     /// <summary>默认处理器：不走系统代理，不自动解压，连接超时 2 秒。</summary>
     public static SocketsHttpHandler CreateDefaultHandler() => new()
     {
@@ -118,6 +145,7 @@ public sealed partial class EngineClient : IDisposable
             _ocrError = health.OcrError;
             _glossary = health.ToGlossaryStatus();
             _glossarySupported = _glossary is not null;
+            _modelIdleUnloadSeconds = health.ModelIdleUnloadSeconds;
         }
 
         return health;
@@ -155,7 +183,11 @@ public sealed partial class EngineClient : IDisposable
             _ocrError = null;
             _glossary = null;
             _glossarySupported = null;
+            _modelIdleUnloadSeconds = null;
         }
+
+        // 服务重启后新进程里的模型都按首次处理。
+        _usage.Clear();
     }
 
     /// <summary>
@@ -164,17 +196,35 @@ public sealed partial class EngineClient : IDisposable
     /// <param name="text">原文。</param>
     /// <param name="source">原文语种或 <c>"auto"</c>。</param>
     /// <param name="target">目标语种。</param>
-    public TimeSpan GetTimeout(string text, string source, string target)
+    /// <remarks>
+    /// #94：服务报告了 <c>model_idle_unload_s</c>（大于 0）时，距上次成功使用已接近该值或从没用过的模型视为未加载（见 <see cref="ColdStartRule"/>），
+    /// 该方向按冷启动超时；旧引擎没有该字段时与之前完全相同。
+    /// </remarks>
+    public TimeSpan GetTimeout(string text, string source, string target) =>
+        TimeSpan.FromMilliseconds(ComputeTranslateTimeout(text, source, target).Effective);
+
+    /// <summary>
+    /// <c>Effective</c>：本次实际使用的超时（已按空闲卸载去掉冷模型）；<c>Baseline</c>：只看 <c>loaded_models</c> 的老逻辑，
+    /// 两者不同说明是 #94 的冷方向，写一行日志。
+    /// </summary>
+    private (int Effective, int Baseline, LanguagesResponse? Languages, double? Idle) ComputeTranslateTimeout(
+        string text,
+        string source,
+        string target)
     {
         LanguagesResponse? languages;
         IReadOnlyCollection<string>? loaded;
+        double? idle;
         lock (_gate)
         {
             languages = _languages;
             loaded = _loadedModels is null ? null : [.. _loadedModels];
+            idle = _modelIdleUnloadSeconds;
         }
 
-        return TimeoutPolicy.Compute(text, source, target, languages, loaded);
+        var baseline = TimeoutPolicy.ComputeMilliseconds(text, source, target, languages, loaded);
+        var effective = TimeoutPolicy.ComputeMilliseconds(text, source, target, languages, _usage.FilterWarm(loaded, idle));
+        return (effective, baseline, languages, idle);
     }
 
     /// <summary>
@@ -182,7 +232,9 @@ public sealed partial class EngineClient : IDisposable
     /// </summary>
     /// <remarks>
     /// <c>/languages</c> 或已加载模型未知时，先各尝试获取一次（失败则忽略，按「可能懒加载」给 10000 ms）。
-    /// 成功后把响应 <c>route</c> 里的模型记为已加载。
+    /// 成功后把响应 <c>route</c> 里的模型记为已加载，并记下使用时刻（<see cref="ModelUsage"/>）。
+    /// <para>#94：可能已被空闲卸载的方向按冷启动超时（见 <see cref="GetTimeout"/>）；超时后按
+    /// <see cref="TimeoutPolicy.ComputeColdMilliseconds"/> 自动重试一次（<see cref="TimeoutRetry"/>），仍超时才抛出；调用方取消不重试。</para>
     /// </remarks>
     /// <param name="text">原文。</param>
     /// <param name="source">原文语种（ISO 639-1）或 <c>"auto"</c>。</param>
@@ -200,16 +252,31 @@ public sealed partial class EngineClient : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(target);
 
         await WarmCachesAsync(cancellationToken).ConfigureAwait(false);
-        var timeout = GetTimeout(text, source, target);
+        var (timeoutMs, baselineMs, languages, idle) = ComputeTranslateTimeout(text, source, target);
+        var direction = TimeoutPolicy.Normalize(source) + "→" + TimeoutPolicy.Normalize(target);
+        if (timeoutMs != baselineMs && languages is not null)
+        {
+            var models = TimeoutPolicy.CandidateRoutes(source, target, languages).SelectMany(pair => pair.Models);
+            Logger?.Info(string.Create(
+                CultureInfo.InvariantCulture,
+                $"翻译：{direction} 的模型可能已被空闲卸载（model_idle_unload_s={idle}；{_usage.Describe(models, idle)}），按冷启动超时 {timeoutMs} ms（原 {baselineMs} ms）"));
+        }
+
         var request = new TranslateRequest { Text = text, Source = source, Target = target, Glossary = GlossaryOverride?.Invoke() };
-        var response = await SendAsync<TranslateResponse>(HttpMethod.Post, "translate", JsonContent(request), timeout, cancellationToken)
-            .ConfigureAwait(false);
+        var response = await TimeoutRetry.ExecuteAsync(
+            (timeout, ct) => SendAsync<TranslateResponse>(HttpMethod.Post, "translate", JsonContent(request), timeout, ct),
+            TimeSpan.FromMilliseconds(timeoutMs),
+            TimeSpan.FromMilliseconds(TimeoutPolicy.ComputeColdMilliseconds(text)),
+            (ex, retry) => LogTimeoutRetry("/translate", direction, ex, retry),
+            cancellationToken).ConfigureAwait(false);
         if (response.Route.Count > 0)
         {
             lock (_gate)
             {
                 _loadedModels?.UnionWith(response.Route);
             }
+
+            _usage.MarkUsed(response.Route);
         }
 
         return response;
@@ -252,6 +319,11 @@ public sealed partial class EngineClient : IDisposable
             // 缓存只影响超时的估计。拿不到时按未知处理，让翻译请求自己报告真正的错误。
         }
     }
+
+    private void LogTimeoutRetry(string path, string direction, EngineException ex, TimeSpan retry) =>
+        Logger?.Warn(string.Create(
+            CultureInfo.InvariantCulture,
+            $"翻译：{path} {direction} {(int)(ex.Timeout ?? TimeSpan.Zero).TotalMilliseconds} ms 超时，按冷启动超时 {(int)retry.TotalMilliseconds} ms 自动重试一次"));
 
     private static StringContent JsonContent(object body) =>
         new(JsonSerializer.Serialize(body, body.GetType(), JsonOptions), new UTF8Encoding(false), "application/json");
