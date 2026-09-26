@@ -86,6 +86,23 @@ def resolve_max_text_chars(cli_value: int | None) -> int:
     return _require_limit(value, "SUIYI_MAX_TEXT_CHARS")
 
 
+def resolve_intra_threads(cli_value: int | None) -> int | None:
+    """命令行优先，其次 ``SUIYI_INTRA_THREADS``；都没有时返回 ``None``（用翻译核心的默认）。"""
+
+    if cli_value is not None:
+        return cli_value
+    raw = os.environ.get("SUIYI_INTRA_THREADS", "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ServeError(f"SUIYI_INTRA_THREADS 不是整数：{raw}") from exc
+    if value < 1:
+        raise ServeError(f"SUIYI_INTRA_THREADS 必须是 >= 1 的整数，收到 {value}")
+    return value
+
+
 def resolve_max_image_bytes(cli_value: int | None) -> int:
     """命令行优先，其次 ``SUIYI_MAX_IMAGE_BYTES``，默认 8 MiB。"""
 
@@ -171,6 +188,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         preload_pairs = parse_preload(args.preload)
         glossary_enabled = resolve_glossary_enabled(getattr(args, "glossary", None))
         user_glossary = resolve_user_glossary(getattr(args, "user_glossary", None))
+        intra_threads = resolve_intra_threads(args.intra_threads)
     except ServeError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
@@ -181,7 +199,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         preload_pairs=preload_pairs,
         max_text_chars=max_text_chars,
         dev=bool(args.dev),
-        intra_threads=args.intra_threads,
+        intra_threads=intra_threads,
         beam_size=args.beam_size,
         max_batch_size=args.max_batch_size,
         max_image_bytes=max_image_bytes,
@@ -324,7 +342,7 @@ def resolve_decode_options(
 ) -> dict[str, int]:
     """把可选的解码参数收成传给 ``Translator`` 的关键字。
 
-    ``None`` 表示沿用默认：``intra_threads`` 为 ``min(2, CPU 数)``，
+    ``None`` 表示沿用默认：``intra_threads`` 为 ``min(4, CPU 数)``（拿不到 CPU 数时 2），
     ``beam_size`` 为 2，``max_batch_size`` 为 32。传入的整数必须 >= 1。
     """
 

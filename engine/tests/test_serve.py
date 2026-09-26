@@ -19,6 +19,7 @@ from suiyi_engine.serve import (
     ServeError,
     parse_preload,
     resolve_decode_options,
+    resolve_intra_threads,
     resolve_max_text_chars,
     resolve_port,
     run_server,
@@ -263,6 +264,64 @@ def test_resolve_decode_options_defaults_and_overrides() -> None:
     }
     with pytest.raises(ServeError, match="beam_size"):
         resolve_decode_options(intra_threads=None, beam_size=0, max_batch_size=None)
+
+
+@pytest.mark.parametrize(("cpus", "expected"), [(None, 2), (1, 1), (2, 2), (4, 4), (8, 4), (64, 4)])
+def test_default_intra_threads_is_min_4_cpu_or_2(
+    monkeypatch: pytest.MonkeyPatch, cpus: int | None, expected: int
+) -> None:
+    """#85：默认 min(4, os.cpu_count())，拿不到 CPU 数时退回 2。"""
+
+    monkeypatch.setattr("suiyi_engine.registry.os.cpu_count", lambda: cpus)
+    assert default_intra_threads() == expected
+    decode = resolve_decode_options(intra_threads=None, beam_size=None, max_batch_size=None)
+    assert decode["intra_threads"] == expected
+
+
+def test_resolve_intra_threads_cli_over_env_over_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SUIYI_INTRA_THREADS", raising=False)
+    assert resolve_intra_threads(None) is None
+    monkeypatch.setenv("SUIYI_INTRA_THREADS", "  ")
+    assert resolve_intra_threads(None) is None
+    monkeypatch.setenv("SUIYI_INTRA_THREADS", "3")
+    assert resolve_intra_threads(None) == 3
+    assert resolve_intra_threads(1) == 1
+    for bad in ("x", "0", "-2", "2.5"):
+        monkeypatch.setenv("SUIYI_INTRA_THREADS", bad)
+        with pytest.raises(ServeError, match="SUIYI_INTRA_THREADS"):
+            resolve_intra_threads(None)
+
+
+def test_cli_intra_threads_env_reaches_translator(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    seen: list[object] = []
+
+    class FakeTranslator:
+        def __init__(self, models_dir: object, **kwargs: object) -> None:
+            seen.append(kwargs["intra_threads"])
+            self.registry = type("Registry", (), {"models_dir": models_dir})()
+
+        def available_pairs(self) -> list[tuple[str, str, str]]:
+            return []
+
+    monkeypatch.setattr("suiyi_engine.serve.Translator", FakeTranslator)
+    monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("suiyi_engine.registry.os.cpu_count", lambda: 8)
+    base = ["serve", "--models-dir", str(tmp_path)]
+
+    monkeypatch.delenv("SUIYI_INTRA_THREADS", raising=False)
+    assert main([*base, "--port", str(_free_port())]) == 0
+    monkeypatch.setenv("SUIYI_INTRA_THREADS", "3")
+    assert main([*base, "--port", str(_free_port())]) == 0
+    assert main([*base, "--port", str(_free_port()), "--intra-threads", "1"]) == 0
+    assert seen == [4, 3, 1]
+    assert "intra_threads=3" in capsys.readouterr().out
+    monkeypatch.setenv("SUIYI_INTRA_THREADS", "zero")
+    assert main([*base, "--port", str(_free_port())]) == 2
+    assert "SUIYI_INTRA_THREADS" in capsys.readouterr().err
 
 
 def test_cli_passes_decode_flags(

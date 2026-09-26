@@ -34,7 +34,7 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--glossary` / `--no-glossary` | 环境变量 `SUIYI_GLOSSARY`，否则开启 | 术语保护的默认开关（#83，见 [术语保护](术语保护.md)）。环境变量接受 `1/0`、`true/false`（也接受 `on/off`，不区分大小写），认不出的值在 stderr 告警并按开启处理。`/translate` 可以用 `glossary` 字段单次覆盖 |
 | `--user-glossary` | 环境变量 `SUIYI_USER_GLOSSARY`，否则 `<设置目录>/glossary.tsv` | 用户术语表路径，文件可以不存在。设置目录与客户端 `settings.json` 相同：`SUIYI_CONFIG_DIR`，否则 Windows `%APPDATA%\suiyi`，其他系统 `$XDG_CONFIG_HOME/suiyi`（默认 `~/.config/suiyi`） |
 | `--dev` | 关闭 | 才挂载 `/docs` 与 `/openapi.json` |
-| `--intra-threads` | `min(2, CPU 数)` | 单个模型内部的计算线程。不传则用翻译核心的默认 |
+| `--intra-threads` | 环境变量 `SUIYI_INTRA_THREADS`，否则 `min(4, CPU 数)`（拿不到 CPU 数时 2） | 单个模型内部的计算线程。命令行优先于环境变量；环境变量不是 ≥ 1 的整数时，在开始监听前非零退出。#87 起默认上限从 2 改为 4 |
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
 
@@ -260,10 +260,11 @@ curl -sS -X POST http://127.0.0.1:18780/glossary/reload
 | `target` | 是 | 目标语种，不能是 `auto` |
 | `source` | 否，默认 `auto` | 原文语种或 `auto` |
 | `fallback_target` | 否 | 次目标：原文语种等于 `target` 时改译为它（客户端的主/次目标规则）。与 `target` 相同或为空时忽略 |
+| `glossary` | 否 | 本次是否做术语保护（#87），含义同 `/translate` 的 `glossary` 字段。写法是 `?glossary=true` 或 `?glossary=false`；不传时按服务配置（`--glossary` / `SUIYI_GLOSSARY`）。框架也接受 `1/0`、`yes/no`、`on/off`，其他值返回 422 `invalid_request`（`details.errors[].loc` 为 `["query", "glossary"]`），不做 OCR。只作用于 zh↔en 直连。老版引擎会忽略这个参数（已在 main 3a7aebf 上实测：带 `glossary=false` 仍返回 200，按默认开启翻译） |
 
 处理顺序与对应错误：
 
-1. 查询参数不合法（缺 `target`、`target=auto`、语种代码非法）→ 422 `invalid_request`，不读请求体。
+1. 查询参数不合法（缺 `target`、`target=auto`、语种代码非法、`glossary` 不是布尔值）→ 422 `invalid_request`，不读请求体。
 2. 字节上限：先看 `Content-Length`，超过 `--max-image-bytes` 直接 413，**不读请求体**；没有 `Content-Length`（分块上传）时边读边计数，超限立即停止读取 → 413 `image_too_large`。
 3. 按文件头魔数判断是不是 PNG，**不看 `Content-Type`**（`application/octet-stream` 也行）。不是 PNG 或请求体为空 → 415 `unsupported_media_type`。
 4. 从 IHDR 读宽高（不解码像素）。头部不完整或尺寸为 0 → 422 `invalid_image`；宽 × 高超过 16,777,216（4096 × 4096）→ 413 `image_too_large`。只限总像素，不限单边，细长截图可以超过 4096。
@@ -284,6 +285,10 @@ curl -sS -X POST http://127.0.0.1:18780/glossary/reload
 
 ```bash
 curl -sS 'http://127.0.0.1:18780/ocr_translate?source=auto&target=en&fallback_target=zh' \
+  -H 'Content-Type: image/png' --data-binary @shot.png
+
+# 这一次关闭术语保护
+curl -sS 'http://127.0.0.1:18780/ocr_translate?target=zh&glossary=false' \
   -H 'Content-Type: image/png' --data-binary @shot.png
 ```
 
@@ -403,7 +408,7 @@ PowerShell 7 也可以给 `Invoke-RestMethod` 加 `-SkipHttpErrorCheck`，再读
 ## 已知限制
 
 - 没有鉴权、没有 TLS、没有流式输出、没有命名管道。
-- 术语保护只作用于 zh↔en 直连（#83）；`/ocr_translate` 没有 `glossary` 字段，按服务端默认开关。
+- 术语保护只作用于 zh↔en 直连（#83）。`/translate` 用 JSON 字段 `glossary`，`/ocr_translate` 用同名 query 参数（#87）。
 - 批量条数没有单独上限；每一条仍受字符上限约束。同时只执行一路翻译，多出来的请求在线程池里排队。`/health` 不排队。
 - `internal_error` 不把异常文本返回给客户端。服务端日志里有栈。
 - `elapsed_ms` 不含语种检测和 HTTP 开销。

@@ -83,14 +83,19 @@ DEFAULT_MAX_BATCH_SIZE = 32
 DEFAULT_MAX_DECODING_LENGTH = 512
 
 
-def default_intra_threads() -> int:
-    """单模型 intra 线程数：不超过 2，也不超过 CPU 数。
+DEFAULT_MAX_INTRA_THREADS = 4
+FALLBACK_INTRA_THREADS = 2
 
-    短句网格里 ``beam_size=2`` 时，2 线程比 4 线程更快，并且把其余核心留给客户端。
-    数据见 ``docs/engine/性能基线.md``。
+
+def default_intra_threads() -> int:
+    """单模型 intra 线程数：``min(4, os.cpu_count())``，拿不到 CPU 数时为 2。
+
+    #87 起从 ``min(2, CPU 数)`` 改为 4：短句上 2 线程略快，但 #83 换成 tc-big 并开启术语保护后，
+    2 线程的段落 P95 超过 200 ms。数据见 ``docs/engine/术语保护.md`` 与 ``性能基线.md``。
     """
 
-    return min(2, os.cpu_count() or 1)
+    count = os.cpu_count()
+    return min(DEFAULT_MAX_INTRA_THREADS, count) if count else FALLBACK_INTRA_THREADS
 
 
 @dataclass(frozen=True, slots=True)
