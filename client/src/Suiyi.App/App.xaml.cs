@@ -383,7 +383,7 @@ public partial class App : Application
 
         _engineClient = new EngineClient(options.Port)
         {
-            // 每次 /translate 都按当前设置带 "glossary": true|false，托盘切换后下一次复制翻译即生效，不用重启服务。
+            // 每次 /translate 与 /ocr_translate 都按当前设置带 glossary（请求体字段 / query 参数），托盘切换后下一次翻译即生效，不用重启服务。
             GlossaryOverride = () => _settings?.Current.Glossary.Enabled,
         };
         _engine = new EngineSupervisor(
@@ -421,8 +421,7 @@ public partial class App : Application
             _logger?.Info($"托盘：专业术语保护{(args.Enabled ? "开启" : "关闭")}");
             _settings?.Update(s => s with { Glossary = s.Glossary with { Enabled = args.Enabled } });
 
-            // 复制翻译每次请求都带开关，立即生效；框选翻译（/ocr_translate 没有单次覆盖字段）按服务启动时的设置，下次重启翻译服务后跟上。
-            tray.ShowNotification(AppTitle, GlossaryStatusText.Toggled(args.Enabled));
+            // 不弹气泡（#88）：复制翻译（/translate 的 glossary 字段）和框选翻译（/ocr_translate?glossary=）每次请求都带当前开关，立即生效。
             UpdateGlossaryStatus();
         };
         tray.EditGlossaryRequested += (_, _) => EditUserGlossary();
@@ -526,15 +525,15 @@ public partial class App : Application
             _tray?.ShowNotification(AppTitle, $"注意：当前翻译服务读取的是 {_engineClient!.KnownGlossaryStatus!.UserPath}，改这个文件需要重启翻译服务才生效");
         }
 
-        // 用系统默认程序打开 .tsv；没有关联程序时退回记事本。
+        // 固定用记事本打开（不走 .tsv 的默认程序：Excel 会改写 Tab 和编码）。
         try
         {
-            using var process = Process.Start(new ProcessStartInfo(file) { UseShellExecute = true });
+            using var process = Process.Start(UserGlossaryFile.EditorStartInfo(file));
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            _logger?.Info($"用默认程序打开 {file} 失败（{ex.Message}），改用记事本");
-            StartProcess("notepad.exe", file);
+            _logger?.Error($"无法用记事本打开 {file}", ex);
+            _tray?.ShowNotification(AppTitle, $"无法打开 {file}");
         }
     }
 

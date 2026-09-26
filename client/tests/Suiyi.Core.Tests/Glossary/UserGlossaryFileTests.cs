@@ -60,6 +60,20 @@ public sealed class UserGlossaryFileTests : IDisposable
     }
 
     [Fact]
+    public void Editor_IsAlwaysNotepad()
+    {
+        var path = Path.Combine(_dir, "带 空格", "glossary.tsv");
+
+        var info = UserGlossaryFile.EditorStartInfo(path);
+
+        Assert.Equal("notepad.exe", info.FileName);
+        Assert.False(info.UseShellExecute); // 不走 .tsv 的默认程序（Excel 会改写 Tab 和编码）
+        Assert.Equal([path], info.ArgumentList);
+        Assert.Contains("记事本", UserGlossaryFile.Template, StringComparison.Ordinal);
+        Assert.Contains("Excel", UserGlossaryFile.Template, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IsMismatch()
     {
         var path = UserGlossaryFile.ResolvePath(_dir);

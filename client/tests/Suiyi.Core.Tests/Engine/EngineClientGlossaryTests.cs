@@ -68,15 +68,59 @@ public sealed class EngineClientGlossaryTests : IDisposable
         Assert.All(_handler.TranslateRequests, r => Assert.False(Body(r).TryGetProperty("glossary", out _)));
     }
 
-    [Fact]
-    public async Task OcrTranslate_DoesNotSendGlossary()
+    [Theory]
+    [InlineData(true, "source=auto&target=zh&fallback_target=en&glossary=true")]
+    [InlineData(false, "source=auto&target=zh&fallback_target=en&glossary=false")]
+    public async Task OcrTranslate_SendsGlossaryQueryFromOverride(bool enabled, string expectedQuery)
     {
-        _client.GlossaryOverride = () => false;
+        _client.GlossaryOverride = () => enabled;
 
         await _client.OcrTranslateAsync(TestPng.Small, "auto", "zh", "en");
 
         var request = Assert.Single(_handler.OcrRequests);
-        Assert.DoesNotContain("glossary", request.Query, StringComparison.Ordinal);
+        Assert.Equal(expectedQuery, request.Query);
+        Assert.Equal(TestPng.Small, request.BodyBytes); // 请求体仍是原始图片字节
+    }
+
+    [Fact]
+    public async Task OcrTranslate_OverrideReadEachRequest()
+    {
+        var enabled = true;
+        _client.GlossaryOverride = () => enabled;
+
+        await _client.OcrTranslateAsync(TestPng.Small, "auto", "zh", null);
+        enabled = false;
+        await _client.OcrTranslateAsync(TestPng.Small, "auto", "zh", null);
+
+        Assert.Equal(["source=auto&target=zh&glossary=true", "source=auto&target=zh&glossary=false"], _handler.OcrRequests.Select(r => r.Query));
+    }
+
+    [Fact]
+    public async Task OcrTranslate_NoOverride_OmitsGlossary()
+    {
+        await _client.OcrTranslateAsync(TestPng.Small, "auto", "zh", "en");
+        _client.GlossaryOverride = () => null;
+        await _client.OcrTranslateAsync(TestPng.Small, "auto", "zh", "en");
+
+        Assert.All(_handler.OcrRequests, r => Assert.DoesNotContain("glossary", r.Query, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Ocr_RecognizeOnly_DoesNotSendGlossary()
+    {
+        _client.GlossaryOverride = () => true;
+
+        await _client.OcrAsync(TestPng.Small);
+
+        Assert.DoesNotContain("glossary", Assert.Single(_handler.OcrRequests).Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildOcrTranslatePath_Glossary()
+    {
+        Assert.Equal("ocr_translate?source=auto&target=zh", EngineClient.BuildOcrTranslatePath("auto", "zh", null));
+        Assert.Equal("ocr_translate?source=auto&target=zh&glossary=true", EngineClient.BuildOcrTranslatePath("auto", "zh", "zh", glossary: true));
+        Assert.Equal("ocr_translate?source=en&target=zh&fallback_target=en&glossary=false", EngineClient.BuildOcrTranslatePath("en", "zh", "en", glossary: false));
     }
 
     [Fact]

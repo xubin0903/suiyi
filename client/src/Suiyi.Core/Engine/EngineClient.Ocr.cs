@@ -96,7 +96,7 @@ public sealed partial class EngineClient
 
         await WarmCachesAsync(cancellationToken).ConfigureAwait(false);
         var timeout = GetOcrTranslateTimeout(source, target, fallbackTarget);
-        var pathAndQuery = BuildOcrTranslatePath(source, target, fallbackTarget);
+        var pathAndQuery = BuildOcrTranslatePath(source, target, fallbackTarget, GlossaryOverride?.Invoke());
         var response = await SendAsync<OcrTranslateResponse>(HttpMethod.Post, pathAndQuery, PngContent(png), timeout, cancellationToken)
             .ConfigureAwait(false);
         lock (_gate)
@@ -193,8 +193,11 @@ public sealed partial class EngineClient
         return true;
     }
 
-    /// <summary><c>/ocr_translate</c> 的相对路径与查询串。<paramref name="fallbackTarget"/> 为空或与 <paramref name="target"/> 同语种时省略。</summary>
-    internal static string BuildOcrTranslatePath(string source, string target, string? fallbackTarget)
+    /// <summary>
+    /// <c>/ocr_translate</c> 的相对路径与查询串。<paramref name="fallbackTarget"/> 为空或与 <paramref name="target"/> 同语种时省略；
+    /// <paramref name="glossary"/> 非空时追加 <c>glossary=true|false</c>（#88，与 <c>/translate</c> 的 <c>glossary</c> 字段同义）。
+    /// </summary>
+    internal static string BuildOcrTranslatePath(string source, string target, string? fallbackTarget, bool? glossary = null)
     {
         var parameters = new List<(string, string)>
         {
@@ -205,6 +208,11 @@ public sealed partial class EngineClient
             && !string.Equals(TimeoutPolicy.Normalize(fallbackTarget), TimeoutPolicy.Normalize(target), StringComparison.Ordinal))
         {
             parameters.Add((OcrDraftContract.FallbackTargetParameter, fallbackTarget.Trim()));
+        }
+
+        if (glossary is { } enabled)
+        {
+            parameters.Add((Glossary.GlossaryContract.OcrQueryParameter, enabled ? "true" : "false"));
         }
 
         return OcrDraftContract.OcrTranslatePath + "?" + Query([.. parameters]);

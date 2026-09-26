@@ -1,6 +1,6 @@
 namespace Suiyi.Core.Glossary;
 
-// 与引擎的术语保护约定（#83 接口约定评论 issuecomment-5845549072，2026-09-26 版）。引擎实现见 PR #85；
+// 与引擎的术语保护约定（#83 接口约定评论 issuecomment-5845549072，2026-09-26 版）。引擎实现已随 PR #85 合入 main（3a7aebf），已逐项核对一致；
 // 约定若有更新，以那条评论的最新内容为准，只需改本文件与 EngineDtos 里 HealthResponse 的 glossary_* 字段（及对应单测）。
 // 客户端依赖约定的地方：本文件、Engine/EngineDtos.cs（TranslateRequest.Glossary、HealthResponse.Glossary*、GlossaryReloadResponse）、
 // Engine/EngineCommandResolver.cs（启动参数 / 环境变量）、Engine/EngineClient.cs（请求字段、POST /glossary/reload）。
@@ -53,6 +53,12 @@ public static class GlossaryContract
 
     /// <summary>立即重读用户术语表：<c>POST /glossary/reload</c>，返回与 <c>/health</c> 的 <c>glossary_*</c> 字段相同。</summary>
     public const string ReloadPath = "glossary/reload";
+
+    /// <summary>
+    /// <c>/ocr_translate</c> 的 query 参数（#87，#88）：<c>glossary=true|false</c>，只影响这一次请求，不传时按服务端默认。
+    /// 旧版引擎（#87 之前）忽略不认识的 query 参数，框选翻译按服务启动时的 <c>SUIYI_GLOSSARY</c>。
+    /// </summary>
+    public const string OcrQueryParameter = "glossary";
 
     /// <summary>用户术语表文件名：<c>&lt;设置目录&gt;\glossary.tsv</c>（设置目录与 <c>settings.json</c> 相同，可被 <c>SUIYI_CONFIG_DIR</c> 覆盖）。</summary>
     public const string UserFileName = "glossary.tsv";

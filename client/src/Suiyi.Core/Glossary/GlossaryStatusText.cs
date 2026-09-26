@@ -86,12 +86,6 @@ public static class GlossaryStatusText
             : text;
     }
 
-    /// <summary>切换开关后的气泡文字。</summary>
-    /// <param name="enabled">切换后的值。</param>
-    /// <returns>提示文字。</returns>
-    public static string Toggled(bool enabled) =>
-        $"专业术语保护已{(enabled ? "开启" : "关闭")}：复制翻译立即生效；框选翻译在下次重启翻译服务后生效";
-
     private static string OneLine(string text) => text.ReplaceLineEndings(" ").Trim();
 
     private static string Truncate(string text, int max = MaxLineLength) =>
