@@ -660,6 +660,13 @@ class LlamaServerBackend:
             "-np",
             "1",
             "--no-webui",
+            # 默认会在内存里缓存最多 8 GiB 的历史提示，RSS 随请求数上涨，不代表模型本身的占用。
+            "--cache-ram",
+            "0",
+            # 不用 mmap：权重整份读进进程内存，RSS 才能和 CTranslate2 候选直接比较
+            # （mmap 时文件页算进 RSS，重排后的权重又占一份匿名内存，会重复计算）。
+            "--load-mode",
+            "none",
         ]
         # 新版 llama-server 默认启用 jinja 模板；completion 模式自己拼提示，关掉模板解析，
         # 以免 TranslateGemma 这类要求结构化 content 的模板在启动时报错。
