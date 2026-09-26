@@ -30,6 +30,50 @@
    "notes": "en→zh：Tatoeba eng-zho opusTCv20210807+bt transformer-big 2022-05-14；zh→en：opus-mt-tc-bible-big-zhx-en；ja→zh：Tatoeba jpn-zho transformer-big 2022-09-15（直连，不再中转）。ja→en / en→ja 没有 tc-big，沿用基线；zh→ja 基线已是 tc-big。"
   },
   {
+   "name": "opus-best",
+   "label": "方案 A：各方向最优 OPUS-MT",
+   "kind": "ct2",
+   "routes": {
+    "en-zh": [{"model": "cand/opus-tc-big-en-zh", "family": "marian", "prefix": ">>cmn_Hans<<"}],
+    "zh-en": [{"model": "opus-mt-zh-en", "family": "marian"}],
+    "ja-zh": [{"model": "cand/opus-tc-big-ja-zh", "family": "marian", "prefix": ">>cmn_Hans<<"}],
+    "ja-en": [{"model": "cand/opus-tc-bible-big-mul-en", "family": "marian"}],
+    "zh-ja": [{"model": "opus-mt-zho-jpn-tc-big-2022-07-28", "family": "marian"}],
+    "en-ja": [{"model": "cand/opus-eng-jpn-bt-2021-04-10", "family": "marian"}]
+   },
+   "license": "CC-BY-4.0",
+   "redistributable": "是（署名）",
+   "commercial": "是",
+   "notes": "按全量评测逐方向取最好的 OPUS-MT：en→zh、ja→zh 用 tc-big，ja→en 用 tc-bible-big mul→en，en→ja 用 eng-jpn opus+bt-2021-04-10；zh→en、zh→ja 保留现用模型。"
+  },
+  {
+   "name": "opus-alt",
+   "label": "OPUS-MT 其余可用版本",
+   "kind": "ct2",
+   "routes": {
+    "zh-en": [{"model": "cand/opus-zho-eng-bt-2021-04-30", "family": "marian"}],
+    "ja-en": [{"model": "cand/opus-jpn-eng-2021-02-18", "family": "marian"}],
+    "en-ja": [{"model": "cand/opus-eng-jpn-bt-2021-04-10", "family": "marian"}]
+   },
+   "license": "CC-BY-4.0",
+   "redistributable": "是（署名）",
+   "commercial": "是",
+   "notes": "Tatoeba-MT 上各方向比现用基线更新的版本（没有 tc-big 的方向用 transformer / +bt）。zh→ja 另测过 2022-07-29 共享词表版 transformer-big：chrF 12.4，输出大量截断，不采用（基线已是 2022-07-28 分离词表版）。其余：zho-eng opus+bt-2021-04-30、jpn-eng opus-2021-02-18、eng-jpn opus+bt-2021-04-10。"
+  },
+  {
+   "name": "opus-tc-bible-mul-en",
+   "label": "OPUS-MT tc-bible-big mul→en",
+   "kind": "ct2",
+   "routes": {
+    "zh-en": [{"model": "cand/opus-tc-bible-big-mul-en", "family": "marian"}],
+    "ja-en": [{"model": "cand/opus-tc-bible-big-mul-en", "family": "marian"}]
+   },
+   "license": "CC-BY-4.0",
+   "redistributable": "是（署名）",
+   "commercial": "是",
+   "notes": "Tatoeba-MT mul-eng opusTCv20230926max50+bt+jhubc transformer-big 2024-08-17：多语→英，一个模型覆盖 zh→en 与 ja→en。"
+  },
+  {
    "name": "m2m100-418m",
    "label": "M2M100 418M",
    "kind": "ct2",
@@ -110,6 +154,23 @@
    "redistributable": "有条件（须附 Gemma 条款并遵守禁止用途政策）",
    "commercial": "是（受禁止用途政策约束）",
    "notes": "google/translategemma-4b-it 的社区 GGUF（bullerwins），按官方聊天模板手工拼提示。"
+  },
+  {
+   "name": "qwen3.5-0.8b",
+   "label": "Qwen3.5 0.8B Q4_K_M（LLM 对照）",
+   "kind": "llama",
+   "gguf": "gguf/Qwen3.5-0.8B-Q4_K_M.gguf",
+   "api": "chat",
+   "prompt": "generic",
+   "request": {
+    "chat_template_kwargs": {
+     "enable_thinking": false
+    }
+   },
+   "license": "Apache-2.0",
+   "redistributable": "是",
+   "commercial": "是",
+   "notes": "unsloth/Qwen3.5-0.8B-GGUF；通用模型，关闭思考模式。"
   },
   {
    "name": "qwen3.5-2b",
