@@ -8,7 +8,10 @@ from suiyi_engine.glossary import (
     GlossaryError,
     find_terms,
     parse_terms,
+    placeholder,
     present_form,
+    protect,
+    restore,
     term_present,
 )
 
@@ -70,3 +73,47 @@ def test_parse_rejects_bad_entries() -> None:
         parse_terms(
             [{"id": "x", "kind": "keep", "en": ["x"]}, {"id": "x", "kind": "keep", "en": ["y"]}]
         )
+
+
+def test_find_terms_every_returns_repeated_occurrences() -> None:
+    text = "Clear the cache, then warm the cache."
+    assert len(find_terms(text, "en", TERMS)) == 1
+    assert len(find_terms(text, "en", TERMS, every=True)) == 2
+
+
+def test_placeholders_are_unique_and_letter_based() -> None:
+    names = [placeholder(i) for i in range(12)]
+    assert names[:3] == ["ZXQ", "ZXW", "ZXJ"]
+    assert len(set(names)) == 12
+    assert names[5] == "ZXQ1"
+
+
+def test_protect_and_restore_round_trip_en_to_zh() -> None:
+    text = "Kubernetes keeps the cache hit rate high."
+    protected = protect(text, "en", "zh", TERMS)
+    assert protected.text == "ZXQ keeps the ZXW high."
+    assert [slot.target for slot in protected.slots] == ["Kubernetes", "缓存命中率"]
+    restored, failed = restore("ZXQ 让 zxw 保持在高位。", protected, "zh")
+    assert restored == "Kubernetes 让缓存命中率保持在高位。"
+    assert failed == []
+
+
+def test_restore_reports_lost_and_duplicated_placeholders() -> None:
+    protected = protect("Kubernetes flushes the cache.", "en", "zh", TERMS)
+    restored, failed = restore("ZXQ ZXQ 清空了。", protected, "zh")
+    assert {slot.target for slot in failed} == {"Kubernetes", "缓存"}
+    assert "ZXQ" in restored
+
+
+def test_restore_capitalises_fixed_term_at_english_sentence_start() -> None:
+    protected = protect("竞态条件很难复现。", "zh", "en", TERMS)
+    assert protected.text == "ZXQ很难复现。"
+    restored, failed = restore("ZXQ is hard to reproduce.", protected, "en")
+    assert restored == "Race condition is hard to reproduce."
+    assert failed == []
+
+
+def test_protect_skips_text_that_already_looks_like_a_placeholder() -> None:
+    protected = protect("Set ZXQ1 in the cache.", "en", "zh", TERMS)
+    assert protected.slots == ()
+    assert protected.text == "Set ZXQ1 in the cache."

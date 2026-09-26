@@ -16,6 +16,10 @@
   ``keep`` 条目在原文里区分大小写，``fixed`` 不区分；在译文里一律不区分大小写。
 - 中文、日文：去掉全部空白后做子串匹配（「OAuth 令牌」=「OAuth令牌」），区分大小写。
 - 一段原文里多个条目重叠时，长的优先（cache hit rate 优先于 cache）。
+
+术语保护原型（#78，只在评测里用）：:func:`protect` 把原文里的术语换成占位符（``ZXQ``、``ZXW``……），
+翻译后 :func:`restore` 把占位符换回目标语的规范写法（``keep`` 条目保留原文写法）。
+占位符格式的取舍见 docs/engine/专业领域评测.md 的「术语保护原型」。
 """
 
 from __future__ import annotations
@@ -33,6 +37,9 @@ FIXED = "fixed"
 KINDS = (KEEP, FIXED)
 LANGS = ("en", "zh", "ja")
 _SPACE_LANGS = frozenset({"en"})
+_CJK_LANGS = frozenset({"zh", "ja"})
+_CJK = "\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff01-\uff60\u3000-\u303f"
+_CJK_GAP = re.compile(rf"(?<=[{_CJK}])[ \t]+(?=[{_CJK}])")
 
 
 class GlossaryError(ValueError):
@@ -105,8 +112,14 @@ def parse_terms(items: Iterable[object]) -> tuple[Term, ...]:
     return tuple(terms)
 
 
-def find_terms(text: str, lang: str, glossary: Sequence[Term]) -> list[TermMatch]:
-    """找出 ``text`` 里出现的术语，按位置排序；重叠时保留更长的那个。"""
+def find_terms(
+    text: str, lang: str, glossary: Sequence[Term], *, every: bool = False
+) -> list[TermMatch]:
+    """找出 ``text`` 里出现的术语，按位置排序；重叠时保留更长的那个。
+
+    默认每个术语只取第一次出现（评测按「术语 × 条目」计数）；
+    ``every=True`` 时取全部出现（术语保护用）。
+    """
 
     candidates: list[TermMatch] = []
     for term in glossary:
@@ -119,7 +132,7 @@ def find_terms(text: str, lang: str, glossary: Sequence[Term]) -> list[TermMatch
     for match in candidates:
         if any(match.start < other.end and other.start < match.end for other in chosen):
             continue
-        if match.term.id in used:
+        if not every and match.term.id in used:
             continue
         chosen.append(match)
         used.add(match.term.id)
@@ -187,3 +200,99 @@ def _strip_spaces(text: str) -> tuple[str, list[int]]:
         kept.append(char)
         positions.append(index)
     return "".join(kept), positions
+
+
+# ---------------------------------------------------------------- 术语保护原型
+
+# Marian（opus-mt）在 en→zh / zh→en 上都能原样抄过去的占位符：
+# 大写 ZX + 一个字母，超过 5 个再加数字。
+# TERM0、__0__、{0} 这类写法会被翻译、拆开或丢掉，实测见 docs/engine/专业领域评测.md。
+_PLACEHOLDER_LETTERS = "QWJKV"
+_PLACEHOLDER_ANY = re.compile(r"zx[qwjkv]\d*", re.IGNORECASE)
+
+
+def placeholder(index: int) -> str:
+    letter = _PLACEHOLDER_LETTERS[index % len(_PLACEHOLDER_LETTERS)]
+    suffix = "" if index < len(_PLACEHOLDER_LETTERS) else str(index // len(_PLACEHOLDER_LETTERS))
+    return f"ZX{letter}{suffix}"
+
+
+@dataclass(frozen=True, slots=True)
+class Slot:
+    """一个被保护的术语：占位符、原文写法、要写回的目标语写法。"""
+
+    placeholder: str
+    term: Term
+    source: str
+    target: str
+
+
+@dataclass(frozen=True, slots=True)
+class Protected:
+    text: str
+    slots: tuple[Slot, ...]
+
+
+def target_form(term: Term, surface: str, tgt_lang: str) -> str | None:
+    """术语在目标语里要强制使用的写法；``fixed`` 条目没有目标语写法时返回 ``None``（不保护）。"""
+
+    canonical = term.canonical(tgt_lang)
+    if term.kind == KEEP:
+        return canonical or surface
+    return canonical
+
+
+def protect(text: str, src_lang: str, tgt_lang: str, glossary: Sequence[Term]) -> Protected:
+    """把原文里的术语换成占位符。原文里本来就有类似占位符的字样时不做保护。"""
+
+    if _PLACEHOLDER_ANY.search(text):
+        return Protected(text, ())
+    matches = [
+        (match, target)
+        for match in find_terms(text, src_lang, glossary, every=True)
+        if (target := target_form(match.term, match.surface, tgt_lang))
+    ]
+    slots = [
+        Slot(placeholder(index), match.term, match.surface, target)
+        for index, (match, target) in enumerate(matches)
+    ]
+    pieces: list[str] = []
+    cursor = 0
+    for (match, _target), slot in zip(matches, slots, strict=True):
+        pieces.append(text[cursor : match.start])
+        pieces.append(slot.placeholder)
+        cursor = match.end
+    pieces.append(text[cursor:])
+    return Protected("".join(pieces), tuple(slots))
+
+
+def restore(translation: str, protected: Protected, tgt_lang: str) -> tuple[str, list[Slot]]:
+    """把译文里的占位符换回目标语写法。返回（译文，丢失或重复的占位符）。
+
+    占位符匹配不区分大小写；丢失（0 次）或重复（多于 1 次）的都算失败，交给调用方决定是否回退。
+    英文译文里占位符在句首时，写回的术语首字母大写。
+    """
+
+    failed: list[Slot] = []
+    text = translation
+    # 长的占位符先换，避免 ZXQ 吃掉 ZXQ1 的前缀
+    for slot in sorted(protected.slots, key=lambda item: -len(item.placeholder)):
+        pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(slot.placeholder)}(?![0-9])", re.I)
+        found = list(pattern.finditer(text))
+        if len(found) != 1:
+            failed.append(slot)
+            continue
+        match = found[0]
+        value = slot.target
+        if tgt_lang == "en" and slot.term.kind == FIXED and _sentence_start(text, match.start()):
+            value = value[:1].upper() + value[1:]
+        text = text[: match.start()] + value + text[match.end() :]
+    if tgt_lang in _CJK_LANGS and len(failed) < len(protected.slots):
+        # 占位符两侧常被模型加上空格（「开源 ZXQ 引擎」），写回中日文术语后去掉汉字 / 假名之间的空白
+        text = _CJK_GAP.sub("", text)
+    return text, failed
+
+
+def _sentence_start(text: str, index: int) -> bool:
+    before = text[:index].rstrip()
+    return not before or before[-1] in ".!?:;\"'“”"

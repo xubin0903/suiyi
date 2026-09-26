@@ -36,7 +36,14 @@ from pathlib import Path
 from typing import Protocol
 
 from suiyi_engine.eval.metrics import corpus_scores, latency_stats
-from suiyi_engine.glossary import Term, load_glossary, term_present
+from suiyi_engine.glossary import (
+    Term,
+    find_terms,
+    load_glossary,
+    protect,
+    restore,
+    term_present,
+)
 
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -553,6 +560,11 @@ GENERIC_PROMPT = (
     "Translate the following {src} text into {tgt}. Output only the translation, "
     "with no explanations or notes.\n\n{text}"
 )
+# HY-MT 模型卡给出的术语干预模板（中文），放在翻译指令之前。
+HY_TERMS_ZH = "参考下面的翻译：\n{pairs}\n\n"
+HY_TERM_PAIR_ZH = "{src} 翻译成 {tgt}"
+GENERIC_TERMS = "Use these term translations:\n{pairs}\n\n"
+GENERIC_TERM_PAIR = "{src} → {tgt}"
 GEMMA_TRANSLATE_RAW = (
     "<start_of_turn>user\n"
     "You are a professional {src} ({src_code}) to {tgt} ({tgt_code}) translator. "
@@ -565,8 +577,27 @@ GEMMA_TRANSLATE_RAW = (
 GEMMA_LANG_CODES = {"en": "en", "zh": "zh-Hans", "ja": "ja"}
 
 
-def build_prompt(style: str, text: str, src: str, tgt: str) -> str:
-    """按候选的提示词风格拼出用户消息（``gemma-translate`` 返回完整原始提示）。"""
+def build_prompt(
+    style: str,
+    text: str,
+    src: str,
+    tgt: str,
+    hints: Sequence[tuple[str, str]] = (),
+) -> str:
+    """按候选的提示词风格拼出用户消息（``gemma-translate`` 返回完整原始提示）。
+
+    ``hints`` 是（原文写法，目标写法）术语对，按 HY-MT 的术语干预模板写在指令前（#78 原型）。
+    """
+
+    if hints:
+        if style == "gemma-translate":
+            raise BenchError("gemma-translate 提示词不支持术语提示", code=2)
+        if style == "hy-mt" and "zh" in (src, tgt):
+            head, pair = HY_TERMS_ZH, HY_TERM_PAIR_ZH
+        else:
+            head, pair = GENERIC_TERMS, GENERIC_TERM_PAIR
+        pairs = "\n".join(pair.format(src=a, tgt=b) for a, b in hints)
+        return head.format(pairs=pairs) + build_prompt(style, text, src, tgt)
 
     names = {
         "src": LANG_NAMES[src][0],
@@ -692,8 +723,10 @@ class LlamaServerBackend:
     def _url(self, path: str) -> str:
         return f"http://127.0.0.1:{self._port}{path}"
 
-    def translate(self, text: str, src: str, tgt: str) -> str:
-        prompt = build_prompt(self._style, text, src, tgt)
+    def translate(
+        self, text: str, src: str, tgt: str, hints: Sequence[tuple[str, str]] = ()
+    ) -> str:
+        prompt = build_prompt(self._style, text, src, tgt, hints)
         budget = max(128, min(2048, len(text) * 4))
         if self._api == "chat":
             payload: dict[str, object] = {
@@ -803,6 +836,59 @@ class RunConfig:
     extra: dict[str, object] = field(default_factory=dict)
 
 
+TERM_MODES = ("none", "protect", "prompt")
+
+
+class TermTranslator:
+    """术语保护原型（#78）：包在后端外面，按 ``mode`` 处理术语。
+
+    - ``protect``：术语换成占位符再翻译，译后写回规范写法；
+      占位符丢失或重复时整条回退为不保护的译文。
+    - ``prompt``：只用于 llama 候选，把（原文写法，目标写法）写进提示词（HY-MT 术语干预模板）。
+    """
+
+    def __init__(self, mode: str, glossary: Sequence[Term]) -> None:
+        if mode not in TERM_MODES:
+            raise BenchError(f"未知的术语模式：{mode}", code=2)
+        self.mode = mode
+        self._glossary = tuple(glossary)
+        self.reset_stats()
+
+    def reset_stats(self) -> None:
+        self.stats = {"samples": 0, "protected": 0, "slots": 0, "failed_slots": 0, "fallbacks": 0}
+
+    def __call__(self, backend: Backend, text: str, src: str, tgt: str) -> str:
+        self.stats["samples"] += 1
+        if self.mode == "protect":
+            return self._protect(backend, text, src, tgt)
+        if self.mode == "prompt":
+            if not isinstance(backend, LlamaServerBackend):
+                raise BenchError("--terms prompt 只适用于 llama 候选", code=2)
+            hints = []
+            for match in find_terms(text, src, self._glossary):
+                target = match.term.canonical(tgt)
+                if target and target != match.surface:
+                    hints.append((match.surface, target))
+            if hints:
+                self.stats["protected"] += 1
+                self.stats["slots"] += len(hints)
+            return backend.translate(text, src, tgt, hints)
+        return backend.translate(text, src, tgt)
+
+    def _protect(self, backend: Backend, text: str, src: str, tgt: str) -> str:
+        protected = protect(text, src, tgt, self._glossary)
+        if not protected.slots:
+            return backend.translate(text, src, tgt)
+        self.stats["protected"] += 1
+        self.stats["slots"] += len(protected.slots)
+        restored, failed = restore(backend.translate(protected.text, src, tgt), protected, tgt)
+        if not failed:
+            return restored
+        self.stats["failed_slots"] += len(failed)
+        self.stats["fallbacks"] += 1
+        return backend.translate(text, src, tgt)
+
+
 def make_backend(config: RunConfig, log_dir: Path | None) -> Backend:
     candidate = config.candidate
     if candidate.kind == "suiyi":
@@ -848,6 +934,9 @@ def run_candidate(
             t0 = time.perf_counter()
             call(backend, warm.source, src, tgt)
             first_ms[f"{src}-{tgt}"] = (time.perf_counter() - t0) * 1000.0
+        reset = getattr(call, "reset_stats", None)
+        if callable(reset):
+            reset()  # 预热不计入术语保护统计
         pid = backend.process_pid()
         loaded_mb = process_rss_mb(pid)
         results: list[SampleResult] = []
@@ -1126,6 +1215,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--threads", type=int, default=4, help="推理线程数，默认 4")
     run.add_argument("--llama-server", type=Path, help="llama-server 可执行文件（llama 候选需要）")
     run.add_argument("--label", default="", help="写进报告的环境说明")
+    run.add_argument(
+        "--terms",
+        choices=TERM_MODES,
+        default="none",
+        help="术语保护原型：protect＝占位符保护并强制术语表译法；prompt＝把术语写进 LLM 提示词",
+    )
     run.add_argument("--name", help="输出文件名（默认同候选名）")
     report = sub.add_parser("report", help="把多个 run 结果合成 Markdown")
     report.add_argument("results", nargs="+", type=Path)
@@ -1197,9 +1292,16 @@ def _run(args: argparse.Namespace) -> int:
         extra={"quick": bool(args.quick), "limit": args.limit},
     )
     log = lambda message: print(message, file=sys.stderr, flush=True)  # noqa: E731
-    log(f"{args.candidate}：{len(samples)} 条，线程 {args.threads}")
-    result = run_candidate(config, log=log, log_dir=out_dir)
-    name = args.name or args.candidate
+    terms = TermTranslator(args.terms, tuple(glossary.values()))
+    suffix = "" if args.terms == "none" else f"+{args.terms}"
+    log(f"{args.candidate}{suffix}：{len(samples)} 条，线程 {args.threads}")
+    result = run_candidate(config, log=log, log_dir=out_dir, translate=terms)
+    if args.terms != "none":
+        result["settings"]["terms"] = {"mode": args.terms, **terms.stats}  # type: ignore[index]
+        mark = {"protect": "术语保护", "prompt": "术语提示"}[args.terms]
+        result["candidate"]["name"] += suffix  # type: ignore[index]
+        result["candidate"]["label"] += f"（{mark}）"  # type: ignore[index]
+    name = args.name or f"{args.candidate}{suffix}"
     path = out_dir / f"{name}.json"
     path.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     summary = result["summary"]
