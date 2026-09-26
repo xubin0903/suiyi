@@ -97,6 +97,8 @@ jobs:
           OUT="$RUNNER_TEMP/mem"; mkdir -p "$OUT"
           M="$RUNNER_TEMP/models"; B="$RUNNER_TEMP/baseline/engine/src"; S="$PWD/engine/src"
           HEAD=$(git rev-parse --short HEAD); BASE=$(git -C "$RUNNER_TEMP/baseline" rev-parse --short HEAD)
+          "$PY" -c "import platform, ctranslate2 as c; print('CPU', platform.processor(), c.__version__, c.get_supported_compute_types('cpu'))" | tee -a "$GITHUB_STEP_SUMMARY"
+          grep -m1 'model name' /proc/cpuinfo 2>/dev/null | tee -a "$GITHUB_STEP_SUMMARY" || true
           echo "## ${RUNNER_OS}：基线 $BASE，当前 $HEAD（GitHub 托管 runner，$(nproc 2>/dev/null || echo "$NUMBER_OF_PROCESSORS") 逻辑 CPU）" >> "$GITHUB_STEP_SUMMARY"
           run() { mode=$1; shift; "$PY" scripts/measure_serve_memory.py "$mode" --summary "$GITHUB_STEP_SUMMARY" "$@"; }
           run breakdown --models-dir "$M" --label "进程内分解（当前 $HEAD）" --out "$OUT/breakdown.json"
@@ -104,6 +106,11 @@ jobs:
           CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_PACKED_GEMM=0" --out "$OUT/baseline-nopack.json" --port 18802
           run serve --models-dir "$M" --src "$S" --label "当前 $HEAD（默认参数）" --out "$OUT/head.json" --port 18803 --idle-wait 20 -- --model-idle-unload 15
           run serve --models-dir "$M" --src "$S" --label "当前 $HEAD（默认参数，第二次）" --out "$OUT/head-2.json" --port 18804
+          # GitHub runner 多为 AMD EPYC，CT2 默认走 oneDNN；负责人的 Intel 机器走 MKL（带权重预打包）。
+          # 强制 CT2_USE_MKL=1 复现 Intel 机器上的 MKL 路径（#96）。
+          CT2_USE_MKL=1 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1" --out "$OUT/baseline-mkl.json" --port 18805
+          CT2_USE_MKL=1 CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1 + CT2_PACKED_GEMM=0" --out "$OUT/baseline-mkl-nopack.json" --port 18806
+          CT2_USE_MKL=1 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1" --out "$OUT/head-mkl.json" --port 18807
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
