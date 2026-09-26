@@ -21,6 +21,15 @@ public enum TrayCommand
     /// <summary>重启翻译服务。</summary>
     RestartEngine,
 
+    /// <summary>切换专业术语保护（#84）。</summary>
+    ToggleGlossary,
+
+    /// <summary>编辑我的术语表（不存在时按模板创建，再用默认编辑器打开）。</summary>
+    EditGlossary,
+
+    /// <summary>让服务立即重读用户术语表（<c>POST /glossary/reload</c>）。</summary>
+    ReloadGlossary,
+
     /// <summary>打开设置文件。</summary>
     OpenSettings,
 
@@ -88,6 +97,7 @@ public static class TrayMenuBuilder
             new TrayMenuItem { Text = state.RegionMenuText, Command = TrayCommand.TranslateRegion },
             new TrayMenuItem { Text = "暂停监听", Command = TrayCommand.TogglePause, IsChecked = state.Paused },
             new TrayMenuItem { Text = "目标语言", Children = targets },
+            new TrayMenuItem { Text = "专业术语", Children = GlossaryItems(state) },
             TrayMenuItem.Separator,
             new TrayMenuItem { Text = "重启翻译服务", Command = TrayCommand.RestartEngine },
             new TrayMenuItem { Text = "打开设置文件", Command = TrayCommand.OpenSettings },
@@ -97,4 +107,15 @@ public static class TrayMenuBuilder
             new TrayMenuItem { Text = "退出", Command = TrayCommand.Exit },
         ];
     }
+
+    /// <summary>「专业术语」子菜单：开关、编辑、重新加载，下面是不可点的状态行（条数、错误、警告）。</summary>
+    private static TrayMenuItem[] GlossaryItems(TrayState state) =>
+    [
+        new TrayMenuItem { Text = "专业术语保护", Command = TrayCommand.ToggleGlossary, IsChecked = state.GlossaryEnabled },
+        new TrayMenuItem { Text = "编辑我的术语表…", Command = TrayCommand.EditGlossary },
+        new TrayMenuItem { Text = "重新加载术语表", Command = TrayCommand.ReloadGlossary },
+        TrayMenuItem.Separator,
+        .. state.GlossaryStatus.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => new TrayMenuItem { Text = line, IsEnabled = false }),
+    ];
 }

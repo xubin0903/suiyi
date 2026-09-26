@@ -4,6 +4,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 
+using Suiyi.Core.Glossary;
+
 namespace Suiyi.Core.Engine;
 
 /// <summary>
@@ -42,6 +44,8 @@ public sealed partial class EngineClient : IDisposable
     private HashSet<string>? _loadedModels;
     private bool? _ocrLoaded;
     private OcrHealthError? _ocrError;
+    private GlossaryStatus? _glossary;
+    private bool? _glossarySupported;
 
     /// <summary>连接 <c>http://127.0.0.1:{port}</c>。</summary>
     /// <param name="port">服务端口，默认 <see cref="DefaultPort"/>。</param>
@@ -112,6 +116,8 @@ public sealed partial class EngineClient : IDisposable
             _loadedModels = new HashSet<string>(health.LoadedModels, StringComparer.Ordinal);
             _ocrLoaded = health.OcrLoaded;
             _ocrError = health.OcrError;
+            _glossary = health.ToGlossaryStatus();
+            _glossarySupported = _glossary is not null;
         }
 
         return health;
@@ -147,6 +153,8 @@ public sealed partial class EngineClient : IDisposable
             _loadedModels = null;
             _ocrLoaded = null;
             _ocrError = null;
+            _glossary = null;
+            _glossarySupported = null;
         }
     }
 
@@ -193,7 +201,7 @@ public sealed partial class EngineClient : IDisposable
 
         await WarmCachesAsync(cancellationToken).ConfigureAwait(false);
         var timeout = GetTimeout(text, source, target);
-        var request = new TranslateRequest { Text = text, Source = source, Target = target };
+        var request = new TranslateRequest { Text = text, Source = source, Target = target, Glossary = GlossaryOverride?.Invoke() };
         var response = await SendAsync<TranslateResponse>(HttpMethod.Post, "translate", JsonContent(request), timeout, cancellationToken)
             .ConfigureAwait(false);
         if (response.Route.Count > 0)

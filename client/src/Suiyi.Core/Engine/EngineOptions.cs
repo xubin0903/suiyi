@@ -29,6 +29,19 @@ public sealed record EngineOptions
     /// <summary>启动时预热 OCR 模型（<c>engine.preloadOcr</c>），为 true（默认）时追加 <c>--preload-ocr</c>。</summary>
     public bool PreloadOcr { get; init; } = true;
 
+    /// <summary>
+    /// 专业术语保护的服务端默认（设置 <c>glossary.enabled</c>，#84 / #83）。经环境变量 <c>SUIYI_GLOSSARY=1/0</c> 交给服务，
+    /// 不用命令行参数（旧版引擎不认识 <c>--glossary</c>，见 <see cref="Glossary.GlossaryContract.StartupTransport"/>）。
+    /// 复制翻译每次请求另带 <c>glossary</c> 字段覆盖；这里决定不带该字段的请求（框选翻译）的行为。
+    /// </summary>
+    public bool Glossary { get; init; } = Suiyi.Core.Glossary.GlossaryContract.DefaultEnabled;
+
+    /// <summary>术语保护配置的传递方式，默认 <see cref="Glossary.GlossaryContract.StartupTransport"/>（环境变量）。</summary>
+    public Suiyi.Core.Glossary.GlossaryStartupTransport GlossaryTransport { get; init; } = Suiyi.Core.Glossary.GlossaryContract.StartupTransport;
+
+    /// <summary>用户术语表路径（<c>&lt;设置目录&gt;\glossary.tsv</c>），经环境变量 <c>SUIYI_USER_GLOSSARY</c> 交给服务；为空时不传。</summary>
+    public string? UserGlossaryPath { get; init; }
+
     /// <summary>模型目录（<c>engine.modelsDir</c>）；为空时由服务使用默认目录。</summary>
     public string? ModelsDir { get; init; }
 

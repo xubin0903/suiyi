@@ -32,6 +32,9 @@ public sealed class SettingsSerializerTests
             "preload": "zh-en,en-zh",
             "preloadOcr": true
           },
+          "glossary": {
+            "enabled": true
+          },
           "startWithWindows": false
         }
 

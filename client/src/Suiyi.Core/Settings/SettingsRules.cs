@@ -78,6 +78,7 @@ public static class SettingsRules
         var autoHide = Range(popup.AutoHideSeconds, 0, MaxAutoHideSeconds, d.Popup.AutoHideSeconds, "popup.autoHideSeconds", warn);
         var maxWidth = Range(popup.MaxWidth, MinPopupWidth, MaxPopupWidth, d.Popup.MaxWidth, "popup.maxWidth", warn);
 
+        var glossary = settings.Glossary ?? Fallback(d.Glossary, "glossary", warn);
         var engine = settings.Engine ?? Fallback(d.Engine, "engine", warn);
         var port = Range(engine.Port, 1, 65535, d.Engine.Port, "engine.port", warn);
         var preload = engine.Preload ?? Fallback(d.Engine.Preload, "engine.preload", warn);
@@ -96,6 +97,7 @@ public static class SettingsRules
             Clipboard = clipboard with { DebounceMs = debounce, MinChars = minChars, MaxChars = maxChars },
             Hotkey = hotkey with { Translate = translate, Region = region },
             Popup = popup with { AutoHideSeconds = autoHide, MaxWidth = maxWidth },
+            Glossary = glossary,
             Engine = engine with
             {
                 Port = port,

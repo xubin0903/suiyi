@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Suiyi.Core.Glossary;
 
 namespace Suiyi.Core.Engine;
 
@@ -42,6 +43,91 @@ public sealed record HealthResponse
     /// </summary>
     [JsonPropertyName("ocr_error")]
     public OcrHealthError? OcrError { get; init; }
+
+    // ---- 术语保护（#83 约定第 3 节）：平铺字段；旧版引擎没有这些字段时均为 null ----
+
+    /// <summary>服务端默认是否开启术语保护（启动参数或环境变量的结果，不反映单次请求的覆盖）。旧版引擎为 <see langword="null"/>。</summary>
+    [JsonPropertyName("glossary_enabled")]
+    public bool? GlossaryEnabled { get; init; }
+
+    /// <summary>内置术语表条数（按方向展开）。</summary>
+    [JsonPropertyName("glossary_builtin_entries")]
+    public int? GlossaryBuiltinEntries { get; init; }
+
+    /// <summary>实际使用的用户术语表路径（文件可以不存在）。</summary>
+    [JsonPropertyName("glossary_user_path")]
+    public string? GlossaryUserPath { get; init; }
+
+    /// <summary>当前生效的用户条目数（按方向展开）；文件不存在或文件级错误时为 0。</summary>
+    [JsonPropertyName("glossary_user_entries")]
+    public int? GlossaryUserEntries { get; init; }
+
+    /// <summary>文件级错误原因；没有时为 <see langword="null"/>。</summary>
+    [JsonPropertyName("glossary_error")]
+    public string? GlossaryError { get; init; }
+
+    /// <summary>行级问题（最多 20 条）。</summary>
+    [JsonPropertyName("glossary_warnings")]
+    public IReadOnlyList<string>? GlossaryWarnings { get; init; }
+
+    /// <summary>
+    /// 术语表状态；服务没有报告（旧版引擎，没有 <c>glossary_enabled</c> 与 <c>glossary_builtin_entries</c>）时为 <see langword="null"/>。
+    /// </summary>
+    public GlossaryStatus? ToGlossaryStatus() => GlossaryFields.ToStatus(
+        GlossaryEnabled, GlossaryBuiltinEntries, GlossaryUserEntries, GlossaryUserPath, GlossaryError, GlossaryWarnings);
+}
+
+/// <summary><c>POST /glossary/reload</c> 的响应：与 <c>/health</c> 的 <c>glossary_*</c> 字段相同（#83 约定第 2 节）。</summary>
+public sealed record GlossaryReloadResponse
+{
+    /// <summary>同 <see cref="HealthResponse.GlossaryEnabled"/>。</summary>
+    [JsonPropertyName("glossary_enabled")]
+    public bool? GlossaryEnabled { get; init; }
+
+    /// <summary>同 <see cref="HealthResponse.GlossaryBuiltinEntries"/>。</summary>
+    [JsonPropertyName("glossary_builtin_entries")]
+    public int? GlossaryBuiltinEntries { get; init; }
+
+    /// <summary>同 <see cref="HealthResponse.GlossaryUserPath"/>。</summary>
+    [JsonPropertyName("glossary_user_path")]
+    public string? GlossaryUserPath { get; init; }
+
+    /// <summary>同 <see cref="HealthResponse.GlossaryUserEntries"/>。</summary>
+    [JsonPropertyName("glossary_user_entries")]
+    public int? GlossaryUserEntries { get; init; }
+
+    /// <summary>同 <see cref="HealthResponse.GlossaryError"/>。</summary>
+    [JsonPropertyName("glossary_error")]
+    public string? GlossaryError { get; init; }
+
+    /// <summary>同 <see cref="HealthResponse.GlossaryWarnings"/>。</summary>
+    [JsonPropertyName("glossary_warnings")]
+    public IReadOnlyList<string>? GlossaryWarnings { get; init; }
+
+    /// <summary>转为 <see cref="GlossaryStatus"/>；字段缺失时为 <see langword="null"/>。</summary>
+    public GlossaryStatus? ToGlossaryStatus() => GlossaryFields.ToStatus(
+        GlossaryEnabled, GlossaryBuiltinEntries, GlossaryUserEntries, GlossaryUserPath, GlossaryError, GlossaryWarnings);
+}
+
+/// <summary><c>glossary_*</c> 字段 → <see cref="GlossaryStatus"/>。</summary>
+internal static class GlossaryFields
+{
+    public static GlossaryStatus? ToStatus(
+        bool? enabled, int? builtin, int? user, string? path, string? error, IReadOnlyList<string>? warnings)
+    {
+        if (enabled is null && builtin is null)
+        {
+            return null;
+        }
+
+        return new GlossaryStatus(
+            enabled,
+            Math.Max(0, builtin ?? 0),
+            Math.Max(0, user ?? 0),
+            string.IsNullOrWhiteSpace(path) ? null : path,
+            string.IsNullOrWhiteSpace(error) ? null : error.Trim(),
+            warnings?.Where(w => !string.IsNullOrWhiteSpace(w)).ToArray() ?? []);
+    }
 }
 
 /// <summary><c>/health.ocr_error</c>：OCR 不可用的原因。</summary>
@@ -127,6 +213,14 @@ public sealed record TranslateRequest
     /// <summary>目标语种，不能是 <c>"auto"</c>。</summary>
     [JsonPropertyName("target")]
     public required string Target { get; init; }
+
+    /// <summary>
+    /// 本次是否启用专业术语保护（#83 约定：<c>"glossary": true | false</c>，只影响这一次）；
+    /// <see langword="null"/> 时不写出，按服务端默认。main 上的旧版服务忽略未知字段（<c>extra="ignore"</c>，有测试覆盖）。
+    /// </summary>
+    [JsonPropertyName(GlossaryContract.RequestField)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Glossary { get; init; }
 }
 
 /// <summary><c>POST /translate</c> 的单条响应。</summary>

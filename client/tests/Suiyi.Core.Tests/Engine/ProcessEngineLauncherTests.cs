@@ -44,6 +44,22 @@ public class ProcessEngineLauncherTests
     }
 
     [Fact]
+    public async Task Start_PassesCommandEnvironment()
+    {
+        var lines = new ConcurrentQueue<EngineOutputLine>();
+        var script = OperatingSystem.IsWindows() ? "echo %SUIYI_GLOSSARY%-%SUIYI_USER_GLOSSARY%" : "echo $SUIYI_GLOSSARY-$SUIYI_USER_GLOSSARY";
+        var command = Shell(script) with
+        {
+            Environment = new Dictionary<string, string> { ["SUIYI_GLOSSARY"] = "0", ["SUIYI_USER_GLOSSARY"] = "glossary.tsv" },
+        };
+
+        using var process = new ProcessEngineLauncher().Start(command, lines.Enqueue);
+        await process.WaitForExitAsync(CancellationToken.None).WaitAsync(Timeout);
+
+        Assert.Contains(lines, l => l.Text.Trim() == "0-glossary.tsv");
+    }
+
+    [Fact]
     public async Task Kill_EndsLongRunningProcess()
     {
         using var process = new ProcessEngineLauncher().Start(LongRunning(), _ => { });

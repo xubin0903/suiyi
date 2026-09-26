@@ -34,9 +34,17 @@ public sealed record EngineCommand
     /// <summary>命中的规则。</summary>
     public required EngineCommandSource Source { get; init; }
 
+    /// <summary>额外设置给服务进程的环境变量（如术语保护的 <c>SUIYI_GLOSSARY</c>、<c>SUIYI_USER_GLOSSARY</c>）。</summary>
+    public IReadOnlyDictionary<string, string> Environment { get; init; } = new Dictionary<string, string>();
+
     /// <summary>用于日志的单行展示（带引号，仅供阅读，不用于启动）。</summary>
-    public override string ToString() =>
-        string.Join(' ', new[] { FileName }.Concat(Arguments).Select(Quote));
+    public override string ToString()
+    {
+        var line = string.Join(' ', new[] { FileName }.Concat(Arguments).Select(Quote));
+        return Environment.Count == 0
+            ? line
+            : line + "（环境变量 " + string.Join(' ', Environment.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => p.Key + "=" + Quote(p.Value))) + "）";
+    }
 
     private static string Quote(string value) =>
         value.Length == 0 || value.Any(char.IsWhiteSpace) ? "\"" + value + "\"" : value;

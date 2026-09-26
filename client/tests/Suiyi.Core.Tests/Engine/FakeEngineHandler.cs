@@ -55,6 +55,10 @@ internal sealed class FakeEngineHandler : HttpMessageHandler
     public Func<RecordedRequest, CancellationToken, Task<HttpResponseMessage>> Ocr { get; set; } =
         (_, _) => Task.FromResult(Json(HttpStatusCode.OK, """{"lines":[],"paragraphs":[],"text":"","image":{"width":10,"height":10},"elapsed_ms":1}"""));
 
+    /// <summary>处理 <c>POST /glossary/reload</c>；默认 404（旧版引擎没有这个接口）。</summary>
+    public Func<RecordedRequest, HttpResponseMessage> GlossaryReload { get; set; } =
+        _ => Json(HttpStatusCode.NotFound, """{"detail":"Not Found"}""");
+
     public IReadOnlyList<RecordedRequest> Requests => [.. _requests];
 
     public IReadOnlyList<RecordedRequest> OcrRequests => [.. _requests.Where(r => r.Path is "/ocr_translate" or "/ocr")];
@@ -91,6 +95,7 @@ internal sealed class FakeEngineHandler : HttpMessageHandler
             "/health" => Json(HttpStatusCode.OK, Health),
             "/languages" => Json(HttpStatusCode.OK, Languages),
             "/translate" => await Translate(body ?? string.Empty, cancellationToken),
+            "/glossary/reload" => GlossaryReload(recorded),
             _ => Json(HttpStatusCode.NotFound, """{"detail":"Not Found"}"""),
         };
     }

@@ -14,6 +14,13 @@ public sealed class TrayPauseToggledEventArgs(bool paused) : EventArgs
     public bool Paused { get; } = paused;
 }
 
+/// <summary>托盘「专业术语保护」切换（#84）。</summary>
+public sealed class TrayGlossaryToggledEventArgs(bool enabled) : EventArgs
+{
+    /// <summary>切换后的值。</summary>
+    public bool Enabled { get; } = enabled;
+}
+
 /// <summary>托盘请求显示气泡通知。</summary>
 public sealed class TrayNotificationEventArgs(string title, string message) : EventArgs
 {
@@ -45,6 +52,15 @@ public interface ITrayService
     /// <summary>「重启翻译服务」。</summary>
     event EventHandler? RestartEngineRequested;
 
+    /// <summary>「专业术语 ▸ 专业术语保护」勾选变化（#84）。</summary>
+    event EventHandler<TrayGlossaryToggledEventArgs>? GlossaryToggled;
+
+    /// <summary>「专业术语 ▸ 编辑我的术语表」。</summary>
+    event EventHandler? EditGlossaryRequested;
+
+    /// <summary>「专业术语 ▸ 重新加载术语表」。</summary>
+    event EventHandler? ReloadGlossaryRequested;
+
     /// <summary>「打开设置文件」。</summary>
     event EventHandler? OpenSettingsRequested;
 
@@ -74,6 +90,12 @@ public interface ITrayService
 
     /// <summary>同步目标语言（不触发 <see cref="TargetChanged"/>）。</summary>
     void SetTarget(string language);
+
+    /// <summary>同步「专业术语保护」勾选（不触发 <see cref="GlossaryToggled"/>）。</summary>
+    void SetGlossaryEnabled(bool enabled);
+
+    /// <summary>更新「专业术语」子菜单的状态行（多行以 <c>\n</c> 分隔）；空时显示「等待翻译服务就绪」。</summary>
+    void SetGlossaryStatus(string? status);
 
     /// <summary>显示一次气泡通知（例如快捷键被占用、已在运行）。</summary>
     void ShowNotification(string title, string message);

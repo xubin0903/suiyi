@@ -1,4 +1,5 @@
 using System.Globalization;
+using Suiyi.Core.Glossary;
 
 namespace Suiyi.Core.Engine;
 
@@ -53,6 +54,7 @@ public static class EngineCommandResolver
         var repoRoot = FindRepositoryRoot(environment.BaseDirectory, environment.FileExists);
         var workingDirectory = repoRoot ?? environment.BaseDirectory;
         var serve = ServeArguments(options);
+        var environmentVariables = ServeEnvironment(options);
 
         if (!string.IsNullOrWhiteSpace(options.Command))
         {
@@ -62,6 +64,7 @@ public static class EngineCommandResolver
                 Arguments = [.. options.Args, .. serve],
                 WorkingDirectory = workingDirectory,
                 Source = EngineCommandSource.ConfiguredCommand,
+                Environment = environmentVariables,
             };
         }
 
@@ -95,6 +98,7 @@ public static class EngineCommandResolver
             Arguments = arguments,
             WorkingDirectory = workingDirectory,
             Source = source,
+            Environment = environmentVariables,
         };
     }
 
@@ -124,7 +128,54 @@ public static class EngineCommandResolver
             args.Add(options.ModelsDir.Trim());
         }
 
+        if (options.GlossaryTransport == GlossaryStartupTransport.Arguments)
+        {
+            args.AddRange(GlossaryArguments(options));
+        }
+
         return args;
+    }
+
+    /// <summary>
+    /// 术语保护的命令行参数（#83 约定）：<c>--glossary</c> / <c>--no-glossary</c>，有路径时加 <c>--user-glossary &lt;path&gt;</c>。
+    /// 仅在 <see cref="EngineOptions.GlossaryTransport"/> 为 <see cref="GlossaryStartupTransport.Arguments"/> 时使用（当前不用：旧版引擎不认识）。
+    /// </summary>
+    /// <param name="options">服务配置。</param>
+    public static IReadOnlyList<string> GlossaryArguments(EngineOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var args = new List<string> { options.Glossary ? GlossaryContract.EnableArgument : GlossaryContract.DisableArgument };
+        if (!string.IsNullOrWhiteSpace(options.UserGlossaryPath))
+        {
+            args.Add(GlossaryContract.UserGlossaryArgument);
+            args.Add(options.UserGlossaryPath.Trim());
+        }
+
+        return args;
+    }
+
+    /// <summary>
+    /// 设置给服务进程的环境变量（#83 约定，与对应参数等价；旧版引擎忽略）：<c>SUIYI_GLOSSARY=1/0</c>，
+    /// 有路径时 <c>SUIYI_USER_GLOSSARY=&lt;完整路径&gt;</c>。<see cref="EngineOptions.GlossaryTransport"/> 为参数方式时为空。
+    /// 总是写出这两个变量，覆盖用户环境里可能残留的同名变量，保证与设置一致。
+    /// </summary>
+    /// <param name="options">服务配置。</param>
+    public static IReadOnlyDictionary<string, string> ServeEnvironment(EngineOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var variables = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (options.GlossaryTransport != GlossaryStartupTransport.EnvironmentVariables)
+        {
+            return variables;
+        }
+
+        variables[GlossaryContract.EnabledVariable] = options.Glossary ? "1" : "0";
+        if (!string.IsNullOrWhiteSpace(options.UserGlossaryPath))
+        {
+            variables[GlossaryContract.UserGlossaryVariable] = Path.GetFullPath(options.UserGlossaryPath.Trim());
+        }
+
+        return variables;
     }
 
     /// <summary>从 <paramref name="startDirectory"/> 向上查找含 <c>engine/pyproject.toml</c> 的目录。</summary>

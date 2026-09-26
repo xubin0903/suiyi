@@ -1,5 +1,6 @@
 using Suiyi.Core.Clipboard;
 using Suiyi.Core.Engine;
+using Suiyi.Core.Glossary;
 using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Popup;
 
@@ -37,8 +38,22 @@ public sealed record AppSettings
     /// <summary>翻译服务启动参数（进程管理 #32 使用）。</summary>
     public EngineSettings Engine { get; init; } = new();
 
+    /// <summary>专业术语保护（#84）。</summary>
+    public GlossarySettings Glossary { get; init; } = new();
+
     /// <summary>开机自启（预留，M2 不实现）。</summary>
     public bool StartWithWindows { get; init; }
+
+    /// <summary>
+    /// 翻译服务配置：<see cref="EngineSettings.ToEngineOptions"/>，加上术语保护开关与用户术语表路径（#84，经环境变量交给服务）。
+    /// 环境变量覆盖（<c>EngineOptionsOverrides</c>）在其后应用。
+    /// </summary>
+    /// <param name="settingsDirectory">设置目录，用户术语表放在这里。</param>
+    public EngineOptions ToEngineOptions(string settingsDirectory) => Engine.ToEngineOptions() with
+    {
+        Glossary = Glossary.Enabled,
+        UserGlossaryPath = UserGlossaryFile.ResolvePath(settingsDirectory),
+    };
 
     /// <summary>改目标语言，并按 <see cref="SettingsRules.ResolveTargets"/> 保持 secondary 与之不同。</summary>
     public AppSettings WithPrimaryTarget(string primary)
@@ -95,6 +110,16 @@ public sealed record PopupSettings
 
     /// <summary>映射为 <see cref="PopupOptions"/>。</summary>
     public PopupOptions ToPopupOptions() => new() { AutoHideSeconds = AutoHideSeconds, MaxWidth = MaxWidth };
+}
+
+/// <summary><c>glossary.*</c>（#84）：与引擎配置同名（#83）。</summary>
+public sealed record GlossarySettings
+{
+    /// <summary>
+    /// 专业术语保护开关（托盘「专业术语 ▸ 专业术语保护」切换），默认开启，与引擎默认一致。
+    /// 每次翻译随请求带给服务（见 <see cref="GlossaryContract.RequestField"/>），切换后下一次翻译即生效。
+    /// </summary>
+    public bool Enabled { get; init; } = GlossaryContract.DefaultEnabled;
 }
 
 /// <summary><c>engine.*</c>。</summary>

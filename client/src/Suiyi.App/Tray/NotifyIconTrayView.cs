@@ -87,6 +87,7 @@ internal sealed class NotifyIconTrayView : IDisposable
 
     private void OnMenuOpening(object? sender, CancelEventArgs e)
     {
+        _controller.NotifyMenuOpening(); // 集成层刷新状态行（如术语表条数）
         ClearMenu();
         foreach (var item in _controller.Menu)
         {

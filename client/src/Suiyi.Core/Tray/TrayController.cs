@@ -31,6 +31,18 @@ public sealed class TrayController : ITrayService
     public event EventHandler? RestartEngineRequested;
 
     /// <inheritdoc />
+    public event EventHandler<TrayGlossaryToggledEventArgs>? GlossaryToggled;
+
+    /// <inheritdoc />
+    public event EventHandler? EditGlossaryRequested;
+
+    /// <inheritdoc />
+    public event EventHandler? ReloadGlossaryRequested;
+
+    /// <summary>右键菜单即将打开（视图在重建菜单前调用 <see cref="NotifyMenuOpening"/>）：集成层可借机刷新状态行。</summary>
+    public event EventHandler? MenuOpening;
+
+    /// <inheritdoc />
     public event EventHandler? OpenSettingsRequested;
 
     /// <inheritdoc />
@@ -80,6 +92,16 @@ public sealed class TrayController : ITrayService
     }
 
     /// <inheritdoc />
+    public void SetGlossaryEnabled(bool enabled) => Update(_state with { GlossaryEnabled = enabled });
+
+    /// <inheritdoc />
+    public void SetGlossaryStatus(string? status) =>
+        Update(_state with { GlossaryStatus = string.IsNullOrWhiteSpace(status) ? Glossary.GlossaryStatusText.Unknown : status.Trim() });
+
+    /// <summary>视图在右键菜单打开、重建菜单之前调用。</summary>
+    public void NotifyMenuOpening() => MenuOpening?.Invoke(this, EventArgs.Empty);
+
+    /// <inheritdoc />
     public void ShowNotification(string title, string message) =>
         NotificationRequested?.Invoke(this, new TrayNotificationEventArgs(title, message));
 
@@ -126,6 +148,17 @@ public sealed class TrayController : ITrayService
                 break;
             case TrayCommand.RestartEngine:
                 RestartEngineRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case TrayCommand.ToggleGlossary:
+                var glossary = !_state.GlossaryEnabled;
+                SetGlossaryEnabled(glossary);
+                GlossaryToggled?.Invoke(this, new TrayGlossaryToggledEventArgs(glossary));
+                break;
+            case TrayCommand.EditGlossary:
+                EditGlossaryRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case TrayCommand.ReloadGlossary:
+                ReloadGlossaryRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case TrayCommand.OpenSettings:
                 OpenSettingsRequested?.Invoke(this, EventArgs.Empty);
