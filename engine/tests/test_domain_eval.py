@@ -207,3 +207,58 @@ def test_parse_directions() -> None:
     assert bench.parse_directions(None) is None
     with pytest.raises(bench.BenchError):
         bench.parse_directions("en-fr")
+
+
+class _EchoMarian:
+    """模拟 Marian：占位符原样抄过去，其余词按小词典翻译；``drop`` 为真时丢掉占位符。"""
+
+    WORDS = {"is an open-source": "是开源的", "engine hosted by the": "引擎，托管方为", ".": "。"}
+
+    def __init__(self, drop: bool = False) -> None:
+        self.drop = drop
+        self.calls: list[str] = []
+
+    def translate(self, text: str, src: str, tgt: str) -> str:
+        self.calls.append(text)
+        if "ZX" not in text:
+            return "Kubernetes是一个由CNCF托管的开放源码集装箱管弦发动机。"
+        out = text
+        for en, zh in self.WORDS.items():
+            out = out.replace(en, zh)
+        return out.replace("ZXQ", "") if self.drop else out
+
+
+def test_term_translator_protects_and_falls_back() -> None:
+    text = "Kubernetes is an open-source container orchestration engine hosted by the CNCF."
+    terms = bench.TermTranslator("protect", GLOSSARY)
+    backend = _EchoMarian()
+    out = terms(backend, text, "en", "zh")
+    assert backend.calls[0].startswith("ZXQ is an open-source ZXW engine")
+    assert "容器编排" in out and "Kubernetes" in out and "CNCF" in out
+    assert "ZX" not in out
+    assert terms.stats["protected"] == 1 and terms.stats["fallbacks"] == 0
+    lossy = _EchoMarian(drop=True)
+    out = terms(lossy, text, "en", "zh")
+    assert len(lossy.calls) == 2 and out.endswith("集装箱管弦发动机。")
+    assert terms.stats["fallbacks"] == 1 and terms.stats["failed_slots"] == 1
+    terms.reset_stats()
+    assert terms.stats["samples"] == 0
+
+
+def test_term_hints_use_hy_mt_template() -> None:
+    prompt = bench.build_prompt(
+        "hy-mt",
+        "Scale the container orchestration layer.",
+        "en",
+        "zh",
+        [("container orchestration", "容器编排")],
+    )
+    assert prompt.startswith(
+        "参考下面的翻译：\ncontainer orchestration 翻译成 容器编排\n\n将以下文本翻译为中文"
+    )
+    generic = bench.build_prompt("generic", "x", "en", "ja", [("a", "b")])
+    assert generic.startswith("Use these term translations:\na → b\n\n")
+    with pytest.raises(bench.BenchError):
+        bench.build_prompt("gemma-translate", "x", "en", "zh", [("a", "b")])
+    with pytest.raises(bench.BenchError):
+        bench.TermTranslator("magic", GLOSSARY)
