@@ -204,8 +204,8 @@ TranslateRegionAsync(trigger)
 
 **托盘「专业术语 ▸」：**
 
-- **专业术语保护 ✓**：写回 `glossary.enabled`（默认开），弹气泡说明生效范围。复制翻译**立即生效**：`EngineClient.GlossaryOverride` 每次 `/translate` 读当前设置，请求体带 `"glossary": true|false`（只影响这一次请求）。框选翻译（`/ocr_translate`）约定里没有单次开关，客户端不带，按服务启动时的 `SUIYI_GLOSSARY`，所以**重启翻译服务后**才跟上。
-- **编辑我的术语表…**：路径 `<设置目录>\glossary.tsv`（即 `%APPDATA%\suiyi\glossary.tsv`，随 `SUIYI_CONFIG_DIR`；`UserGlossaryFile.ResolvePath`）。文件不存在时先按 `UserGlossaryFile.Template` 创建（UTF-8 无 BOM、LF，全是注释和注释掉的示例，不添加任何条目），再用 .tsv 的默认程序打开，没有关联程序时退回记事本。服务报告的 `glossary_user_path` 与客户端算出的不同（例如复用了别处启动的服务）时写 Warning 并提示。
+- **专业术语保护 ✓**：写回 `glossary.enabled`（默认开），不弹气泡。复制翻译和框选翻译都**立即生效**：`EngineClient.GlossaryOverride` 每次请求读当前设置，`/translate` 请求体带 `"glossary": true|false`，`/ocr_translate` 的 query 带 `glossary=true|false`（#88，引擎 #87；只影响这一次请求，`/ocr` 只识别不带）。#87 之前的引擎忽略这个 query 参数，框选翻译按服务启动时的 `SUIYI_GLOSSARY`，要重启翻译服务才跟上；引擎的 `/health` 没有字段能区分这一点，所以客户端不做单独提示。
+- **编辑我的术语表…**：路径 `<设置目录>\glossary.tsv`（即 `%APPDATA%\suiyi\glossary.tsv`，随 `SUIYI_CONFIG_DIR`；`UserGlossaryFile.ResolvePath`）。文件不存在时先按 `UserGlossaryFile.Template` 创建（UTF-8 无 BOM、LF，全是注释和注释掉的示例，不添加任何条目），再**固定用记事本**（`notepad.exe`，`UserGlossaryFile.EditorStartInfo`）打开，不走 .tsv 的默认程序：Excel 会改写 Tab 和编码，而目标用户不一定熟悉电脑。服务报告的 `glossary_user_path` 与客户端算出的不同（例如复用了别处启动的服务）时写 Warning 并提示。
 - **重新加载术语表**：`POST /glossary/reload`，气泡显示结果（我的 N 条、被跳过的行或文件级错误）。不点也行：服务每次 `/translate` 前检查文件（最多每秒一次），保存后下一次翻译即生效。
 - **状态行**（灰）：「内置 N 条 · 我的 N 条」；用户术语表有文件级错误时加「我的术语表未生效：…」（此时服务只用内置表，翻译照常）；有被跳过的行时加「有 N 行被跳过，例如：」和第一条原因。每行最多 60 字。旧版引擎（`/health` 没有 `glossary_enabled` 字段）显示「当前引擎不支持术语保护（需要更新引擎，见 #83）」。
 
@@ -480,7 +480,7 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
 客户端最初按 Issue #53 草案实现，#53（PR #69）合入后的 `docs/engine/HTTP-API.md` 与草案的路径、参数、请求体、响应字段和错误码一致。相关代码集中在：`Ocr/OcrDraftContract.cs`（DTO、错误码、路径/参数名、上限常量）、`Engine/EngineClient.Ocr.cs`（请求构造、错误映射、预检）、`Flow/OcrResultMapper.cs`（→ 浮窗），外加 `HealthResponse.OcrLoaded`、`HealthResponse.OcrError`（`OcrHealthError`：`reason`、`missing_models`、`message`）两个字段。
 - **`EngineClient.KnownOcrError`**：最近一次 `/health.ocr_error`；成功识别或 `Invalidate()` 后为 `null`。`IOcrTranslationService.KnownOcrError` 转发它（默认接口实现返回 `null`），编排器用它补全 `ocr_unavailable` 的原因。
 
-- **`EngineClient.OcrTranslateAsync(png, source, target, fallbackTarget, ct)`** → `POST /ocr_translate?source=…&target=…[&fallback_target=…]`，请求体为**原始 PNG 字节**，`Content-Type: image/png`（草案不用 multipart / base64）。`fallbackTarget` 为空或与 `target` 同语种时不发。成功后记 OCR 已加载、各段 `route` 模型已加载。识别为空是正常结果（`paragraphs: []`）。
+- **`EngineClient.OcrTranslateAsync(png, source, target, fallbackTarget, ct)`** → `POST /ocr_translate?source=…&target=…[&fallback_target=…][&glossary=true|false]`（`glossary` 取 `GlossaryOverride`，即当前 `glossary.enabled`，见[专业术语保护](#专业术语保护)），请求体为**原始 PNG 字节**，`Content-Type: image/png`（草案不用 multipart / base64）。`fallbackTarget` 为空或与 `target` 同语种时不发。成功后记 OCR 已加载、各段 `route` 模型已加载。识别为空是正常结果（`paragraphs: []`）。
 - **`EngineClient.OcrAsync(png, lang = "auto", ct)`** → `POST /ocr?lang=…`，只识别。
 - **客户端预检**（`EngineClient.PrecheckImage`）：超过 8 MiB，或 PNG 头的宽×高超过 4096×4096 = 16 777 216 像素时，直接抛 `ImageTooLarge`（`IsClientPrecheck = true`，`Details` 与服务端 413 同形 `limit`/`actual`），不发请求。读不出 PNG 头时不判像素，交给服务端。
 - **超时**：OCR 与候选翻译模型都已加载（`/health.ocr_loaded == true`）时 15000 ms，否则 30000 ms（旧引擎没有 `ocr_loaded` 也按 30000 ms）。见下文表格。
