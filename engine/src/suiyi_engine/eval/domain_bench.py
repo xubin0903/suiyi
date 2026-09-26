@@ -999,7 +999,8 @@ def render_report(results: Sequence[Mapping[str, object]], *, title: str = "") -
             f"- 线程：{first['settings']['threads']}；样例数：{first['settings']['samples']}"  # type: ignore[index]
             f"{'（快速子集）' if first['settings'].get('quick') else ''}",  # type: ignore[union-attr]
             "- chrF / BLEU 为 sacrebleu 语料级 0–100；术语准确率 = 译文里按术语表写法出现的术语 / "
-            "原文里出现的术语；延迟为单条 P50 / P95（ms）；内存为进程 RSS（MB）。",
+            "原文里出现的术语；延迟为单条 P50 / P95（ms）；内存为进程 RSS；"
+            "内存与体积单位均为 MiB。",
             "",
         ]
     dirs = [f"{src}-{tgt}" for src, tgt in DIRECTIONS]
@@ -1047,7 +1048,7 @@ def render_report(results: Sequence[Mapping[str, object]], *, title: str = "") -
                 load=_fmt(result["load_ms"], " ms"),
                 res=_fmt(memory["resident"]),  # type: ignore[index]
                 peak=_fmt(memory["peak_over_base"]),  # type: ignore[index]
-                disk=_fmt(result["disk_mb"], " MB"),
+                disk=_fmt(result["disk_mb"]),
                 lic=cand["license"] or "—",  # type: ignore[index]
                 dist=cand["redistributable"] or "—",  # type: ignore[index]
                 com=cand["commercial"] or "—",  # type: ignore[index]
