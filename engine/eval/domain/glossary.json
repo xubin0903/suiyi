@@ -1142,6 +1142,253 @@
    ]
   },
   {
+   "id": "flaky-test",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "flaky test"
+   ],
+   "zh": [
+    "不稳定测试",
+    "不稳定的测试"
+   ],
+   "ja": [
+    "フレーキーテスト",
+    "不安定なテスト"
+   ]
+  },
+  {
+   "id": "integration-test",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "integration test"
+   ],
+   "zh": [
+    "集成测试"
+   ],
+   "ja": [
+    "結合テスト",
+    "統合テスト"
+   ]
+  },
+  {
+   "id": "regression-test",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "regression test"
+   ],
+   "zh": [
+    "回归测试"
+   ],
+   "ja": [
+    "回帰テスト"
+   ]
+  },
+  {
+   "id": "end-to-end-test",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "end-to-end test"
+   ],
+   "zh": [
+    "端到端测试"
+   ],
+   "ja": [
+    "エンドツーエンドテスト",
+    "E2Eテスト"
+   ]
+  },
+  {
+   "id": "test-suite",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "test suite"
+   ],
+   "zh": [
+    "测试套件"
+   ],
+   "ja": [
+    "テストスイート"
+   ]
+  },
+  {
+   "id": "test-case",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "test case"
+   ],
+   "zh": [
+    "测试用例"
+   ],
+   "ja": [
+    "テストケース"
+   ]
+  },
+  {
+   "id": "code-review",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "code review"
+   ],
+   "zh": [
+    "代码评审",
+    "代码审查"
+   ],
+   "ja": [
+    "コードレビュー"
+   ]
+  },
+  {
+   "id": "code-coverage",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "code coverage"
+   ],
+   "zh": [
+    "代码覆盖率"
+   ],
+   "ja": [
+    "コードカバレッジ"
+   ]
+  },
+  {
+   "id": "merge-conflict",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "merge conflict"
+   ],
+   "zh": [
+    "合并冲突"
+   ],
+   "ja": [
+    "マージコンフリクト",
+    "マージ競合"
+   ]
+  },
+  {
+   "id": "merge-request",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "merge request"
+   ],
+   "zh": [
+    "合并请求",
+    "MR"
+   ],
+   "ja": [
+    "マージリクエスト"
+   ]
+  },
+  {
+   "id": "feature-branch",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "feature branch"
+   ],
+   "zh": [
+    "功能分支",
+    "特性分支"
+   ],
+   "ja": [
+    "フィーチャーブランチ"
+   ]
+  },
+  {
+   "id": "hotfix",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "hotfix"
+   ],
+   "zh": [
+    "热修复"
+   ],
+   "ja": [
+    "ホットフィックス"
+   ]
+  },
+  {
+   "id": "technical-debt",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "technical debt"
+   ],
+   "zh": [
+    "技术债务",
+    "技术债"
+   ],
+   "ja": [
+    "技術的負債"
+   ]
+  },
+  {
+   "id": "ci-pipeline",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "CI pipeline"
+   ],
+   "zh": [
+    "CI 流水线"
+   ],
+   "ja": [
+    "CIパイプライン"
+   ]
+  },
+  {
+   "id": "ci-cd-pipeline",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "CI/CD pipeline"
+   ],
+   "zh": [
+    "CI/CD 流水线"
+   ],
+   "ja": [
+    "CI/CDパイプライン"
+   ]
+  },
+  {
+   "id": "blue-green-deployment",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "blue-green deployment"
+   ],
+   "zh": [
+    "蓝绿部署"
+   ],
+   "ja": [
+    "ブルーグリーンデプロイメント"
+   ]
+  },
+  {
+   "id": "code-freeze",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "code freeze"
+   ],
+   "zh": [
+    "代码冻结"
+   ],
+   "ja": [
+    "コードフリーズ"
+   ]
+  },
+  {
    "id": "fine-tuned",
    "kind": "fixed",
    "domain": "ai",
