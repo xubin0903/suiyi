@@ -24,6 +24,7 @@ public static class UserGlossaryFile
         + "# 示例（删掉行首的 # 才会生效）：\n"
         + "# container orchestration\t容器编排\n"
         + "# Kubernetes\tKubernetes\n"
+        + "# k8s\tKubernetes\n"
         + "# 预发布环境\tstaging environment\tzh-en\n";
 
     /// <summary>

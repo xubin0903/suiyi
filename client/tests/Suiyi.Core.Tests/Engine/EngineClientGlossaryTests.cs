@@ -109,6 +109,29 @@ public sealed class EngineClientGlossaryTests : IDisposable
     }
 
     [Fact]
+    public async Task Health_WithoutGlossaryEnabled_IsUnsupported()
+    {
+        // 判断依据是 glossary_enabled 字段是否存在（#83）：只有其他 glossary_* 字段不算支持。
+        _handler.Health = """{"status":"ok","version":"x","models_dir":"/m","uptime_s":1,"loaded_models":[],"glossary_builtin_entries":10}""";
+
+        await _client.GetHealthAsync();
+
+        Assert.Null(_client.KnownGlossaryStatus);
+        Assert.False(_client.GlossarySupported);
+    }
+
+    [Fact]
+    public async Task Health_OnlyGlossaryEnabled_IsSupported()
+    {
+        _handler.Health = """{"status":"ok","version":"x","models_dir":"/m","uptime_s":1,"loaded_models":[],"glossary_enabled":true}""";
+
+        await _client.GetHealthAsync();
+
+        Assert.Equal(new GlossaryStatus(true, 0, 0, null, null, []), _client.KnownGlossaryStatus);
+        Assert.True(_client.GlossarySupported);
+    }
+
+    [Fact]
     public async Task Health_MissingWarnings_IsEmptyList()
     {
         _handler.Health = """{"status":"ok","version":"x","models_dir":"/m","uptime_s":1,"loaded_models":[],"glossary_enabled":false,"glossary_builtin_entries":10}""";

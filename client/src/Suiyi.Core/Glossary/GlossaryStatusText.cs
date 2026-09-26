@@ -12,7 +12,7 @@ public static class GlossaryStatusText
     public const string Unknown = "术语表状态：等待翻译服务就绪";
 
     /// <summary>服务不报告术语表状态（#83 之前的引擎）。</summary>
-    public const string NotSupported = "当前翻译服务不支持术语保护（需要更新引擎，见 #83）";
+    public const string NotSupported = "当前引擎不支持术语保护（需要更新引擎，见 #83）";
 
     /// <summary>
     /// 子菜单里的状态行（不可点）：第一行是条数，其后依次是错误、警告条数与第一条警告。

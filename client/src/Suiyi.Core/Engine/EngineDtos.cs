@@ -109,13 +109,15 @@ public sealed record GlossaryReloadResponse
         GlossaryEnabled, GlossaryBuiltinEntries, GlossaryUserEntries, GlossaryUserPath, GlossaryError, GlossaryWarnings);
 }
 
-/// <summary><c>glossary_*</c> 字段 → <see cref="GlossaryStatus"/>。</summary>
+/// <summary>
+/// <c>glossary_*</c> 字段 → <see cref="GlossaryStatus"/>。没有 <c>glossary_enabled</c> 字段即旧版引擎（不支持术语保护），返回 <see langword="null"/>。
+/// </summary>
 internal static class GlossaryFields
 {
     public static GlossaryStatus? ToStatus(
         bool? enabled, int? builtin, int? user, string? path, string? error, IReadOnlyList<string>? warnings)
     {
-        if (enabled is null && builtin is null)
+        if (enabled is null)
         {
             return null;
         }

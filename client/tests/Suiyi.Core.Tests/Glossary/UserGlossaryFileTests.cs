@@ -44,6 +44,8 @@ public sealed class UserGlossaryFileTests : IDisposable
         Assert.Contains(lines, l => l.Contains('\t', StringComparison.Ordinal)); // 示例用真正的 Tab
         Assert.Contains("en-zh", UserGlossaryFile.Template, StringComparison.Ordinal);
         Assert.Contains("zh-en", UserGlossaryFile.Template, StringComparison.Ordinal);
+        Assert.Contains("# k8s\tKubernetes\n", UserGlossaryFile.Template, StringComparison.Ordinal); // 两列都不含中文的行有效（#83 更新）
+        Assert.Contains("两列都不含中文", UserGlossaryFile.Template, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -207,7 +207,7 @@ TranslateRegionAsync(trigger)
 - **专业术语保护 ✓**：写回 `glossary.enabled`（默认开），弹气泡说明生效范围。复制翻译**立即生效**：`EngineClient.GlossaryOverride` 每次 `/translate` 读当前设置，请求体带 `"glossary": true|false`（只影响这一次请求）。框选翻译（`/ocr_translate`）约定里没有单次开关，客户端不带，按服务启动时的 `SUIYI_GLOSSARY`，所以**重启翻译服务后**才跟上。
 - **编辑我的术语表…**：路径 `<设置目录>\glossary.tsv`（即 `%APPDATA%\suiyi\glossary.tsv`，随 `SUIYI_CONFIG_DIR`；`UserGlossaryFile.ResolvePath`）。文件不存在时先按 `UserGlossaryFile.Template` 创建（UTF-8 无 BOM、LF，全是注释和注释掉的示例，不添加任何条目），再用 .tsv 的默认程序打开，没有关联程序时退回记事本。服务报告的 `glossary_user_path` 与客户端算出的不同（例如复用了别处启动的服务）时写 Warning 并提示。
 - **重新加载术语表**：`POST /glossary/reload`，气泡显示结果（我的 N 条、被跳过的行或文件级错误）。不点也行：服务每次 `/translate` 前检查文件（最多每秒一次），保存后下一次翻译即生效。
-- **状态行**（灰）：「内置 N 条 · 我的 N 条」；用户术语表有文件级错误时加「我的术语表未生效：…」（此时服务只用内置表，翻译照常）；有被跳过的行时加「有 N 行被跳过，例如：」和第一条原因。每行最多 60 字。旧版引擎（`/health` 没有 `glossary_*`）显示「当前翻译服务不支持术语保护（需要更新引擎，见 #83）」。
+- **状态行**（灰）：「内置 N 条 · 我的 N 条」；用户术语表有文件级错误时加「我的术语表未生效：…」（此时服务只用内置表，翻译照常）；有被跳过的行时加「有 N 行被跳过，例如：」和第一条原因。每行最多 60 字。旧版引擎（`/health` 没有 `glossary_enabled` 字段）显示「当前引擎不支持术语保护（需要更新引擎，见 #83）」。
 
 **状态来源：** `EngineClient.GetHealthAsync` 解析 `/health` 的 `glossary_enabled`、`glossary_builtin_entries`、`glossary_user_path`、`glossary_user_entries`、`glossary_error`、`glossary_warnings`，缓存为 `KnownGlossaryStatus`（`GlossaryStatus`），`GlossarySupported` 为 `false` 表示旧版引擎。看门狗每 10 s 调一次 `/health`，所以状态行最多滞后 10 s；服务就绪时主动取一次，有新的文件级错误时弹一次气泡。`Invalidate()` 清空缓存。「关于」末尾列出开关、条数、错误和全部被跳过的行（`GlossaryStatusText.About`）。
 
