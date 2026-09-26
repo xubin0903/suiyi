@@ -1,0 +1,3255 @@
+{
+ "schema_version": 1,
+ "license": "MIT",
+ "source": "engine/eval/domain/glossary.json（#79）的 en / zh 部分，由 scripts/build_builtin_glossary.py 生成，不要手改",
+ "terms": [
+  {
+   "id": "kubernetes",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Kubernetes"
+   ],
+   "zh": [
+    "Kubernetes"
+   ]
+  },
+  {
+   "id": "cncf",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "CNCF"
+   ],
+   "zh": [
+    "CNCF"
+   ]
+  },
+  {
+   "id": "docker-compose",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Docker Compose"
+   ],
+   "zh": [
+    "Docker Compose"
+   ]
+  },
+  {
+   "id": "terraform",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Terraform"
+   ],
+   "zh": [
+    "Terraform"
+   ]
+  },
+  {
+   "id": "nginx",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Nginx"
+   ],
+   "zh": [
+    "Nginx"
+   ]
+  },
+  {
+   "id": "argo-cd",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Argo CD"
+   ],
+   "zh": [
+    "Argo CD"
+   ]
+  },
+  {
+   "id": "prometheus",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Prometheus"
+   ],
+   "zh": [
+    "Prometheus"
+   ]
+  },
+  {
+   "id": "grafana",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Grafana"
+   ],
+   "zh": [
+    "Grafana"
+   ]
+  },
+  {
+   "id": "grpc",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "gRPC"
+   ],
+   "zh": [
+    "gRPC"
+   ]
+  },
+  {
+   "id": "git",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Git"
+   ],
+   "zh": [
+    "Git"
+   ]
+  },
+  {
+   "id": "readme",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "README"
+   ],
+   "zh": [
+    "README"
+   ]
+  },
+  {
+   "id": "debug",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "DEBUG"
+   ],
+   "zh": [
+    "DEBUG"
+   ]
+  },
+  {
+   "id": "oauth",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "OAuth"
+   ],
+   "zh": [
+    "OAuth"
+   ]
+  },
+  {
+   "id": "ssh",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "SSH"
+   ],
+   "zh": [
+    "SSH"
+   ]
+  },
+  {
+   "id": "tls",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "TLS"
+   ],
+   "zh": [
+    "TLS"
+   ]
+  },
+  {
+   "id": "dns",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "DNS"
+   ],
+   "zh": [
+    "DNS"
+   ]
+  },
+  {
+   "id": "paas",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "PaaS"
+   ],
+   "zh": [
+    "PaaS"
+   ]
+  },
+  {
+   "id": "http-429",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "HTTP 429"
+   ],
+   "zh": [
+    "HTTP 429"
+   ]
+  },
+  {
+   "id": "pod",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Pod"
+   ],
+   "zh": [
+    "Pod"
+   ]
+  },
+  {
+   "id": "replicaset",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "ReplicaSet"
+   ],
+   "zh": [
+    "ReplicaSet"
+   ]
+  },
+  {
+   "id": "package-json",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "package.json"
+   ],
+   "zh": [
+    "package.json"
+   ]
+  },
+  {
+   "id": "apache-2-0",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "Apache 2.0"
+   ],
+   "zh": [
+    "Apache 2.0"
+   ]
+  },
+  {
+   "id": "o-n-log-n",
+   "kind": "keep",
+   "domain": "code",
+   "en": [
+    "O(n log n)"
+   ],
+   "zh": [
+    "O(n log n)"
+   ]
+  },
+  {
+   "id": "bleu",
+   "kind": "keep",
+   "domain": "ai",
+   "en": [
+    "BLEU"
+   ],
+   "zh": [
+    "BLEU"
+   ]
+  },
+  {
+   "id": "chrf",
+   "kind": "keep",
+   "domain": "ai",
+   "en": [
+    "chrF"
+   ],
+   "zh": [
+    "chrF"
+   ]
+  },
+  {
+   "id": "dropout",
+   "kind": "keep",
+   "domain": "ai",
+   "en": [
+    "Dropout"
+   ],
+   "zh": [
+    "Dropout"
+   ]
+  },
+  {
+   "id": "transformer",
+   "kind": "keep",
+   "domain": "ai",
+   "en": [
+    "Transformer"
+   ],
+   "zh": [
+    "Transformer"
+   ]
+  },
+  {
+   "id": "i2c",
+   "kind": "keep",
+   "domain": "hw",
+   "en": [
+    "I2C"
+   ],
+   "zh": [
+    "I2C"
+   ]
+  },
+  {
+   "id": "spi",
+   "kind": "keep",
+   "domain": "hw",
+   "en": [
+    "SPI"
+   ],
+   "zh": [
+    "SPI"
+   ]
+  },
+  {
+   "id": "uart",
+   "kind": "keep",
+   "domain": "hw",
+   "en": [
+    "UART"
+   ],
+   "zh": [
+    "UART"
+   ]
+  },
+  {
+   "id": "usb-c",
+   "kind": "keep",
+   "domain": "hw",
+   "en": [
+    "USB-C"
+   ],
+   "zh": [
+    "USB-C"
+   ]
+  },
+  {
+   "id": "fpga",
+   "kind": "keep",
+   "domain": "hw",
+   "en": [
+    "FPGA"
+   ],
+   "zh": [
+    "FPGA"
+   ]
+  },
+  {
+   "id": "mosfet",
+   "kind": "keep",
+   "domain": "hw",
+   "en": [
+    "MOSFET"
+   ],
+   "zh": [
+    "MOSFET"
+   ]
+  },
+  {
+   "id": "wi-fi-7",
+   "kind": "keep",
+   "domain": "hw",
+   "en": [
+    "Wi-Fi 7"
+   ],
+   "zh": [
+    "Wi-Fi 7"
+   ]
+  },
+  {
+   "id": "mit-license",
+   "kind": "keep",
+   "domain": "legal",
+   "en": [
+    "MIT License",
+    "MIT license"
+   ],
+   "zh": [
+    "MIT 许可证",
+    "MIT 许可",
+    "MIT 授权"
+   ]
+  },
+  {
+   "id": "suiyi",
+   "kind": "keep",
+   "domain": "ui",
+   "en": [
+    "Suiyi"
+   ],
+   "zh": [
+    "随译"
+   ]
+  },
+  {
+   "id": "container-orchestration",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "container orchestration"
+   ],
+   "zh": [
+    "容器编排"
+   ]
+  },
+  {
+   "id": "cloud-native-computing-foundation",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "Cloud Native Computing Foundation"
+   ],
+   "zh": [
+    "云原生计算基金会"
+   ]
+  },
+  {
+   "id": "cloud-native",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "cloud-native",
+    "cloud native"
+   ],
+   "zh": [
+    "云原生"
+   ]
+  },
+  {
+   "id": "containerized",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "containerized"
+   ],
+   "zh": [
+    "容器化"
+   ]
+  },
+  {
+   "id": "declarative-configuration",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "declarative configuration"
+   ],
+   "zh": [
+    "声明式配置"
+   ]
+  },
+  {
+   "id": "distributed-system",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "distributed system"
+   ],
+   "zh": [
+    "分布式系统"
+   ]
+  },
+  {
+   "id": "load-balancer",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "load balancer"
+   ],
+   "zh": [
+    "负载均衡器"
+   ]
+  },
+  {
+   "id": "health-check",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "health check"
+   ],
+   "zh": [
+    "健康检查"
+   ]
+  },
+  {
+   "id": "canary-release",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "canary release"
+   ],
+   "zh": [
+    "金丝雀发布"
+   ]
+  },
+  {
+   "id": "service-mesh",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "service mesh"
+   ],
+   "zh": [
+    "服务网格"
+   ]
+  },
+  {
+   "id": "sidecar-proxy",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "sidecar proxy"
+   ],
+   "zh": [
+    "边车代理",
+    "Sidecar 代理",
+    "sidecar 代理"
+   ]
+  },
+  {
+   "id": "race-condition",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "race condition"
+   ],
+   "zh": [
+    "竞态条件",
+    "竞争条件"
+   ]
+  },
+  {
+   "id": "null-pointer",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "null pointer"
+   ],
+   "zh": [
+    "空指针"
+   ]
+  },
+  {
+   "id": "reverse-proxy",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "reverse proxy"
+   ],
+   "zh": [
+    "反向代理"
+   ]
+  },
+  {
+   "id": "garbage-collector",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "garbage collector"
+   ],
+   "zh": [
+    "垃圾回收器",
+    "垃圾收集器"
+   ]
+  },
+  {
+   "id": "pull-request",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "pull request"
+   ],
+   "zh": [
+    "拉取请求",
+    "合并请求",
+    "PR"
+   ]
+  },
+  {
+   "id": "rate-limit",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "rate limit"
+   ],
+   "zh": [
+    "速率限制",
+    "限流"
+   ]
+  },
+  {
+   "id": "observability",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "observability"
+   ],
+   "zh": [
+    "可观测性"
+   ]
+  },
+  {
+   "id": "distributed-tracing",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "distributed tracing"
+   ],
+   "zh": [
+    "分布式追踪",
+    "分布式跟踪"
+   ]
+  },
+  {
+   "id": "message-queue",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "message queue"
+   ],
+   "zh": [
+    "消息队列"
+   ]
+  },
+  {
+   "id": "container-image",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "container image"
+   ],
+   "zh": [
+    "容器镜像"
+   ]
+  },
+  {
+   "id": "feature-flag",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "feature flag"
+   ],
+   "zh": [
+    "功能开关",
+    "特性开关"
+   ]
+  },
+  {
+   "id": "migration-script",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "migration script"
+   ],
+   "zh": [
+    "迁移脚本"
+   ]
+  },
+  {
+   "id": "staging-environment",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "staging environment"
+   ],
+   "zh": [
+    "预发布环境",
+    "预生产环境"
+   ]
+  },
+  {
+   "id": "production-environment",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "production environment"
+   ],
+   "zh": [
+    "生产环境"
+   ]
+  },
+  {
+   "id": "unit-test",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "unit test"
+   ],
+   "zh": [
+    "单元测试"
+   ]
+  },
+  {
+   "id": "connection-pool",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "connection pool"
+   ],
+   "zh": [
+    "连接池"
+   ]
+  },
+  {
+   "id": "deadlock",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "deadlock"
+   ],
+   "zh": [
+    "死锁"
+   ]
+  },
+  {
+   "id": "memory-leak",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "memory leak"
+   ],
+   "zh": [
+    "内存泄漏",
+    "内存泄露"
+   ]
+  },
+  {
+   "id": "cache-hit-rate",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "cache hit rate"
+   ],
+   "zh": [
+    "缓存命中率"
+   ]
+  },
+  {
+   "id": "microservice",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "microservice"
+   ],
+   "zh": [
+    "微服务"
+   ]
+  },
+  {
+   "id": "monolithic-application",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "monolithic application"
+   ],
+   "zh": [
+    "单体应用"
+   ]
+  },
+  {
+   "id": "regular-expression",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "regular expression"
+   ],
+   "zh": [
+    "正则表达式"
+   ]
+  },
+  {
+   "id": "continuous-integration",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "continuous integration"
+   ],
+   "zh": [
+    "持续集成"
+   ]
+  },
+  {
+   "id": "exponential-backoff",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "exponential backoff"
+   ],
+   "zh": [
+    "指数退避"
+   ]
+  },
+  {
+   "id": "idempotent",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "idempotent"
+   ],
+   "zh": [
+    "幂等"
+   ]
+  },
+  {
+   "id": "environment-variable",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "environment variable"
+   ],
+   "zh": [
+    "环境变量"
+   ]
+  },
+  {
+   "id": "time-complexity",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "time complexity"
+   ],
+   "zh": [
+    "时间复杂度"
+   ]
+  },
+  {
+   "id": "key-management-service",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "key management service"
+   ],
+   "zh": [
+    "密钥管理服务"
+   ]
+  },
+  {
+   "id": "smoke-test",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "smoke test"
+   ],
+   "zh": [
+    "冒烟测试"
+   ]
+  },
+  {
+   "id": "main-branch",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "main branch"
+   ],
+   "zh": [
+    "主分支"
+   ]
+  },
+  {
+   "id": "backtracking",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "backtracking"
+   ],
+   "zh": [
+    "回溯"
+   ]
+  },
+  {
+   "id": "replica",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "replica"
+   ],
+   "zh": [
+    "副本"
+   ]
+  },
+  {
+   "id": "infrastructure",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "infrastructure"
+   ],
+   "zh": [
+    "基础设施"
+   ]
+  },
+  {
+   "id": "fine-tuned",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "fine-tuned",
+    "fine-tune",
+    "fine-tuning"
+   ],
+   "zh": [
+    "微调"
+   ]
+  },
+  {
+   "id": "overfitting",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "overfitting",
+    "overfitted",
+    "overfit"
+   ],
+   "zh": [
+    "过拟合"
+   ]
+  },
+  {
+   "id": "gradient-descent",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "gradient descent"
+   ],
+   "zh": [
+    "梯度下降"
+   ]
+  },
+  {
+   "id": "loss-function",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "loss function"
+   ],
+   "zh": [
+    "损失函数"
+   ]
+  },
+  {
+   "id": "large-language-model",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "large language model"
+   ],
+   "zh": [
+    "大语言模型",
+    "大型语言模型"
+   ]
+  },
+  {
+   "id": "context-window",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "context window"
+   ],
+   "zh": [
+    "上下文窗口"
+   ]
+  },
+  {
+   "id": "retrieval-augmented-generation",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "retrieval-augmented generation"
+   ],
+   "zh": [
+    "检索增强生成"
+   ]
+  },
+  {
+   "id": "quantization",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "quantization",
+    "quantized",
+    "quantize"
+   ],
+   "zh": [
+    "量化"
+   ]
+  },
+  {
+   "id": "attention-mechanism",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "attention mechanism"
+   ],
+   "zh": [
+    "注意力机制"
+   ]
+  },
+  {
+   "id": "self-attention",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "self-attention"
+   ],
+   "zh": [
+    "自注意力"
+   ]
+  },
+  {
+   "id": "batch-size",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "batch size"
+   ],
+   "zh": [
+    "批大小",
+    "批量大小",
+    "批次大小"
+   ]
+  },
+  {
+   "id": "knowledge-distillation",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "knowledge distillation"
+   ],
+   "zh": [
+    "知识蒸馏"
+   ]
+  },
+  {
+   "id": "distillation",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "distillation"
+   ],
+   "zh": [
+    "蒸馏"
+   ]
+  },
+  {
+   "id": "student-model",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "student model"
+   ],
+   "zh": [
+    "学生模型"
+   ]
+  },
+  {
+   "id": "teacher-model",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "teacher model"
+   ],
+   "zh": [
+    "教师模型"
+   ]
+  },
+  {
+   "id": "embedding",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "embedding"
+   ],
+   "zh": [
+    "嵌入"
+   ]
+  },
+  {
+   "id": "vector-database",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "vector database"
+   ],
+   "zh": [
+    "向量数据库"
+   ]
+  },
+  {
+   "id": "reinforcement-learning-from-human-feedback",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "reinforcement learning from human feedback"
+   ],
+   "zh": [
+    "基于人类反馈的强化学习",
+    "人类反馈强化学习"
+   ]
+  },
+  {
+   "id": "learning-rate",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "learning rate"
+   ],
+   "zh": [
+    "学习率"
+   ]
+  },
+  {
+   "id": "confusion-matrix",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "confusion matrix"
+   ],
+   "zh": [
+    "混淆矩阵"
+   ]
+  },
+  {
+   "id": "tokenizer",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "tokenizer"
+   ],
+   "zh": [
+    "分词器"
+   ]
+  },
+  {
+   "id": "subword",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "subword"
+   ],
+   "zh": [
+    "子词"
+   ]
+  },
+  {
+   "id": "data-augmentation",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "data augmentation"
+   ],
+   "zh": [
+    "数据增强"
+   ]
+  },
+  {
+   "id": "convolutional-neural-network",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "convolutional neural network"
+   ],
+   "zh": [
+    "卷积神经网络"
+   ]
+  },
+  {
+   "id": "neural-network",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "neural network"
+   ],
+   "zh": [
+    "神经网络"
+   ]
+  },
+  {
+   "id": "zero-shot",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "zero-shot"
+   ],
+   "zh": [
+    "零样本"
+   ]
+  },
+  {
+   "id": "precision",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "precision"
+   ],
+   "zh": [
+    "精确率",
+    "精准率",
+    "查准率"
+   ]
+  },
+  {
+   "id": "recall",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "recall"
+   ],
+   "zh": [
+    "召回率"
+   ]
+  },
+  {
+   "id": "hyperparameter",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "hyperparameter"
+   ],
+   "zh": [
+    "超参数"
+   ]
+  },
+  {
+   "id": "validation-set",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "validation set"
+   ],
+   "zh": [
+    "验证集"
+   ]
+  },
+  {
+   "id": "multimodal",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "multimodal"
+   ],
+   "zh": [
+    "多模态"
+   ]
+  },
+  {
+   "id": "prompt-engineering",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "prompt engineering"
+   ],
+   "zh": [
+    "提示词工程",
+    "提示工程"
+   ]
+  },
+  {
+   "id": "contrastive-learning",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "contrastive learning"
+   ],
+   "zh": [
+    "对比学习"
+   ]
+  },
+  {
+   "id": "speech-recognition",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "speech recognition"
+   ],
+   "zh": [
+    "语音识别"
+   ]
+  },
+  {
+   "id": "character-error-rate",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "character error rate"
+   ],
+   "zh": [
+    "字错误率",
+    "字符错误率"
+   ]
+  },
+  {
+   "id": "glossary",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "glossary"
+   ],
+   "zh": [
+    "术语表"
+   ]
+  },
+  {
+   "id": "inference",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "inference"
+   ],
+   "zh": [
+    "推理"
+   ]
+  },
+  {
+   "id": "machine-translation",
+   "kind": "fixed",
+   "domain": "ai",
+   "en": [
+    "machine translation"
+   ],
+   "zh": [
+    "机器翻译"
+   ]
+  },
+  {
+   "id": "microcontroller",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "microcontroller"
+   ],
+   "zh": [
+    "微控制器",
+    "单片机"
+   ]
+  },
+  {
+   "id": "deep-sleep",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "deep sleep"
+   ],
+   "zh": [
+    "深度睡眠"
+   ]
+  },
+  {
+   "id": "decoupling-capacitor",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "decoupling capacitor"
+   ],
+   "zh": [
+    "去耦电容"
+   ]
+  },
+  {
+   "id": "electrolytic-capacitor",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "electrolytic capacitor"
+   ],
+   "zh": [
+    "电解电容"
+   ]
+  },
+  {
+   "id": "clock-speed",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "clock speed"
+   ],
+   "zh": [
+    "时钟频率"
+   ]
+  },
+  {
+   "id": "solder-joint",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "solder joint"
+   ],
+   "zh": [
+    "焊点"
+   ]
+  },
+  {
+   "id": "pull-up-resistor",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "pull-up resistor"
+   ],
+   "zh": [
+    "上拉电阻"
+   ]
+  },
+  {
+   "id": "wear-leveling",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "wear leveling"
+   ],
+   "zh": [
+    "磨损均衡"
+   ]
+  },
+  {
+   "id": "flash-memory",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "flash memory"
+   ],
+   "zh": [
+    "闪存"
+   ]
+  },
+  {
+   "id": "printed-circuit-board",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "printed circuit board"
+   ],
+   "zh": [
+    "印刷电路板",
+    "PCB"
+   ]
+  },
+  {
+   "id": "ground-plane",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "ground plane"
+   ],
+   "zh": [
+    "接地层",
+    "地平面"
+   ]
+  },
+  {
+   "id": "firmware",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "firmware"
+   ],
+   "zh": [
+    "固件"
+   ]
+  },
+  {
+   "id": "oscilloscope",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "oscilloscope"
+   ],
+   "zh": [
+    "示波器"
+   ]
+  },
+  {
+   "id": "heat-sink",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "heat sink"
+   ],
+   "zh": [
+    "散热片",
+    "散热器"
+   ]
+  },
+  {
+   "id": "thermal-pad",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "thermal pad"
+   ],
+   "zh": [
+    "导热垫"
+   ]
+  },
+  {
+   "id": "voltage-regulator",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "voltage regulator"
+   ],
+   "zh": [
+    "稳压器"
+   ]
+  },
+  {
+   "id": "electrostatic-discharge",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "electrostatic discharge"
+   ],
+   "zh": [
+    "静电放电"
+   ]
+  },
+  {
+   "id": "analog-to-digital-converter",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "analog-to-digital converter"
+   ],
+   "zh": [
+    "模数转换器",
+    "ADC"
+   ]
+  },
+  {
+   "id": "ripple-voltage",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "ripple voltage"
+   ],
+   "zh": [
+    "纹波电压"
+   ]
+  },
+  {
+   "id": "bootloader",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "bootloader"
+   ],
+   "zh": [
+    "引导加载程序",
+    "引导程序",
+    "Bootloader"
+   ]
+  },
+  {
+   "id": "serial-console",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "serial console"
+   ],
+   "zh": [
+    "串口控制台"
+   ]
+  },
+  {
+   "id": "bluetooth-low-energy",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "Bluetooth Low Energy"
+   ],
+   "zh": [
+    "低功耗蓝牙",
+    "BLE"
+   ]
+  },
+  {
+   "id": "coin-cell",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "coin cell"
+   ],
+   "zh": [
+    "纽扣电池"
+   ]
+  },
+  {
+   "id": "multimeter",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "multimeter"
+   ],
+   "zh": [
+    "万用表"
+   ]
+  },
+  {
+   "id": "short-circuited",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "short-circuited",
+    "short circuit"
+   ],
+   "zh": [
+    "短路"
+   ]
+  },
+  {
+   "id": "solid-state-drive",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "solid-state drive",
+    "SSD"
+   ],
+   "zh": [
+    "固态硬盘",
+    "SSD"
+   ]
+  },
+  {
+   "id": "mechanical-hard-drive",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "mechanical hard drive"
+   ],
+   "zh": [
+    "机械硬盘"
+   ]
+  },
+  {
+   "id": "sampling-rate",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "sampling rate"
+   ],
+   "zh": [
+    "采样率"
+   ]
+  },
+  {
+   "id": "refresh-rate",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "refresh rate"
+   ],
+   "zh": [
+    "刷新率"
+   ]
+  },
+  {
+   "id": "real-time-operating-system",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "real-time operating system"
+   ],
+   "zh": [
+    "实时操作系统"
+   ]
+  },
+  {
+   "id": "on-resistance",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "on-resistance"
+   ],
+   "zh": [
+    "导通电阻"
+   ]
+  },
+  {
+   "id": "memory-module",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "memory module"
+   ],
+   "zh": [
+    "内存条"
+   ]
+  },
+  {
+   "id": "development-board",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "development board"
+   ],
+   "zh": [
+    "开发板"
+   ]
+  },
+  {
+   "id": "power-management-chip",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "power management chip"
+   ],
+   "zh": [
+    "电源管理芯片"
+   ]
+  },
+  {
+   "id": "embedded-system",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "embedded system"
+   ],
+   "zh": [
+    "嵌入式系统"
+   ]
+  },
+  {
+   "id": "motherboard",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "motherboard"
+   ],
+   "zh": [
+    "主板"
+   ]
+  },
+  {
+   "id": "soldering-iron",
+   "kind": "fixed",
+   "domain": "hw",
+   "en": [
+    "soldering iron"
+   ],
+   "zh": [
+    "烙铁"
+   ]
+  },
+  {
+   "id": "type-2-diabetes",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "type 2 diabetes"
+   ],
+   "zh": [
+    "2 型糖尿病",
+    "2型糖尿病",
+    "II 型糖尿病"
+   ]
+  },
+  {
+   "id": "diabetes",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "diabetes"
+   ],
+   "zh": [
+    "糖尿病"
+   ]
+  },
+  {
+   "id": "metformin",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "metformin"
+   ],
+   "zh": [
+    "二甲双胍"
+   ]
+  },
+  {
+   "id": "stroke",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "stroke"
+   ],
+   "zh": [
+    "中风",
+    "卒中"
+   ]
+  },
+  {
+   "id": "mri",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "MRI"
+   ],
+   "zh": [
+    "磁共振",
+    "MRI",
+    "核磁共振"
+   ]
+  },
+  {
+   "id": "tumor",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "tumor"
+   ],
+   "zh": [
+    "肿瘤"
+   ]
+  },
+  {
+   "id": "side-effect",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "side effect"
+   ],
+   "zh": [
+    "副作用",
+    "不良反应"
+   ]
+  },
+  {
+   "id": "nausea",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "nausea"
+   ],
+   "zh": [
+    "恶心"
+   ]
+  },
+  {
+   "id": "dizziness",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "dizziness"
+   ],
+   "zh": [
+    "头晕",
+    "眩晕"
+   ]
+  },
+  {
+   "id": "vaccine",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "vaccine"
+   ],
+   "zh": [
+    "疫苗"
+   ]
+  },
+  {
+   "id": "antibiotic",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "antibiotic"
+   ],
+   "zh": [
+    "抗生素"
+   ]
+  },
+  {
+   "id": "viral-infection",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "viral infection"
+   ],
+   "zh": [
+    "病毒感染"
+   ]
+  },
+  {
+   "id": "randomized-controlled-trial",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "randomized controlled trial"
+   ],
+   "zh": [
+    "随机对照试验"
+   ]
+  },
+  {
+   "id": "minimally-invasive",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "minimally invasive"
+   ],
+   "zh": [
+    "微创"
+   ]
+  },
+  {
+   "id": "gallbladder",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "gallbladder"
+   ],
+   "zh": [
+    "胆囊"
+   ]
+  },
+  {
+   "id": "white-blood-cell",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "white blood cell"
+   ],
+   "zh": [
+    "白细胞"
+   ]
+  },
+  {
+   "id": "contraindicated",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "contraindicated"
+   ],
+   "zh": [
+    "禁用",
+    "禁忌"
+   ]
+  },
+  {
+   "id": "chronic-inflammation",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "chronic inflammation"
+   ],
+   "zh": [
+    "慢性炎症"
+   ]
+  },
+  {
+   "id": "emergency-department",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "emergency department"
+   ],
+   "zh": [
+    "急诊科",
+    "急诊"
+   ]
+  },
+  {
+   "id": "triage",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "triage"
+   ],
+   "zh": [
+    "分诊",
+    "分级"
+   ]
+  },
+  {
+   "id": "allergic-reaction",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "allergic reaction"
+   ],
+   "zh": [
+    "过敏反应"
+   ]
+  },
+  {
+   "id": "hives",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "hives"
+   ],
+   "zh": [
+    "荨麻疹"
+   ]
+  },
+  {
+   "id": "primary-endpoint",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "primary endpoint"
+   ],
+   "zh": [
+    "主要终点"
+   ]
+  },
+  {
+   "id": "overall-survival",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "overall survival"
+   ],
+   "zh": [
+    "总生存期"
+   ]
+  },
+  {
+   "id": "physical-therapy",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "physical therapy"
+   ],
+   "zh": [
+    "物理治疗",
+    "物理疗法",
+    "理疗"
+   ]
+  },
+  {
+   "id": "electrocardiogram",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "electrocardiogram"
+   ],
+   "zh": [
+    "心电图"
+   ]
+  },
+  {
+   "id": "hypertension",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "hypertension",
+    "high blood pressure"
+   ],
+   "zh": [
+    "高血压"
+   ]
+  },
+  {
+   "id": "lung-cancer",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "lung cancer"
+   ],
+   "zh": [
+    "肺癌"
+   ]
+  },
+  {
+   "id": "hemoglobin",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "hemoglobin"
+   ],
+   "zh": [
+    "血红蛋白"
+   ]
+  },
+  {
+   "id": "anemia",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "anemia"
+   ],
+   "zh": [
+    "贫血"
+   ]
+  },
+  {
+   "id": "complete-blood-count",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "complete blood count"
+   ],
+   "zh": [
+    "血常规"
+   ]
+  },
+  {
+   "id": "rash",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "rash"
+   ],
+   "zh": [
+    "皮疹"
+   ]
+  },
+  {
+   "id": "ultrasound",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "ultrasound"
+   ],
+   "zh": [
+    "超声"
+   ]
+  },
+  {
+   "id": "blood-sugar",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "blood sugar"
+   ],
+   "zh": [
+    "血糖"
+   ]
+  },
+  {
+   "id": "double-blind",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "double-blind"
+   ],
+   "zh": [
+    "双盲"
+   ]
+  },
+  {
+   "id": "placebo-controlled",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "placebo-controlled"
+   ],
+   "zh": [
+    "安慰剂对照"
+   ]
+  },
+  {
+   "id": "multicenter",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "multicenter"
+   ],
+   "zh": [
+    "多中心"
+   ]
+  },
+  {
+   "id": "clinical-trial",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "clinical trial"
+   ],
+   "zh": [
+    "临床试验"
+   ]
+  },
+  {
+   "id": "penicillin",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "penicillin"
+   ],
+   "zh": [
+    "青霉素"
+   ]
+  },
+  {
+   "id": "nodule",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "nodule"
+   ],
+   "zh": [
+    "结节"
+   ]
+  },
+  {
+   "id": "general-anesthesia",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "general anesthesia"
+   ],
+   "zh": [
+    "全身麻醉",
+    "全麻"
+   ]
+  },
+  {
+   "id": "arrhythmia",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "arrhythmia"
+   ],
+   "zh": [
+    "心律不齐",
+    "心律失常"
+   ]
+  },
+  {
+   "id": "influenza",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "influenza",
+    "flu"
+   ],
+   "zh": [
+    "流感"
+   ]
+  },
+  {
+   "id": "pneumonia",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "pneumonia"
+   ],
+   "zh": [
+    "肺炎"
+   ]
+  },
+  {
+   "id": "arbitration",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "arbitration"
+   ],
+   "zh": [
+    "仲裁"
+   ]
+  },
+  {
+   "id": "sublicense",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "sublicense"
+   ],
+   "zh": [
+    "再许可",
+    "转授权",
+    "分许可"
+   ]
+  },
+  {
+   "id": "licensee",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "licensee"
+   ],
+   "zh": [
+    "被许可方",
+    "被许可人"
+   ]
+  },
+  {
+   "id": "warranty",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "warranty"
+   ],
+   "zh": [
+    "担保",
+    "保证",
+    "保修"
+   ]
+  },
+  {
+   "id": "jurisdiction",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "jurisdiction"
+   ],
+   "zh": [
+    "管辖权"
+   ]
+  },
+  {
+   "id": "personal-data",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "personal data"
+   ],
+   "zh": [
+    "个人数据"
+   ]
+  },
+  {
+   "id": "personal-information",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "personal information"
+   ],
+   "zh": [
+    "个人信息"
+   ]
+  },
+  {
+   "id": "confidentiality",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "confidentiality"
+   ],
+   "zh": [
+    "保密"
+   ]
+  },
+  {
+   "id": "force-majeure",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "force majeure"
+   ],
+   "zh": [
+    "不可抗力"
+   ]
+  },
+  {
+   "id": "plaintiff",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "plaintiff"
+   ],
+   "zh": [
+    "原告"
+   ]
+  },
+  {
+   "id": "defendant",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "defendant"
+   ],
+   "zh": [
+    "被告"
+   ]
+  },
+  {
+   "id": "breach-of-contract",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "breach of contract",
+    "breach"
+   ],
+   "zh": [
+    "违约"
+   ]
+  },
+  {
+   "id": "gross-negligence",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "gross negligence"
+   ],
+   "zh": [
+    "重大过失"
+   ]
+  },
+  {
+   "id": "willful-misconduct",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "willful misconduct"
+   ],
+   "zh": [
+    "故意不当行为"
+   ]
+  },
+  {
+   "id": "patent-holder",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "patent holder"
+   ],
+   "zh": [
+    "专利权人"
+   ]
+  },
+  {
+   "id": "non-exclusive-license",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "non-exclusive license"
+   ],
+   "zh": [
+    "非独占许可",
+    "非排他性许可",
+    "非独家许可"
+   ]
+  },
+  {
+   "id": "under-oath",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "under oath"
+   ],
+   "zh": [
+    "宣誓"
+   ]
+  },
+  {
+   "id": "copyright",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "copyright"
+   ],
+   "zh": [
+    "著作权",
+    "版权"
+   ]
+  },
+  {
+   "id": "trade-secret",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "trade secret"
+   ],
+   "zh": [
+    "商业秘密"
+   ]
+  },
+  {
+   "id": "liquidated-damages",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "liquidated damages"
+   ],
+   "zh": [
+    "违约金"
+   ]
+  },
+  {
+   "id": "intellectual-property",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "intellectual property"
+   ],
+   "zh": [
+    "知识产权"
+   ]
+  },
+  {
+   "id": "appeal",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "appeal"
+   ],
+   "zh": [
+    "上诉"
+   ]
+  },
+  {
+   "id": "lessor",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "lessor"
+   ],
+   "zh": [
+    "出租人"
+   ]
+  },
+  {
+   "id": "employment-contract",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "employment contract"
+   ],
+   "zh": [
+    "劳动合同"
+   ]
+  },
+  {
+   "id": "social-insurance",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "social insurance"
+   ],
+   "zh": [
+    "社会保险"
+   ]
+  },
+  {
+   "id": "party-a",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "Party A"
+   ],
+   "zh": [
+    "甲方"
+   ]
+  },
+  {
+   "id": "party-b",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "Party B"
+   ],
+   "zh": [
+    "乙方"
+   ]
+  },
+  {
+   "id": "third-party",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "third party",
+    "third parties"
+   ],
+   "zh": [
+    "第三方"
+   ]
+  },
+  {
+   "id": "tenant",
+   "kind": "fixed",
+   "domain": "legal",
+   "en": [
+    "tenant"
+   ],
+   "zh": [
+    "承租人",
+    "租户"
+   ]
+  },
+  {
+   "id": "basis-points",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "basis points"
+   ],
+   "zh": [
+    "基点"
+   ]
+  },
+  {
+   "id": "central-bank",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "central bank"
+   ],
+   "zh": [
+    "央行",
+    "中央银行"
+   ]
+  },
+  {
+   "id": "year-over-year",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "year over year",
+    "year on year"
+   ],
+   "zh": [
+    "同比"
+   ]
+  },
+  {
+   "id": "operating-margin",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "operating margin"
+   ],
+   "zh": [
+    "营业利润率",
+    "经营利润率"
+   ]
+  },
+  {
+   "id": "net-loss",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "net loss"
+   ],
+   "zh": [
+    "净亏损"
+   ]
+  },
+  {
+   "id": "diversification",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "diversification"
+   ],
+   "zh": [
+    "分散投资"
+   ]
+  },
+  {
+   "id": "portfolio",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "portfolio"
+   ],
+   "zh": [
+    "投资组合"
+   ]
+  },
+  {
+   "id": "bond",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "bond"
+   ],
+   "zh": [
+    "债券"
+   ]
+  },
+  {
+   "id": "coupon",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "coupon"
+   ],
+   "zh": [
+    "票息"
+   ]
+  },
+  {
+   "id": "free-cash-flow",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "free cash flow"
+   ],
+   "zh": [
+    "自由现金流"
+   ]
+  },
+  {
+   "id": "ipo",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "IPO"
+   ],
+   "zh": [
+    "首次公开募股",
+    "IPO"
+   ]
+  },
+  {
+   "id": "inflation",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "inflation"
+   ],
+   "zh": [
+    "通货膨胀",
+    "通胀"
+   ]
+  },
+  {
+   "id": "purchasing-power",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "purchasing power"
+   ],
+   "zh": [
+    "购买力"
+   ]
+  },
+  {
+   "id": "management-fee",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "management fee"
+   ],
+   "zh": [
+    "管理费"
+   ]
+  },
+  {
+   "id": "balance-sheet",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "balance sheet"
+   ],
+   "zh": [
+    "资产负债表"
+   ]
+  },
+  {
+   "id": "shareholders-equity",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "shareholders' equity"
+   ],
+   "zh": [
+    "股东权益"
+   ]
+  },
+  {
+   "id": "exchange-rate",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "exchange rate"
+   ],
+   "zh": [
+    "汇率"
+   ]
+  },
+  {
+   "id": "share-buyback",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "share buyback"
+   ],
+   "zh": [
+    "股票回购",
+    "股份回购"
+   ]
+  },
+  {
+   "id": "market-order",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "market order"
+   ],
+   "zh": [
+    "市价单"
+   ]
+  },
+  {
+   "id": "venture-capital",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "venture capital"
+   ],
+   "zh": [
+    "风险投资",
+    "风投"
+   ]
+  },
+  {
+   "id": "depreciation",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "depreciation"
+   ],
+   "zh": [
+    "折旧"
+   ]
+  },
+  {
+   "id": "price-to-earnings-ratio",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "price-to-earnings ratio"
+   ],
+   "zh": [
+    "市盈率"
+   ]
+  },
+  {
+   "id": "wire-transfer",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "wire transfer"
+   ],
+   "zh": [
+    "电汇"
+   ]
+  },
+  {
+   "id": "gross-profit",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "gross profit"
+   ],
+   "zh": [
+    "毛利润",
+    "毛利"
+   ]
+  },
+  {
+   "id": "cost-of-goods-sold",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "cost of goods sold"
+   ],
+   "zh": [
+    "销货成本",
+    "销售成本"
+   ]
+  },
+  {
+   "id": "variable-interest-rate",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "variable interest rate"
+   ],
+   "zh": [
+    "浮动利率"
+   ]
+  },
+  {
+   "id": "benchmark-rate",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "benchmark rate"
+   ],
+   "zh": [
+    "基准利率"
+   ]
+  },
+  {
+   "id": "guidance",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "guidance"
+   ],
+   "zh": [
+    "业绩指引",
+    "指引"
+   ]
+  },
+  {
+   "id": "dividend",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "dividend"
+   ],
+   "zh": [
+    "股息",
+    "红利",
+    "分红"
+   ]
+  },
+  {
+   "id": "liquidity-risk",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "liquidity risk"
+   ],
+   "zh": [
+    "流动性风险"
+   ]
+  },
+  {
+   "id": "stress-scenario",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "stress scenario"
+   ],
+   "zh": [
+    "压力情景"
+   ]
+  },
+  {
+   "id": "reserve-requirement-ratio",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "reserve requirement ratio"
+   ],
+   "zh": [
+    "存款准备金率",
+    "准备金率"
+   ]
+  },
+  {
+   "id": "star-market",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "STAR Market"
+   ],
+   "zh": [
+    "科创板"
+   ]
+  },
+  {
+   "id": "operating-revenue",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "operating revenue"
+   ],
+   "zh": [
+    "营业收入"
+   ]
+  },
+  {
+   "id": "net-cash-flow",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "net cash flow"
+   ],
+   "zh": [
+    "现金流量净额",
+    "净现金流"
+   ]
+  },
+  {
+   "id": "debt-to-asset-ratio",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "debt-to-asset ratio"
+   ],
+   "zh": [
+    "资产负债率"
+   ]
+  },
+  {
+   "id": "credit-rating",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "credit rating"
+   ],
+   "zh": [
+    "信用评级"
+   ]
+  },
+  {
+   "id": "gross-margin",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "gross margin"
+   ],
+   "zh": [
+    "毛利率"
+   ]
+  },
+  {
+   "id": "limit-up",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "limit up"
+   ],
+   "zh": [
+    "涨停"
+   ]
+  },
+  {
+   "id": "net-profit",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "net profit"
+   ],
+   "zh": [
+    "净利润"
+   ]
+  },
+  {
+   "id": "principal",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "principal"
+   ],
+   "zh": [
+    "本金"
+   ]
+  },
+  {
+   "id": "monetary-easing",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "monetary easing"
+   ],
+   "zh": [
+    "货币宽松",
+    "宽松"
+   ]
+  },
+  {
+   "id": "bank-of-japan",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "Bank of Japan"
+   ],
+   "zh": [
+    "日本银行",
+    "日本央行"
+   ]
+  },
+  {
+   "id": "days-sales-outstanding",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "days sales outstanding"
+   ],
+   "zh": [
+    "应收账款周转天数"
+   ]
+  },
+  {
+   "id": "risk-tolerance",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "risk tolerance"
+   ],
+   "zh": [
+    "风险承受能力"
+   ]
+  },
+  {
+   "id": "series-b",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "Series B"
+   ],
+   "zh": [
+    "B 轮",
+    "B轮"
+   ]
+  },
+  {
+   "id": "series-c",
+   "kind": "fixed",
+   "domain": "fin",
+   "en": [
+    "Series C"
+   ],
+   "zh": [
+    "C 轮",
+    "C轮"
+   ]
+  },
+  {
+   "id": "two-factor-authentication",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "two-factor authentication"
+   ],
+   "zh": [
+    "双因素认证",
+    "双重验证",
+    "两步验证",
+    "双因素身份验证"
+   ]
+  },
+  {
+   "id": "clipboard",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "clipboard"
+   ],
+   "zh": [
+    "剪贴板"
+   ]
+  },
+  {
+   "id": "keyboard-shortcuts",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "keyboard shortcuts"
+   ],
+   "zh": [
+    "键盘快捷键"
+   ]
+  },
+  {
+   "id": "shortcut",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "shortcut"
+   ],
+   "zh": [
+    "快捷键"
+   ]
+  },
+  {
+   "id": "dashboard",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "dashboard"
+   ],
+   "zh": [
+    "仪表板",
+    "仪表盘"
+   ]
+  },
+  {
+   "id": "sidebar",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "sidebar"
+   ],
+   "zh": [
+    "侧边栏"
+   ]
+  },
+  {
+   "id": "privacy-policy",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "privacy policy"
+   ],
+   "zh": [
+    "隐私政策"
+   ]
+  },
+  {
+   "id": "terms-of-service",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "Terms of Service"
+   ],
+   "zh": [
+    "服务条款"
+   ]
+  },
+  {
+   "id": "verification-code",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "verification code"
+   ],
+   "zh": [
+    "验证码"
+   ]
+  },
+  {
+   "id": "dark-mode",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "dark mode"
+   ],
+   "zh": [
+    "深色模式",
+    "暗色模式",
+    "暗黑模式"
+   ]
+  },
+  {
+   "id": "tray",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "tray"
+   ],
+   "zh": [
+    "托盘"
+   ]
+  },
+  {
+   "id": "cache",
+   "kind": "fixed",
+   "domain": "ui",
+   "en": [
+    "cache"
+   ],
+   "zh": [
+    "缓存"
+   ]
+  }
+ ]
+}

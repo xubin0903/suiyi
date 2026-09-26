@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Protocol
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictBool
 
 from suiyi_engine import __version__
 from suiyi_engine.errors import UnsupportedPairError
@@ -75,7 +75,11 @@ class ApiSettings:
 
 
 class TranslateRequest(BaseModel):
-    """翻译请求。未知字段忽略，以便以后增加术语表等可选项。"""
+    """翻译请求。未知字段忽略，以便以后增加可选项。
+
+    ``glossary``：本次是否做术语保护（#83）。省略或 ``null`` 时用服务端默认（``--glossary`` /
+    ``SUIYI_GLOSSARY``）；必须是 JSON 布尔值，其他类型返回 422。
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -83,6 +87,7 @@ class TranslateRequest(BaseModel):
     texts: list[str] | None = None
     source: str
     target: str
+    glossary: StrictBool | None = None
 
 
 class ApiError(Exception):
@@ -189,6 +194,7 @@ def create_app(
                 "uptime_s": round(float(uptime), 1),
                 "ocr_loaded": bool(app.state.ocr.loaded),
                 "ocr_error": app.state.ocr.health(),
+                **glossary_status(current),
             }
         except Exception:
             logger.exception("读取健康状态失败")
@@ -224,8 +230,38 @@ def create_app(
                 return _internal_error()
         return JSONResponse(status_code=200, content=payload)
 
+    @app.post("/glossary/reload")
+    def reload_glossary() -> JSONResponse:
+        # 同步路由在线程池中运行；读文件不拿翻译锁，术语表自己有锁。
+        try:
+            reload = getattr(app.state.translator, "reload_glossary", None)
+            payload = reload() if callable(reload) else glossary_status(app.state.translator)
+        except Exception:
+            logger.exception("重读术语表失败")
+            return _internal_error()
+        return JSONResponse(status_code=200, content=payload)
+
     register_ocr_routes(app)
     return app
+
+
+_GLOSSARY_OFF: dict[str, object] = {
+    "glossary_enabled": False,
+    "glossary_builtin_entries": 0,
+    "glossary_user_path": None,
+    "glossary_user_entries": 0,
+    "glossary_error": None,
+    "glossary_warnings": [],
+}
+
+
+def glossary_status(translator: object) -> dict[str, object]:
+    """``/health`` 与 ``/glossary/reload`` 的 ``glossary_*`` 字段；翻译器没有术语表时报告关闭。"""
+
+    status = getattr(translator, "glossary_status", None)
+    if not callable(status):
+        return dict(_GLOSSARY_OFF)
+    return {**_GLOSSARY_OFF, **status()}
 
 
 def language_catalog(translator: SupportsTranslation) -> dict[str, object]:
@@ -261,13 +297,16 @@ def perform_translate(
         sources = [_normalize_source(body.source)] * len(texts)
     for index, (text, src) in enumerate(zip(texts, sources, strict=True)):
         _preflight(translator, src, target, text, index if batched else None)
+    # 只在请求带了 glossary 时才传，测试里的假翻译器和旧实现不必认识这个参数。
+    extra: dict[str, object] = {} if body.glossary is None else {"glossary": body.glossary}
     if not auto and batched:
-        translated = translator.translate_many(texts, sources[0], target)
+        translated = translator.translate_many(texts, sources[0], target, **extra)
         return {"results": [_public_result(item, detected=False) for item in translated]}
     if not auto:
-        return _public_result(translator.translate(texts[0], sources[0], target), detected=False)
+        result = translator.translate(texts[0], sources[0], target, **extra)
+        return _public_result(result, detected=False)
     results = [
-        _public_result(translator.translate(text, src, target), detected=True)
+        _public_result(translator.translate(text, src, target, **extra), detected=True)
         for text, src in zip(texts, sources, strict=True)
     ]
     if batched:

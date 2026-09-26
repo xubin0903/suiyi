@@ -24,6 +24,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="模型目录，默认 SUIYI_MODELS_DIR 或仓库 models/",
     )
+    translate.add_argument(
+        "--glossary",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="术语保护（--no-glossary 关闭），默认环境变量 SUIYI_GLOSSARY 或开启",
+    )
+    translate.add_argument(
+        "--user-glossary",
+        default=None,
+        help="用户术语表，默认环境变量 SUIYI_USER_GLOSSARY 或 <设置目录>/glossary.tsv",
+    )
     translate.add_argument("text", help="待翻译文本")
 
     serve = subparsers.add_parser("serve", help="启动只监听本机回环的 HTTP 翻译服务")
@@ -65,6 +76,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="开始监听前加载并预热 OCR 模型；OCR 不可用时只告警，服务照常启动，OCR 接口返回 503",
     )
+    serve.add_argument(
+        "--glossary",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="术语保护默认开关（--no-glossary 关闭），默认环境变量 SUIYI_GLOSSARY 或开启",
+    )
+    serve.add_argument(
+        "--user-glossary",
+        default=None,
+        help="用户术语表（UTF-8 TSV），默认环境变量 SUIYI_USER_GLOSSARY 或 <设置目录>/glossary.tsv",
+    )
     serve.add_argument("--dev", action="store_true", help="开启 /docs 与 /openapi.json")
     serve.add_argument(
         "--intra-threads",
@@ -100,10 +122,17 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_translate(args: argparse.Namespace) -> int:
+    from suiyi_engine.serve import resolve_glossary_enabled, resolve_user_glossary
+    from suiyi_engine.terms import GlossaryStore
     from suiyi_engine.translator import Translator, UnsupportedPairError
 
     try:
-        result = Translator(args.models_dir).translate(args.text, args.src, args.tgt)
+        glossary = GlossaryStore(
+            resolve_user_glossary(args.user_glossary),
+            enabled=resolve_glossary_enabled(args.glossary),
+        )
+        translator = Translator(args.models_dir, glossary=glossary)
+        result = translator.translate(args.text, args.src, args.tgt)
     except UnsupportedPairError as exc:
         print(str(exc), file=sys.stderr)
         return 1

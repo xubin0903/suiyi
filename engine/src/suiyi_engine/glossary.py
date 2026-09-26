@@ -54,6 +54,18 @@ class Term:
     kind: str
     domain: str
     forms: Mapping[str, tuple[str, ...]]
+    # None：按 kind 决定（keep 区分大小写，fixed 不区分）。用户术语表按「全大写缩写才区分」设置。
+    case_sensitive: bool | None = None
+    # None：双向可用；否则只用于这个（源语种, 目标语种）方向。
+    direction: tuple[str, str] | None = None
+
+    def source_case_sensitive(self) -> bool:
+        return self.kind == KEEP if self.case_sensitive is None else self.case_sensitive
+
+    def applies(self, src: str, tgt: str) -> bool:
+        if self.direction is not None and self.direction != (src, tgt):
+            return False
+        return src in self.forms and tgt in self.forms
 
     def canonical(self, lang: str) -> str | None:
         values = self.forms.get(lang, ())
@@ -124,7 +136,9 @@ def find_terms(
     candidates: list[TermMatch] = []
     for term in glossary:
         for form in term.forms.get(lang, ()):
-            for start, end in _find_all(text, form, lang, case_sensitive=term.kind == KEEP):
+            for start, end in _find_all(
+                text, form, lang, case_sensitive=term.source_case_sensitive()
+            ):
                 candidates.append(TermMatch(term, start, end, text[start:end]))
     candidates.sort(key=lambda match: (-(match.end - match.start), match.start))
     chosen: list[TermMatch] = []
@@ -158,7 +172,8 @@ def present_form(text: str, term: Term, lang: str) -> str | None:
 
 
 def _find_all(text: str, form: str, lang: str, *, case_sensitive: bool) -> list[tuple[int, int]]:
-    if lang in _SPACE_LANGS:
+    if lang in _SPACE_LANGS or _is_latin(form):
+        # 中日文里夹的拉丁字母术语（Kubernetes、Go）也按词边界匹配，免得 Go 命中 Google
         pattern = _en_pattern(form, case_sensitive)
         return [(match.start(), match.end()) for match in pattern.finditer(text)]
     return _cjk_find_all(text, form, case_sensitive)
@@ -167,10 +182,26 @@ def _find_all(text: str, form: str, lang: str, *, case_sensitive: bool) -> list[
 @lru_cache(maxsize=4096)
 def _en_pattern(form: str, case_sensitive: bool) -> re.Pattern[str]:
     parts = re.split(r"[\s\-]+", form.strip())
-    body = r"[\s\-]*".join(re.escape(part) for part in parts)
-    plural = r"(?:s|es)?" if form[-1:].isalpha() else ""
+    last = parts[-1]
+    if len(last) > 1 and last[-1] in "yY" and last[-2].lower() not in "aeiou":
+        # policy → policies：最后一个词以「辅音 + y」结尾时，允许 y / ies
+        stem, tail = last[:-1], r"(?:y|ies)" if last[-1] == "y" else r"(?:Y|IES)"
+        parts = [*parts[:-1], stem]
+        body = r"[\s\-]*".join(re.escape(part) for part in parts) + tail
+        plural = ""
+    else:
+        body = r"[\s\-]*".join(re.escape(part) for part in parts)
+        plural = r"(?:s|es)?" if form[-1:].isalpha() else ""
     flags = 0 if case_sensitive else re.IGNORECASE
     return re.compile(rf"(?<![A-Za-z0-9]){body}{plural}(?![A-Za-z0-9])", flags)
+
+
+def _is_latin(form: str) -> bool:
+    return (
+        bool(form)
+        and all(ord(char) < 0x2E80 for char in form)
+        and any(char.isascii() and char.isalpha() for char in form)
+    )
 
 
 def _cjk_find_all(text: str, form: str, case_sensitive: bool) -> list[tuple[int, int]]:
@@ -191,6 +222,7 @@ def _cjk_find_all(text: str, form: str, case_sensitive: bool) -> list[tuple[int,
     return found
 
 
+@lru_cache(maxsize=256)
 def _strip_spaces(text: str) -> tuple[str, list[int]]:
     kept: list[str] = []
     positions: list[int] = []
@@ -245,11 +277,23 @@ def target_form(term: Term, surface: str, tgt_lang: str) -> str | None:
 def protect(text: str, src_lang: str, tgt_lang: str, glossary: Sequence[Term]) -> Protected:
     """把原文里的术语换成占位符。原文里本来就有类似占位符的字样时不做保护。"""
 
+    return protect_matches(text, find_terms(text, src_lang, glossary, every=True), tgt_lang)
+
+
+def has_placeholder_like(text: str) -> bool:
+    """原文里是否已有和占位符相像的字样（这时不做保护，免得写回时串位）。"""
+
+    return _PLACEHOLDER_ANY.search(text) is not None
+
+
+def protect_matches(text: str, found: Sequence[TermMatch], tgt_lang: str) -> Protected:
+    """只把 ``found`` 里的命中换成占位符（``found`` 须按位置排序、互不重叠）。"""
+
     if _PLACEHOLDER_ANY.search(text):
         return Protected(text, ())
     matches = [
         (match, target)
-        for match in find_terms(text, src_lang, glossary, every=True)
+        for match in found
         if (target := target_form(match.term, match.surface, tgt_lang))
     ]
     slots = [
@@ -287,6 +331,8 @@ def restore(translation: str, protected: Protected, tgt_lang: str) -> tuple[str,
         if tgt_lang == "en" and slot.term.kind == FIXED and _sentence_start(text, match.start()):
             value = value[:1].upper() + value[1:]
         text = text[: match.start()] + value + text[match.end() :]
+        if tgt_lang == "en":
+            text = _fix_article(text, match.start(), value)
     if tgt_lang in _CJK_LANGS and len(failed) < len(protected.slots):
         # 占位符两侧常被模型加上空格（「开源 ZXQ 引擎」），写回中日文术语后去掉汉字 / 假名之间的空白
         text = _CJK_GAP.sub("", text)
@@ -296,3 +342,36 @@ def restore(translation: str, protected: Protected, tgt_lang: str) -> tuple[str,
 def _sentence_start(text: str, index: int) -> bool:
     before = text[:index].rstrip()
     return not before or before[-1] in ".!?:;\"'“”"
+
+
+# 读作元音开头的大写字母：an API、an SDK、an HTTP request；a URL、a CPU
+_VOWEL_LETTERS = frozenset("AEFHILMNORSX")
+_ARTICLE_BEFORE = re.compile(r"(?<![A-Za-z])(a|an|A|An|AN)(\s+)$")
+
+
+def _fix_article(text: str, start: int, value: str) -> str:
+    """写回英文术语后，把紧挨着的 a / an 改成和术语读音一致的那个（占位符前的冠词常常不对）。"""
+
+    found = _ARTICLE_BEFORE.search(text, 0, start)
+    if found is None or found.end() != start:
+        return text
+    wanted_an = _starts_with_vowel_sound(value)
+    article = found.group(1)
+    if wanted_an == (article.lower() == "an"):
+        return text
+    replacement = (
+        ("an" if wanted_an else "a") if article.islower() else ("An" if wanted_an else "A")
+    )
+    return text[: found.start(1)] + replacement + text[found.end(1) :]
+
+
+def _starts_with_vowel_sound(value: str) -> bool:
+    word = value.split()[0] if value.split() else value
+    if len(word) >= 2 and word.isupper():
+        return word[0] in _VOWEL_LETTERS
+    lowered = word.lower()
+    if lowered.startswith(("uni", "use", "usa", "usu", "eu", "one")):
+        return False
+    if lowered.startswith(("hour", "honest", "honor", "heir")):
+        return True
+    return lowered[:1] in "aeiou"

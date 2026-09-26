@@ -31,6 +31,8 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--max-text-chars` | `SUIYI_MAX_TEXT_CHARS`，否则 `10000` | 单条文本的字符上限 |
 | `--max-image-bytes` | `SUIYI_MAX_IMAGE_BYTES`，否则 `8388608`（8 MiB） | OCR 请求体的字节上限 |
 | `--preload-ocr` | 关闭 | 开始监听前加载并预热 OCR 模型（启动日志「OCR 已预热 N ms」），之后 `/health` 的 `ocr_loaded` 为 `true`。**与 `--preload` 不同，失败不退出**：OCR 依赖未装或模型缺失/损坏时只在 stderr 打一行警告（含缺失的 OCR 模型 id 和下载命令），服务照常启动，文本翻译不受影响；`/health` 的 `ocr_error` 带上原因，OCR 接口返回 503。客户端设置 `engine.preloadOcr`（#58）为 `true` 时追加这个参数，可以安全地默认开启 |
+| `--glossary` / `--no-glossary` | 环境变量 `SUIYI_GLOSSARY`，否则开启 | 术语保护的默认开关（#83，见 [术语保护](术语保护.md)）。环境变量接受 `1/0`、`true/false`（也接受 `on/off`，不区分大小写），认不出的值在 stderr 告警并按开启处理。`/translate` 可以用 `glossary` 字段单次覆盖 |
+| `--user-glossary` | 环境变量 `SUIYI_USER_GLOSSARY`，否则 `<设置目录>/glossary.tsv` | 用户术语表路径，文件可以不存在。设置目录与客户端 `settings.json` 相同：`SUIYI_CONFIG_DIR`，否则 Windows `%APPDATA%\suiyi`，其他系统 `$XDG_CONFIG_HOME/suiyi`（默认 `~/.config/suiyi`） |
 | `--dev` | 关闭 | 才挂载 `/docs` 与 `/openapi.json` |
 | `--intra-threads` | `min(2, CPU 数)` | 单个模型内部的计算线程。不传则用翻译核心的默认 |
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
@@ -38,7 +40,9 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 
 OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
 
-进程起来后，标准输出有四行：监听 URL、模型目录、可用语向数量，以及实际使用的 `intra_threads`、`beam_size`、`max_batch_size`。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
+**客户端请用环境变量 `SUIYI_GLOSSARY` / `SUIYI_USER_GLOSSARY` 传术语表设置**：老版引擎会忽略不认识的环境变量，但遇到不认识的命令行参数会启动失败。
+
+进程起来后，标准输出有五行：监听 URL、模型目录、可用语向数量，实际使用的 `intra_threads`、`beam_size`、`max_batch_size`，以及术语表状态（「术语保护开启：内置 N 条，用户 M 条（路径）」）。清单推荐的模型没装、正在用同方向的旧模型时（例如只装了旧的 `opus-mt-en-zh`），stderr 多一行告警和补装命令，服务照常启动。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
 
 ### 端口占用判断
 
@@ -77,7 +81,7 @@ OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无
 
 - 已经出现的 JSON 字段保持名字和含义。可以新增字段。
 - 客户端必须忽略不认识的响应字段。
-- 服务端忽略不认识的请求字段，不因此返回 `invalid_request`。以后的术语表等可选项可以加在请求体里，旧客户端不用改。
+- 服务端忽略不认识的请求字段，不因此返回 `invalid_request`。新的可选项加在请求体里，旧客户端不用改；新客户端对老引擎发新字段也不会出错（例如 #83 的 `glossary`，老引擎直接忽略）。
 - 错误形状固定为 `error.code`、`error.message`、`error.details`。`details` 始终是对象，可以多出键。
 - 不保证 0.0.x 与以后的 0.1 字段完全相同。升级次版本前先看本文。
 
@@ -107,6 +111,12 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "loaded_models": ["opus-mt-zh-en"],
   "uptime_s": 12.3,
   "ocr_loaded": false,
+  "glossary_enabled": true,
+  "glossary_builtin_entries": 574,
+  "glossary_user_path": "C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv",
+  "glossary_user_entries": 6,
+  "glossary_error": null,
+  "glossary_warnings": ["第 12 行：缺少目标词（源词和目标词之间要用 Tab 分隔）"],
   "ocr_error": {
     "message": "缺少 OCR 模型：PP-OCRv6_det_small、ch_ppocr_mobile_v2.0_cls_mobile、PP-OCRv6_rec_small（目录 /path/to/models/ocr）。请执行 python scripts/download_ocr_models.py download 下载 OCR 模型",
     "reason": "models_missing",
@@ -123,6 +133,12 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `loaded_models` | 已经加载进内存的模型 id，字典序。`--preload` 成功后这里能看到它们 |
 | `uptime_s` | 自开始监听起的秒数，保留 1 位小数 |
 | `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增 |
+| `glossary_enabled` | 服务端默认是否开启术语保护（`--glossary` / `SUIYI_GLOSSARY` 的结果；内置术语表加载失败时为 `false`）。不反映单次请求的 `glossary` 覆盖。#83 新增 |
+| `glossary_builtin_entries` | 内置术语表条数，按方向展开（一条 zh↔en 术语算 2 条）。#83 新增 |
+| `glossary_user_path` | 实际使用的用户术语表路径，文件可以不存在；没有配置时为 `null`。#83 新增 |
+| `glossary_user_entries` | 当前生效的用户条目数，按方向展开；文件不存在或文件级错误时为 0。#83 新增 |
+| `glossary_error` | 文件级错误原因（不是 UTF-8、读不了、超过 1 MiB 或 5000 条；内置表加载失败）。没有错误时为 `null`。出错时只用内置表，翻译照常。#83 新增 |
+| `glossary_warnings` | 用户术语表的行级问题，最多 20 条，形如 `"第 12 行：缺少目标词…"`；这些行被跳过，其余照常生效。#83 新增 |
 | `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增 |
 
 翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 也在线程池里执行，有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。
@@ -161,7 +177,7 @@ Invoke-RestMethod http://127.0.0.1:18780/languages
       "src": "ja",
       "tgt": "zh",
       "route": "pivot",
-      "models": ["opus-mt-ja-en", "opus-mt-en-zh"]
+      "models": ["opus-mt-ja-en", "opus-mt-eng-zho-tc-big-2022-05-14"]
     },
     {
       "src": "zh",
@@ -173,13 +189,13 @@ Invoke-RestMethod http://127.0.0.1:18780/languages
 }
 ```
 
-MVP 必测六个方向是 `zh↔en`、`zh↔ja`、`en↔ja`。它们是否出现，取决于对应模型（`ja→zh` 则是 `opus-mt-ja-en` 与 `opus-mt-en-zh`）是否已经放进模型目录。
+MVP 必测六个方向是 `zh↔en`、`zh↔ja`、`en↔ja`。它们是否出现，取决于对应模型（`ja→zh` 则是 `opus-mt-ja-en` 与 `opus-mt-eng-zho-tc-big-2022-05-14`；只装了旧的 `opus-mt-en-zh` 时用它顶替第二跳）是否已经放进模型目录。
 
 ## `POST /translate`
 
 `Content-Type: application/json`。`text` 与 `texts` 必须有且只有一个。`source` 可以是 `"auto"` 或 ISO 639-1（`zh-CN` 会收成 `zh`）。`target` 不能是 `"auto"`。
 
-多出来的字段（例如以后的术语表）会被忽略。
+可选字段 `glossary`（#83）：`true` / `false` 只影响这一次请求是否做术语保护（`text` 和 `texts` 都支持）；省略或 `null` 时用服务端默认。必须是 JSON 布尔值，`"yes"`、`1`、对象等返回 422 `invalid_request`。术语保护目前只作用于 zh↔en 直连，其他语向忽略这个字段。其他多出来的字段会被忽略。
 
 单条文本超过 `--max-text-chars`（默认 10000 个 Unicode 字符，按 Python `len`）返回 413。批量时每一条单独计，任一条超限则整次请求失败，不返回部分译文。
 
@@ -225,7 +241,15 @@ Invoke-RestMethod http://127.0.0.1:18780/translate -Method Post `
 }
 ```
 
-批量响应只有 `results`，每一项与单条对象相同。英文中转时 `route` 长度为 2，例如 `["opus-mt-ja-en", "opus-mt-en-zh"]`。
+批量响应只有 `results`，每一项与单条对象相同。英文中转时 `route` 长度为 2，例如 `["opus-mt-ja-en", "opus-mt-eng-zho-tc-big-2022-05-14"]`。响应格式不因术语保护而变化。
+
+## `POST /glossary/reload`
+
+立即重读用户术语表（#83），返回与 `/health` 相同的 `glossary_*` 字段。平时不需要调用：每次 `/translate` 前都会检查文件的修改时间和大小（最多每秒一次），改了就自动重读。客户端在用户保存或关闭术语表编辑器后调一次，可以马上拿到行级警告。请求体为空；术语表永远不会让这个接口报错，错误写在 `glossary_error` / `glossary_warnings` 里。
+
+```bash
+curl -sS -X POST http://127.0.0.1:18780/glossary/reload
+```
 
 ## `POST /ocr_translate`
 
@@ -330,11 +354,11 @@ Invoke-RestMethod 'http://127.0.0.1:18780/ocr?lang=auto' -Method Post -InFile .\
 {
   "error": {
     "code": "unsupported_pair",
-    "message": "不支持的语向 en→zh，未下载模型：opus-mt-en-zh",
+    "message": "不支持的语向 en→zh，未下载模型：opus-mt-eng-zho-tc-big-2022-05-14",
     "details": {
       "source": "en",
       "target": "zh",
-      "missing_models": ["opus-mt-en-zh"]
+      "missing_models": ["opus-mt-eng-zho-tc-big-2022-05-14"]
     }
   }
 }
@@ -379,7 +403,7 @@ PowerShell 7 也可以给 `Invoke-RestMethod` 加 `-SkipHttpErrorCheck`，再读
 ## 已知限制
 
 - 没有鉴权、没有 TLS、没有流式输出、没有命名管道。
-- 术语表等扩展字段目前会被忽略，不会参与翻译。
+- 术语保护只作用于 zh↔en 直连（#83）；`/ocr_translate` 没有 `glossary` 字段，按服务端默认开关。
 - 批量条数没有单独上限；每一条仍受字符上限约束。同时只执行一路翻译，多出来的请求在线程池里排队。`/health` 不排队。
 - `internal_error` 不把异常文本返回给客户端。服务端日志里有栈。
 - `elapsed_ms` 不含语种检测和 HTTP 开销。
