@@ -156,6 +156,50 @@ jobs:
           path: ${{ runner.temp }}/ocr-eval
           if-no-files-found: ignore
 
+      - name: 专业领域评测：缓存 opus-mt en↔zh（#78，仅 Linux）
+        if: ${{ runner.os == 'Linux' }}
+        id: domain-models
+        uses: actions/cache@v4
+        with:
+          path: ~/suiyi-ci-models
+          key: domain-eval-models-${{ hashFiles('engine/model_manifest.json', 'scripts/convert_models.py') }}
+
+      - name: 专业领域评测：转换 opus-mt en↔zh（缓存未命中时）
+        # torch / transformers 只装在单独的转换 venv（convert 可选组），不进上面的运行环境。
+        if: ${{ runner.os == 'Linux' && steps.domain-models.outputs.cache-hit != 'true' }}
+        run: |
+          python -m venv "$RUNNER_TEMP/convert-venv"
+          CPY="$RUNNER_TEMP/convert-venv/bin/python"
+          "$CPY" -m pip install --quiet --upgrade pip
+          "$CPY" -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          "$CPY" -m pip install --quiet -e "./engine[convert]"
+          "$CPY" scripts/convert_models.py --ids opus-mt-en-zh opus-mt-zh-en --out-dir ~/suiyi-ci-models
+          rm -rf ~/suiyi-ci-models/.cache
+
+      - name: 专业领域评测快速子集（#78，仅 Linux）
+        # 验证 scripts/eval_domain.py 一条命令能跑通：现用基线 opus-mt 在 en↔zh 快速子集上的
+        # chrF、术语准确率、延迟与内存。GitHub 托管 runner 的耗时只用于确认脚本可用，不作为基线。
+        # MKL_ENABLE_INSTRUCTIONS 与评测机一致（关掉 AMX int8 路径，见 docs/engine/专业领域评测.md）。
+        if: ${{ runner.os == 'Linux' }}
+        env:
+          PYTHONUTF8: "1"
+          MKL_ENABLE_INSTRUCTIONS: AVX512_E1
+        run: |
+          python scripts/eval_domain.py run --candidate opus-mt --quick --directions en-zh,zh-en \
+            --models-dir ~/suiyi-ci-models --threads 2 --label "CI Linux（GitHub 托管 runner）" \
+            --out "$RUNNER_TEMP/domain-eval"
+          python scripts/eval_domain.py report "$RUNNER_TEMP/domain-eval/opus-mt.json" \
+            --title "专业领域评测快速子集（CI）" --out "$RUNNER_TEMP/domain-eval/report.md"
+          cat "$RUNNER_TEMP/domain-eval/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传专业领域评测结果
+        if: ${{ runner.os == 'Linux' && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-eval-${{ matrix.os }}
+          path: ${{ runner.temp }}/domain-eval
+          if-no-files-found: ignore
+
   # 稳定的汇总检查，供将来分支保护使用。
   # engine 矩阵被跳过时本 job 仍成功；矩阵失败或被取消时本 job 失败。
   engine-check:
