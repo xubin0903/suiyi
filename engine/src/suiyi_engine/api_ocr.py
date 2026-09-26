@@ -167,6 +167,7 @@ def register_ocr_routes(app: FastAPI) -> None:
         target: str = Query(...),
         source: str = Query("auto"),
         fallback_target: str | None = Query(None),
+        glossary: bool | None = Query(None),
     ) -> JSONResponse:
         started = time.perf_counter()
         try:
@@ -178,7 +179,7 @@ def register_ocr_routes(app: FastAPI) -> None:
             ocr_done = time.perf_counter()
             texts = [p.text for p in result.paragraphs]
             results = await run_in_threadpool(
-                _translate_locked, app, texts, source_code, target_code, fallback_code
+                _translate_locked, app, texts, source_code, target_code, fallback_code, glossary
             )
         except ApiError as exc:
             return JSONResponse(status_code=exc.status_code, content=exc.payload)
@@ -278,6 +279,7 @@ def _translate_locked(
     source: str | None,
     target: str,
     fallback: str | None,
+    glossary: bool | None = None,
 ) -> list[dict[str, object]]:
     with app.state.translate_lock:
         return translate_paragraphs(
@@ -285,6 +287,7 @@ def _translate_locked(
             source=source,
             target=target,
             fallback=fallback,
+            glossary=glossary,
             translator=app.state.translator,
             detector=app.state.detector,
             settings=app.state.settings,
@@ -300,6 +303,7 @@ def translate_paragraphs(
     translator: SupportsTranslation,
     detector: Detector,
     settings: ApiSettings,
+    glossary: bool | None = None,
 ) -> list[dict[str, object]]:
     """按段落翻译，结果与 ``texts`` 一一对应，形状同 ``/translate`` 批量结果的 ``results``。
 
@@ -309,6 +313,7 @@ def translate_paragraphs(
     - 次目标：整张图的语种（或显式 ``source``）等于 ``target`` 且给了 ``fallback`` 时，
       所有段落都改译为 ``fallback``。按整张图而不是按段落决定，浮窗里的译文语种一致。
     - 某段语向没有模型时整个请求 422 ``unsupported_pair``（``details.index`` 是段落序号）。
+    - ``glossary``：本次是否做术语保护（#87，同 ``/translate``）；``None`` 用服务端默认。
     """
 
     if not texts:
@@ -331,8 +336,10 @@ def translate_paragraphs(
     effective = fallback if fallback is not None and overall == target else target
     for index, (text, src) in enumerate(zip(texts, sources, strict=True)):
         _preflight(translator, src, effective, text, index)
+    # 只在请求带了 glossary 时才传，假翻译器和旧实现不必认识这个参数。
+    extra: dict[str, object] = {} if glossary is None else {"glossary": glossary}
     return [
-        _public_result(translator.translate(text, src, effective), detected=auto)
+        _public_result(translator.translate(text, src, effective, **extra), detected=auto)
         for text, src in zip(texts, sources, strict=True)
     ]
 

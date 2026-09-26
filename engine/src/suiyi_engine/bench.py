@@ -278,7 +278,7 @@ def suggest_defaults(
         )
     }
     if not cells:
-        reasons["intra_threads"] = "未跑线程网格，保持 intra_threads=min(2, CPU 数)。"
+        reasons["intra_threads"] = "未跑线程网格，保持 intra_threads=min(4, CPU 数)。"
         reasons["beam_size"] = "未跑束宽网格，保持 beam_size=2。"
         reasons["max_batch_size"] = "未跑批量网格，保持 max_batch_size=32。"
         return _suggestion(current_intra, current_beam, current_batch, False, reasons)

@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         "--intra-threads",
         type=int,
         default=None,
-        help="单模型 intra 线程数，默认 min(2, CPU 数)",
+        help="单模型 intra 线程数，默认环境变量 SUIYI_INTRA_THREADS 或 min(4, CPU 数)",
     )
     serve.add_argument(
         "--beam-size",

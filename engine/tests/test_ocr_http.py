@@ -297,6 +297,8 @@ def test_paragraph_too_long(tmp_path: Path) -> None:
         ({"target": "auto"}, "target"),
         ({"target": "en", "fallback_target": "123"}, "fallback_target"),
         ({"target": "en", "source": "??"}, "source"),
+        ({"target": "zh", "glossary": "maybe"}, "glossary"),
+        ({"target": "zh", "glossary": "2"}, "glossary"),
     ],
 )
 def test_invalid_query(tmp_path: Path, params: dict[str, str], field: str) -> None:
@@ -648,3 +650,54 @@ def test_real_models_chinese_screenshot_to_english() -> None:
     assert all(r["source"] == "zh" and r["target"] == "en" for r in results)
     english = " ".join(r["text"] for r in results)
     assert sum(ch.isascii() and ch.isalpha() for ch in english) > 100, english
+
+
+# ---- 术语保护开关（#87）---------------------------------------------------------
+
+
+class GlossaryBackend:
+    """原句把术语译错，占位符版照抄占位符，用来区分是否做了术语保护。"""
+
+    def __init__(self, record: ModelRecord) -> None:
+        self.record = record
+
+    def translate_batch(self, sentences: list[str]) -> list[str]:
+        table = {"Use container orchestration.": "使用集装箱管弦乐。", "Use ZXQ.": "使用 ZXQ。"}
+        return [table.get(sentence, sentence) for sentence in sentences]
+
+
+def _glossary_app(tmp_path: Path, engine: FakeOcrEngine, *, enabled: bool):
+    from suiyi_engine.glossary import FIXED, Term
+    from suiyi_engine.terms import GlossaryStore
+
+    root = tmp_path / "models"
+    _install(root, "opus-mt-eng-zho-tc-big-2022-05-14", "en", "zh")
+    term = Term(
+        id="b:co",
+        kind=FIXED,
+        domain="test",
+        forms={"en": ("container orchestration",), "zh": ("容器编排",)},
+    )
+    store = GlossaryStore(None, enabled=enabled, builtin=[term])
+    translator = Translator(root, backend_factory=GlossaryBackend, glossary=store)
+    provider = OcrProvider(tmp_path, engine_factory=lambda: engine)  # type: ignore[arg-type,return-value]
+    return create_app(translator, script_detector, ApiSettings(), provider)
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_ocr_translate_glossary_query_overrides_server_default(
+    tmp_path: Path, enabled: bool
+) -> None:
+    engine = FakeOcrEngine([_line("Use container orchestration.", 10, 10, 400, 40)])
+    protected, plain = "使用容器编排。", "使用集装箱管弦乐。"
+    with TestClient(_glossary_app(tmp_path, engine, enabled=enabled)) as client:
+
+        def text(**params: str) -> str:
+            response = _post(client, "/ocr_translate", make_png(), target="zh", **params)
+            assert response.status_code == 200, response.text
+            return response.json()["translation"]["results"][0]["text"]
+
+        assert text() == (protected if enabled else plain)  # 不传：按服务配置
+        assert text(glossary="true") == protected
+        assert text(glossary="false") == plain
+    assert len(engine.calls) == 3
