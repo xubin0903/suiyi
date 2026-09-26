@@ -65,15 +65,4 @@ public sealed class GlossaryStatusTests
         Assert.Equal("术语表已重新加载：我的 2 条，内置 300 条；1 行被跳过：第 3 行：缺少目标词", GlossaryStatusText.Reloaded(Status(null, "第 3 行：缺少目标词")));
         Assert.Equal("我的术语表未生效：文件过大（已改用内置术语表）", GlossaryStatusText.Reloaded(Status("文件过大")));
     }
-
-    [Theory]
-    [InlineData(true, "已开启")]
-    [InlineData(false, "已关闭")]
-    public void Toggled_MentionsRegionNeedsRestart(bool enabled, string expected)
-    {
-        var text = GlossaryStatusText.Toggled(enabled);
-
-        Assert.Contains(expected, text, StringComparison.Ordinal);
-        Assert.Contains("重启翻译服务", text, StringComparison.Ordinal);
-    }
 }

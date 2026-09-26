@@ -18,6 +18,7 @@ public static class UserGlossaryFile
         + "#   英文源词不区分大小写（全大写缩写如 API 除外），常见复数形式（-s、-es、-ies）自动匹配。\n"
         + "#   同一个词我的术语优先于内置术语。文件用 UTF-8 保存，不超过 1 MiB、5000 条。\n"
         + "#   有问题的行会被跳过，原因显示在托盘「专业术语」菜单里。\n"
+        + "#   请用记事本编辑，不要用 Excel 打开：Excel 保存时会改掉 Tab 和编码。\n"
         + "#\n"
         + "# 保存后约 1 秒内自动生效（下一次翻译时），也可以在托盘「专业术语 ▸ 重新加载术语表」立即生效。\n"
         + "#\n"
@@ -26,6 +27,20 @@ public static class UserGlossaryFile
         + "# Kubernetes\tKubernetes\n"
         + "# k8s\tKubernetes\n"
         + "# 预发布环境\tstaging environment\tzh-en\n";
+
+    /// <summary>
+    /// 「编辑我的术语表」固定用记事本打开（#84 拍板）：不走 .tsv 的默认程序，Excel 会改写 Tab 和编码。
+    /// </summary>
+    public const string Editor = "notepad.exe";
+
+    /// <summary>用记事本打开 <paramref name="path"/> 的启动参数（不经 Shell，路径作为单个参数）。</summary>
+    /// <param name="path">用户术语表路径。</param>
+    /// <returns>启动参数。</returns>
+    public static System.Diagnostics.ProcessStartInfo EditorStartInfo(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return new System.Diagnostics.ProcessStartInfo(Editor) { ArgumentList = { path }, UseShellExecute = false };
+    }
 
     /// <summary>
     /// 用户术语表路径：<c>&lt;设置目录&gt;\glossary.tsv</c>（默认 <c>%APPDATA%\suiyi\glossary.tsv</c>，设置目录可被 <c>SUIYI_CONFIG_DIR</c> 覆盖）。
