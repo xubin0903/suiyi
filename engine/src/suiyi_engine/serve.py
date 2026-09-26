@@ -12,7 +12,7 @@ import socket
 import sys
 from pathlib import Path
 
-from suiyi_engine import langdetect
+from suiyi_engine import langdetect, memory
 from suiyi_engine.api import DEFAULT_MAX_IMAGE_BYTES, ApiSettings, create_app, glossary_status
 from suiyi_engine.api_ocr import OcrProvider, OcrUnavailable
 from suiyi_engine.errors import UnsupportedPairError
@@ -103,6 +103,28 @@ def resolve_intra_threads(cli_value: int | None) -> int | None:
     return value
 
 
+DEFAULT_MODEL_IDLE_UNLOAD_S = 600
+
+
+def resolve_model_idle_unload(cli_value: int | None) -> int:
+    """命令行优先，其次 ``SUIYI_MODEL_IDLE_UNLOAD``，默认 600 秒；0 表示不卸载（#92）。"""
+
+    if cli_value is not None:
+        value, name = cli_value, "--model-idle-unload"
+    else:
+        raw = os.environ.get("SUIYI_MODEL_IDLE_UNLOAD", "").strip()
+        if not raw:
+            return DEFAULT_MODEL_IDLE_UNLOAD_S
+        name = "SUIYI_MODEL_IDLE_UNLOAD"
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise ServeError(f"{name} 不是整数：{raw}") from exc
+    if isinstance(value, bool) or value < 0:
+        raise ServeError(f"{name} 必须是 >= 0 的整数（秒，0 表示不卸载），收到 {value}")
+    return value
+
+
 def resolve_max_image_bytes(cli_value: int | None) -> int:
     """命令行优先，其次 ``SUIYI_MAX_IMAGE_BYTES``，默认 8 MiB。"""
 
@@ -189,6 +211,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         glossary_enabled = resolve_glossary_enabled(getattr(args, "glossary", None))
         user_glossary = resolve_user_glossary(getattr(args, "user_glossary", None))
         intra_threads = resolve_intra_threads(args.intra_threads)
+        model_idle_unload_s = resolve_model_idle_unload(getattr(args, "model_idle_unload", None))
     except ServeError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
@@ -206,6 +229,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         preload_ocr=bool(getattr(args, "preload_ocr", False)),
         glossary_enabled=glossary_enabled,
         user_glossary=user_glossary,
+        model_idle_unload_s=model_idle_unload_s,
     )
 
 
@@ -224,6 +248,7 @@ def run_server(
     preload_ocr: bool = False,
     glossary_enabled: bool = True,
     user_glossary: Path | str | None = None,
+    model_idle_unload_s: int = DEFAULT_MODEL_IDLE_UNLOAD_S,
 ) -> int:
     """构建翻译器并阻塞运行，直到进程收到停止信号。
 
@@ -231,6 +256,10 @@ def run_server(
     OCR 依赖或模型缺失从不阻止启动，文本翻译不受影响：``preload_ocr`` 加载失败只在 stderr 告警
     （含缺失的模型 id），``/health`` 的 ``ocr_error`` 带上原因，OCR 接口返回 503。
     术语表同理：用户术语表缺失或格式错误只告警，``/health`` 的 ``glossary_*`` 字段带上状态。
+
+    内存（#92）：加载模型前调 :func:`memory.configure_allocator`；监听期间由
+    :class:`memory.ModelJanitor` 在翻译空闲时卸载超过 ``model_idle_unload_s`` 秒没用的模型
+    （0 表示不卸载），并把临时内存还给系统。
     """
 
     try:
@@ -238,6 +267,8 @@ def run_server(
         port = _require_port(port, "端口")
         max_text_chars = _require_limit(max_text_chars, "max_text_chars")
         max_image_bytes = _require_limit(max_image_bytes, "max_image_bytes")
+        if isinstance(model_idle_unload_s, bool) or model_idle_unload_s < 0:
+            raise ServeError(f"model_idle_unload_s 必须 >= 0，收到 {model_idle_unload_s!r}")
         decode = resolve_decode_options(
             intra_threads=intra_threads,
             beam_size=beam_size,
@@ -247,6 +278,7 @@ def run_server(
         print(str(exc), file=sys.stderr)
         return exc.code
 
+    memory.configure_allocator()
     glossary = GlossaryStore(user_glossary, enabled=glossary_enabled)
     try:
         translator = Translator(models_dir, glossary=glossary, **decode)
@@ -277,19 +309,33 @@ def run_server(
         app = create_app(
             translator,
             None,
-            ApiSettings(max_text_chars=max_text_chars, dev=dev, max_image_bytes=max_image_bytes),
+            ApiSettings(
+                max_text_chars=max_text_chars,
+                dev=dev,
+                max_image_bytes=max_image_bytes,
+                model_idle_unload_s=model_idle_unload_s,
+            ),
             ocr,
         )
         _print_startup(host, port, translator, decode, detector_ms)
+        idle_text = f"{model_idle_unload_s} 秒" if model_idle_unload_s else "关闭"
+        print(f"模型空闲卸载 {idle_text}", flush=True)
         _print_glossary(translator)
         _warn_outdated(translator)
         if ocr_ms is not None:
             print(f"OCR 已预热 {ocr_ms:.0f} ms", flush=True)
+        memory.trim()  # 预热的临时内存
+        janitor = memory.ModelJanitor(
+            translator.registry, app.state.translate_lock, model_idle_unload_s
+        )
+        janitor.start()
         try:
             _serve_uvicorn(app, listen_socket)
         except OSError as exc:
             print(f"无法在 {host}:{port} 启动服务：{exc}", file=sys.stderr)
             return 1
+        finally:
+            janitor.stop()
         return 0
     finally:
         listen_socket.close()

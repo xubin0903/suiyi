@@ -7,6 +7,8 @@
 纯汉字日语（如「東京大学」）没有假名，会判成 ``zh``。这是规则层的已知局限。
 """
 
+import logging
+import os
 import re
 import threading
 import time
@@ -14,6 +16,8 @@ import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
+
+_logger = logging.getLogger(__name__)
 
 # 候选语种的默认集合，与一期常见语种一致。
 DEFAULT_CANDIDATES: tuple[str, ...] = ("zh", "en", "ja", "ko", "fr", "de", "es", "ru")
@@ -325,12 +329,61 @@ def _get_identifier():
         return _identifier
     with _identifier_lock:
         if _identifier is None:
-            from py3langid.langid import MODEL_FILE, LanguageIdentifier
-
-            identifier = LanguageIdentifier.from_model_file(MODEL_FILE, norm_probs=True)
-            identifier.set_languages(list(_LATIN_MODEL_LANGS))
-            _identifier = identifier
+            _identifier = _load_slim() or _load_py3langid()
         return _identifier
+
+
+def _load_slim():
+    """优先用 mmap 缓存的精简检测器（#92）；缓存建不起来时返回 ``None``。
+
+    ``SUIYI_LANGID_SLIM=0`` 可以关掉，直接用 py3langid。
+    """
+
+    if os.environ.get("SUIYI_LANGID_SLIM", "").strip().lower() in {"0", "false", "off"}:
+        return None
+    from suiyi_engine import langid_slim
+
+    try:
+        path = langid_slim.ensure_cache(langid_slim.default_cache_dir(), _LATIN_MODEL_LANGS)
+        return langid_slim.SlimIdentifier(path)
+    except Exception as exc:  # 缓存目录不可写、子进程失败、文件损坏……都退回 py3langid
+        _logger.warning("语种检测缓存不可用，改用 py3langid 常驻加载：%s", exc)
+        return None
+
+
+def _load_py3langid():
+    from py3langid.langid import MODEL_FILE, LanguageIdentifier
+
+    identifier = LanguageIdentifier.from_model_file(MODEL_FILE, norm_probs=True)
+    identifier.set_languages(list(_LATIN_MODEL_LANGS))
+    _slim_identifier(identifier)
+    return identifier
+
+
+def _slim_identifier(identifier: object) -> None:
+    """压缩 py3langid 常驻内存（#92），不改变检测结果。
+
+    - ``set_languages`` 之后 ``_full_model`` 仍引用 97 个语种的完整权重（约 27 MiB），
+      我们只用四个拉丁语种，换成已裁剪的那份。
+    - DFA 每个状态的输出特征和行偏移原本是 Python ``list[int]``（约 10 万个 int 对象），
+      换成 ``array``，下标访问的结果相同。
+
+    依赖 py3langid 的内部属性；属性不存在（上游改了实现）时什么也不做。
+    """
+
+    from array import array
+
+    try:
+        restricted = (identifier.nb_ptc, identifier.nb_pc, identifier.nb_classes)  # type: ignore[attr-defined]
+        identifier._full_model = restricted  # type: ignore[attr-defined]
+        output = identifier.tk_output  # type: ignore[attr-defined]
+        rowbase = identifier._rowbase  # type: ignore[attr-defined]
+        if isinstance(output, list):
+            identifier.tk_output = array("l", output)  # type: ignore[attr-defined]
+        if isinstance(rowbase, list):
+            identifier._rowbase = array("L", rowbase)  # type: ignore[attr-defined]
+    except (AttributeError, OverflowError, TypeError):
+        return  # py3langid 内部结构变了：保持原样
 
 
 def _model_detect(text: str, allowed: set[str]) -> tuple[str, float]:

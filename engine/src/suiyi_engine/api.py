@@ -58,12 +58,14 @@ class ApiSettings:
     ``max_text_chars`` 是单条 ``text``（以及 ``texts`` 里每一条）的字符上限。
     ``max_image_bytes`` / ``max_image_pixels`` 是 OCR 请求体的字节上限与总像素上限。
     ``dev`` 为真时才挂载 ``/docs`` 和 ``/openapi.json``。
+    ``model_idle_unload_s`` 只用于在 ``/health`` 里报告空闲卸载设置（#92），0 表示不卸载。
     """
 
     max_text_chars: int = 10_000
     dev: bool = False
     max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES
     max_image_pixels: int = DEFAULT_MAX_IMAGE_PIXELS
+    model_idle_unload_s: int = 0
 
     def __post_init__(self) -> None:
         for name in ("max_text_chars", "max_image_bytes", "max_image_pixels"):
@@ -72,6 +74,9 @@ class ApiSettings:
                 raise ValueError(f"{name} 必须是整数")
             if value < 1:
                 raise ValueError(f"{name} 必须 >= 1")
+        idle = self.model_idle_unload_s
+        if isinstance(idle, bool) or not isinstance(idle, int) or idle < 0:
+            raise ValueError("model_idle_unload_s 必须是 >= 0 的整数")
 
 
 class TranslateRequest(BaseModel):
@@ -195,6 +200,7 @@ def create_app(
                 "ocr_loaded": bool(app.state.ocr.loaded),
                 "ocr_error": app.state.ocr.health(),
                 **glossary_status(current),
+                "model_idle_unload_s": app.state.settings.model_idle_unload_s,
             }
         except Exception:
             logger.exception("读取健康状态失败")

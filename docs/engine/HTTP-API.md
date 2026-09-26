@@ -37,12 +37,13 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--intra-threads` | 环境变量 `SUIYI_INTRA_THREADS`，否则 `min(4, CPU 数)`（拿不到 CPU 数时 2） | 单个模型内部的计算线程。命令行优先于环境变量；环境变量不是 ≥ 1 的整数时，在开始监听前非零退出。#87 起默认上限从 2 改为 4 |
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
+| `--model-idle-unload` | 环境变量 `SUIYI_MODEL_IDLE_UNLOAD`，否则 `600` | 翻译模型连续这么多秒没被用到就卸载（#92），下次用到时自动重新加载。`0` 表示不卸载。命令行优先于环境变量；不是 ≥ 0 的整数时在开始监听前非零退出。只卸载翻译模型，不卸载 OCR 和语种检测 |
 
 OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
 
 **客户端请用环境变量 `SUIYI_GLOSSARY` / `SUIYI_USER_GLOSSARY` 传术语表设置**：老版引擎会忽略不认识的环境变量，但遇到不认识的命令行参数会启动失败。
 
-进程起来后，标准输出有五行：监听 URL、模型目录、可用语向数量，实际使用的 `intra_threads`、`beam_size`、`max_batch_size`，以及术语表状态（「术语保护开启：内置 N 条，用户 M 条（路径）」）。清单推荐的模型没装、正在用同方向的旧模型时（例如只装了旧的 `opus-mt-en-zh`），stderr 多一行告警和补装命令，服务照常启动。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
+进程起来后，标准输出有这几行：监听 URL、模型目录、可用语向数量，实际使用的 `intra_threads`、`beam_size`、`max_batch_size`，「语种检测已预热 N ms」，模型空闲卸载设置（「模型空闲卸载 600 秒」或「模型空闲卸载 关闭」，#92），以及术语表状态（「术语保护开启：内置 N 条，用户 M 条（路径）」）。清单推荐的模型没装、正在用同方向的旧模型时（例如只装了旧的 `opus-mt-en-zh`），stderr 多一行告警和补装命令，服务照常启动。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
 
 ### 端口占用判断
 
@@ -111,6 +112,7 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "loaded_models": ["opus-mt-zh-en"],
   "uptime_s": 12.3,
   "ocr_loaded": false,
+  "model_idle_unload_s": 600,
   "glossary_enabled": true,
   "glossary_builtin_entries": 574,
   "glossary_user_path": "C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv",
@@ -130,7 +132,8 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `status` | 固定 `"ok"` |
 | `version` | 引擎包版本 |
 | `models_dir` | 本次进程使用的模型目录 |
-| `loaded_models` | 已经加载进内存的模型 id，字典序。`--preload` 成功后这里能看到它们 |
+| `loaded_models` | 已经加载进内存的模型 id，字典序。`--preload` 成功后这里能看到它们。#92 起模型空闲超过 `model_idle_unload_s` 秒会被卸载，这个列表会变短（可能变成 `[]`）；下次翻译会重新加载 |
+| `model_idle_unload_s` | 翻译模型空闲卸载的秒数，`0` 表示不卸载。#92 新增 |
 | `uptime_s` | 自开始监听起的秒数，保留 1 位小数 |
 | `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增 |
 | `glossary_enabled` | 服务端默认是否开启术语保护（`--glossary` / `SUIYI_GLOSSARY` 的结果；内置术语表加载失败时为 `false`）。不反映单次请求的 `glossary` 覆盖。#83 新增 |
@@ -203,7 +206,7 @@ MVP 必测六个方向是 `zh↔en`、`zh↔ja`、`en↔ja`。它们是否出现
 
 `elapsed_ms` 是翻译器报告的墙钟毫秒，保留 1 位小数，包含该方向第一次加载模型的时间，不包含 HTTP 解析和语种检测。
 
-`serve` 在开始监听之前加载语种检测的统计模型（py3langid，约 0.4–0.5 s，计入启动时间，启动日志打印「语种检测已预热 N ms」），所以第一次 `auto` 请求的检测也在 1 ms 内，`elapsed_ms` 之外不再藏着这段加载时间（#40）。预热失败只在 stderr 告警、不阻止启动，检测会在第一次需要统计模型时再加载。
+`serve` 在开始监听之前加载语种检测的统计模型（启动日志打印「语种检测已预热 N ms」）。#92 起用精简缓存（见 [语种检测](语种检测.md#92-精简缓存)），有缓存时约 10 ms；安装后第一次启动要在子进程里生成缓存，约 0.5 s，所以第一次 `auto` 请求的检测也在 1 ms 内，`elapsed_ms` 之外不再藏着这段加载时间（#40）。预热失败只在 stderr 告警、不阻止启动，检测会在第一次需要统计模型时再加载。
 
 空白文本在源语种已经明确、且与目标不同时，按翻译核心的约定返回空字符串，不检查模型是否下载。`source: "auto"` 的空白或纯符号通常无法识别，返回 `detect_failed`。
 
