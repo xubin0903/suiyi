@@ -26,6 +26,7 @@ from suiyi_engine.registry import (
 )
 from suiyi_engine.segment import join_segments, split_sentences
 from suiyi_engine.terms import GlossaryStore, TermStats, translate_with_terms
+from suiyi_engine.zh_punct import normalize_zh_punct
 
 __all__ = ["TranslationResult", "Translator", "UnsupportedPairError"]
 
@@ -211,6 +212,8 @@ def _translate_text(
         restore_final_punct(source, output, tgt)
         for source, output in zip(sources, current, strict=True)
     ]
+    if tgt == "zh":
+        current = [normalize_zh_punct(output) for output in current]
     return join_segments(current, segments, tgt)
 
 

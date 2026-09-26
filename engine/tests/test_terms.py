@@ -309,6 +309,66 @@ def test_spacing_variant_in_first_pass_is_fixed_without_placeholder() -> None:
     assert stats.variant_fixes == 1 and stats.protected == 0
 
 
+def test_type_suffix_after_placeholder_is_dropped() -> None:
+    """tc-big 把占位符当型号，写出「ZXQ型」（#97）。"""
+
+    pr = _term("pr", "pull request", "拉取请求")
+    flaky = _term("flaky", "flaky test", "不稳定测试")
+    source = "The pull request was merged and the flaky test was quarantined."
+    model = FakeModel(
+        {
+            source: "Pull 请求被合并并进行片状测试。",
+            "The ZXQ was merged and the ZXW was quarantined.": "ZXQ型被合并,ZXW 型被隔离。",
+        }
+    )
+    out = translate_with_terms([source], "en", "zh", [pr, flaky], model)
+    assert out == ["拉取请求被合并,不稳定测试被隔离。"]
+
+
+def test_type_suffix_is_kept_when_the_source_says_type() -> None:
+    engine = _term("e", "container orchestration", "容器编排")
+    source = "Pick a container orchestration type."
+    model = FakeModel({source: "选择集装箱类型。", "Pick a ZXQ type.": "选择一种 ZXQ型。"})
+    assert translate_with_terms([source], "en", "zh", [engine], model) == ["选择一种容器编排型。"]
+
+
+def test_new_repetition_in_placeholder_version_falls_back(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    flaky = _term("builtin:flaky", "flaky test", "不稳定测试")
+    source = "The flaky test was quarantined."
+    model = FakeModel(
+        {source: "片状测试被隔离。", "The ZXQ was quarantined.": "ZXQ被隔离了,他们被隔离了。"}
+    )
+    stats = TermStats()
+    with caplog.at_level(logging.INFO, logger="suiyi_engine.terms"):
+        out = translate_with_terms([source], "en", "zh", [flaky], model, stats)
+    assert out == ["片状测试被隔离。"]
+    assert stats.fallbacks == 1
+    assert "builtin:flaky repeat" in caplog.text
+
+
+def test_repeated_term_itself_is_not_a_repetition() -> None:
+    co = _term("co", "container orchestration", "容器编排")
+    source = "Container orchestration beats manual container orchestration."
+    model = FakeModel(
+        {
+            source: "集装箱管弦乐胜过手工集装箱管弦乐。",
+            "ZXQ beats manual ZXW.": "ZXQ胜过手工ZXW。",
+        }
+    )
+    assert translate_with_terms([source], "en", "zh", [co], model) == ["容器编排胜过手工容器编排。"]
+
+
+def test_builtin_glossary_has_common_engineering_terms() -> None:
+    by_id = {term.id: term for term in load_builtin()}
+    assert by_id["builtin:flaky-test"].forms["zh"][0] == "不稳定测试"
+    assert by_id["builtin:ci-pipeline"].forms["zh"][0] == "CI 流水线"
+    assert by_id["builtin:ci-cd-pipeline"].forms["zh"][0] == "CI/CD 流水线"
+    found = find_terms("The CI/CD pipeline runs every flaky test.", "en", list(by_id.values()))
+    assert [match.term.id for match in found] == ["builtin:ci-cd-pipeline", "builtin:flaky-test"]
+
+
 # ---------------------------------------------------------------- 句末标点
 
 
@@ -526,7 +586,7 @@ def test_serve_reads_glossary_env_vars(
     assert status["glossary_enabled"] is False
     assert status["glossary_user_path"] == str(env_file)
     assert status["glossary_user_entries"] == 2
-    assert f"术语保护关闭：内置 574 条，用户 2 条（{env_file}）" in capsys.readouterr().out
+    assert f"术语保护关闭：内置 608 条，用户 2 条（{env_file}）" in capsys.readouterr().out
     monkeypatch.setenv("SUIYI_GLOSSARY", "1")
     assert serve()["glossary_enabled"] is True
     assert serve("--no-glossary")["glossary_enabled"] is False
@@ -592,3 +652,29 @@ def test_convert_accepts_legacy_tier_but_mvp_skips_it() -> None:
     assert [e["id"] for e in convert.select_models(manifest, ["opus-mt-en-zh"], None)] == [
         "opus-mt-en-zh"
     ]
+
+
+# ---------------------------------------------------------------- 真实模型回归（#97）
+
+_ISSUE_97_PR = (
+    "The pull request was merged after the CI pipeline passed and the flaky test was quarantined."
+)
+_ISSUE_97_K8S = (
+    "Kubernetes is an open-source system for automating deployment, scaling, and management of "
+    "containerized applications. It is an open source project hosted by the CNCF "
+    "(Cloud Native Computing Foundation)."
+)
+
+
+@pytest.mark.model
+def test_issue_97_regressions_with_real_models() -> None:
+    models_dir = Path(os.environ["SUIYI_MODELS_DIR"])
+    if not (models_dir / "opus-mt-eng-zho-tc-big-2022-05-14").is_dir():
+        pytest.skip("需要 tc-big en→zh 模型")
+    translator = Translator(models_dir, glossary=GlossaryStore(None))
+    on = translator.translate(_ISSUE_97_PR, "en", "zh", glossary=True).text
+    assert "不稳定测试" in on and "隔离" in on and "拉取请求" in on
+    assert "型" not in on
+    for glossary in (True, False):
+        text = translator.translate(_ISSUE_97_K8S, "en", "zh", glossary=glossary).text
+        assert not any(mark in text for mark in ",;()"), text

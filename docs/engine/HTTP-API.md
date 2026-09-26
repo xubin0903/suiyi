@@ -114,7 +114,7 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "ocr_loaded": false,
   "model_idle_unload_s": 600,
   "glossary_enabled": true,
-  "glossary_builtin_entries": 574,
+  "glossary_builtin_entries": 608,
   "glossary_user_path": "C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv",
   "glossary_user_entries": 6,
   "glossary_error": null,
@@ -203,6 +203,8 @@ MVP 必测六个方向是 `zh↔en`、`zh↔ja`、`en↔ja`。它们是否出现
 单条文本超过 `--max-text-chars`（默认 10000 个 Unicode 字符，按 Python `len`）返回 413。批量时每一条单独计，任一条超限则整次请求失败，不返回部分译文。
 
 `source` 为 `auto` 时，对每一条文本调用语种检测。检测结果就是响应里的 `source`，`detected` 为 `true`。检测结果与 `target` 相同则原样返回，`route` 为空数组。检测结果为 `und` 时返回 `detect_failed`。显式指定语种时 `detected` 为 `false`。
+
+目标语为 `zh` 时，译文里挨着中文的半角 `, ; : ? ! ( )` 会改成全角；URL、邮箱、反引号代码、数字（`2,000`、`12:30`）和 `foo(bar)` 这类代码保持原样（#97，见 [术语保护 · #97](术语保护.md#97中文标点规范化与占位符修正linux-实测)）。`/ocr_translate` 同样适用。
 
 `elapsed_ms` 是翻译器报告的墙钟毫秒，保留 1 位小数，包含该方向第一次加载模型的时间，不包含 HTTP 解析和语种检测。
 

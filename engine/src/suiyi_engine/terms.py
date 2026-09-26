@@ -409,10 +409,66 @@ def _speculative(
                 record.variant_fixes += 1
             outputs[index] = fixed
             continue
+        candidate = _strip_placeholder_suffix(candidate, item, tgt)
         restored = _restore_or_log(candidate, item, src, tgt, record)
-        if restored is not None:
-            outputs[index] = restored
+        if restored is None:
+            continue
+        repeated = _new_repeat(restored, outputs[index], item, tgt)
+        if repeated:
+            record.fallbacks += 1
+            ids = " ".join(slot.term.id for slot in item.slots)
+            logger.info("术语保护回退 %s→%s %s repeat", src, tgt, ids)
+            continue
+        outputs[index] = restored
     return outputs
+
+
+# tc-big 把占位符当成型号，常在后面加「型」（「ZXQ型在CI管道通过后被合并」）。原文里术语后面
+# 本来就跟着 type / model 之类的词时保留。
+_TYPE_WORDS = re.compile(r"\s*(?:type|types|model|models|series|class|variant)\b", re.IGNORECASE)
+_HAN_RUN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
+_REPEAT_N = 3
+
+
+def _strip_placeholder_suffix(raw: str, item: Protected, tgt: str) -> str:
+    if tgt not in ("zh", "ja"):
+        return raw
+    text = raw
+    for slot in item.slots:
+        position = item.text.find(slot.placeholder)
+        after = item.text[position + len(slot.placeholder) :] if position >= 0 else ""
+        if _TYPE_WORDS.match(after):
+            continue
+        pattern = rf"(?<![A-Za-z0-9])({re.escape(slot.placeholder)})(?![0-9])[ \t]*型"
+        text = re.sub(pattern, r"\1", text, flags=re.IGNORECASE)
+    return text
+
+
+def _new_repeat(restored: str, first: str, item: Protected, tgt: str) -> str | None:
+    """占位符版多出了首遍译文里没有的重复片段（「不稳定测试被隔离了，他们被隔离了」）时返回该片段。
+
+    术语本身的写法不算（同一术语出现两次是正常的）。只看中日文译文里连续 3 个以上的汉字。
+    """
+
+    if tgt not in ("zh", "ja"):
+        return None
+    targets = sorted({slot.target for slot in item.slots}, key=len, reverse=True)
+
+    def grams(text: str) -> dict[str, int]:
+        for target in targets:
+            text = text.replace(target, "|")
+        counts: dict[str, int] = {}
+        for run in _HAN_RUN.findall(text):
+            for start in range(len(run) - _REPEAT_N + 1):
+                gram = run[start : start + _REPEAT_N]
+                counts[gram] = counts.get(gram, 0) + 1
+        return counts
+
+    before = grams(first)
+    for gram, count in grams(restored).items():
+        if count >= 2 and before.get(gram, 0) < count:
+            return gram
+    return None
 
 
 def _restore_or_log(raw: str, item: Protected, src: str, tgt: str, record: TermStats) -> str | None:
