@@ -30,7 +30,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -399,10 +399,14 @@ class Backend(Protocol):
 class SuiyiBackend:
     """现有 ``Translator``：与产品同一条路径（分句、批量、中转、拼回）。"""
 
-    def __init__(self, models_dir: Path, threads: int) -> None:
+    def __init__(self, models_dir: Path, threads: int, *, glossary: bool = False) -> None:
+        from suiyi_engine.terms import GlossaryStore
         from suiyi_engine.translator import Translator
 
-        self._translator = Translator(models_dir, intra_threads=threads)
+        # glossary=True：与服务默认一致，只用内置术语表（不读用户术语表）
+        store = GlossaryStore(None, enabled=True) if glossary else None
+        self._translator = Translator(models_dir, intra_threads=threads, glossary=store)
+        self.term_stats = self._translator.term_stats
 
     def supports(self, src: str, tgt: str) -> bool:
         return any(pair[0] == src and pair[1] == tgt for pair in self._translator.available_pairs())
@@ -892,7 +896,9 @@ class TermTranslator:
 def make_backend(config: RunConfig, log_dir: Path | None) -> Backend:
     candidate = config.candidate
     if candidate.kind == "suiyi":
-        return SuiyiBackend(config.models_dir, config.threads)
+        return SuiyiBackend(
+            config.models_dir, config.threads, glossary=bool(candidate.spec.get("glossary"))
+        )
     if candidate.kind == "ct2":
         return Ct2Backend(candidate, config.models_dir, config.threads)
     if config.server_bin is None:
@@ -937,6 +943,9 @@ def run_candidate(
         reset = getattr(call, "reset_stats", None)
         if callable(reset):
             reset()  # 预热不计入术语保护统计
+        engine_terms = getattr(backend, "term_stats", None)
+        if engine_terms is not None:
+            engine_terms.reset()
         pid = backend.process_pid()
         loaded_mb = process_rss_mb(pid)
         results: list[SampleResult] = []
@@ -972,6 +981,7 @@ def run_candidate(
             "samples": len(results),
             "directions": [f"{src}-{tgt}" for src, tgt in directions],
             "skipped_directions": [f"{src}-{tgt}" for src, tgt in unsupported],
+            **({"engine_terms": asdict(engine_terms)} if engine_terms is not None else {}),
             **config.extra,
         },
         "environment": _environment(),

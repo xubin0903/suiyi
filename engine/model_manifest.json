@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_on": "2026-09-25",
+  "checked_on": "2026-09-26",
   "language_codes": "ISO-639-1",
   "weight_note": "weight_bytes 是所钉修订上 pytorch_model.bin 的字节数，不是 CTranslate2 int8 体积。同一仓库里的 tf/flax/rust 文件是另一份权重，不要相加。",
   "license_policy": "纳入模型的 license 一律写 CC-BY-4.0：OPUS-MT-train models/README.md 将预训练权重声明为 CC BY 4.0；weights_source 为上游 Marian zip 的条目，zip 内自带 CC BY 4.0 全文 LICENSE。hf_card_license 保留 Hugging Face 模型卡 YAML，二者不一致时仍按 CC-BY-4.0 署名。禁止 NC。",
@@ -25,6 +25,43 @@
       "notes": "直连 zh→en。模型卡正文与 YAML 均为 CC-BY-4.0。Marian base：d_model 512，encoder/decoder 各 6 层，8 头，FFN 2048，词表 65001。训练说明为 transformer，源侧含 cmn_Hans 与 cmn_Hant 等中文变体，源文本不加语言标记。Tatoeba-test.zho.eng BLEU 36.1、chrF 0.548（模型卡）。仓库内无 LICENSE 文件。"
     },
     {
+      "id": "opus-mt-eng-zho-tc-big-2022-05-14",
+      "src": "en",
+      "tgt": "zh",
+      "hf_repo": null,
+      "hf_revision": null,
+      "weights_source": {
+        "type": "opus-mt-zip",
+        "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-zho/opusTCv20210807+bt_transformer-big_2022-05-14.zip",
+        "sha256": "9bfe340595d7c80fe869a2fe3dd4d03e2d9751514ff8c35724be464819b36a8e",
+        "bytes": 878468956,
+        "model_file": "opusTCv20210807+bt.spm32k-spm32k.transformer-big.model1.npz.best-perplexity.npz",
+        "vocab_files": [
+          "opusTCv20210807+bt.spm32k-spm32k.vocab.yml"
+        ],
+        "copy_files": [
+          "source.spm",
+          "target.spm",
+          "LICENSE",
+          "README.md"
+        ]
+      },
+      "model_card": "https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-en-zh",
+      "upstream_readme_url": "https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/master/models/eng-zho/README.md",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+      "hf_card_license": "CC-BY-4.0",
+      "upstream_license": "CC-BY-4.0",
+      "upstream_license_url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-zho/opusTCv20210807+bt_transformer-big_2022-05-14.zip",
+      "attribution": "Helsinki-NLP Tatoeba-MT eng-zho opusTCv20210807+bt_transformer-big_2022-05-14 (zip sha256 9bfe340595d7c80fe869a2fe3dd4d03e2d9751514ff8c35724be464819b36a8e); Tiedemann & Thottingal, EAMT 2020; Tiedemann, WMT 2020; CC-BY-4.0",
+      "src_prefix_token": ">>cmn_Hans<<",
+      "tier": "mvp",
+      "architecture": "marian-big",
+      "weight_file": "opusTCv20210807+bt.spm32k-spm32k.transformer-big.model1.npz.best-perplexity.npz",
+      "weight_bytes": 946526090,
+      "notes": "直连 en→zh，取代 opus-mt-en-zh（Issue #83，#78 方案 A）。Tatoeba-Challenge eng-zho 的 transformer-big 发布（训练数据 opusTCv20210807 + 回译），共享词表 spm32k，多目标中文，源文本句首必须加 >>cmn_Hans<<（与原文之间一个空格）。zip 内 LICENSE 为 CC BY 4.0 全文。#78 全量评测（388 条中 en→zh 154 条）：chrF 39.8 / COMET 88.2（opus-mt-en-zh 33.1 / 83.7），术语准确率 80%（54%）。int8 目录约 250 MB。已知问题：常丢句末「。」，由 Translator 的句末标点补全处理。"
+    },
+    {
       "id": "opus-mt-en-zh",
       "src": "en",
       "tgt": "zh",
@@ -37,11 +74,11 @@
       "upstream_license_url": "https://github.com/Helsinki-NLP/OPUS-MT-train/blob/master/models/README.md",
       "attribution": "Helsinki-NLP OPUS-MT opus-mt-en-zh (revision 408d9bc410a388e1d9aef112a2daba955b945255); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
       "src_prefix_token": ">>cmn_Hans<<",
-      "tier": "mvp",
+      "tier": "legacy",
       "architecture": "marian-base",
       "weight_file": "pytorch_model.bin",
       "weight_bytes": 312087009,
-      "notes": "直连 en→zh，多目标中文。模型卡要求源文本句首加 >>id<<。本修订 vocab.json 中 >>cmn_Hans<< 的 id 为 5（保留号段）；同时存在 >>cmn<<（361）与 >>cmn_Hant<<（21）。简体默认用 >>cmn_Hans<<，与原文之间加一个空格，字段本身不含空格。模型卡列出的 gan/lzh/cjy 在该词表中没有对应 >>id<<。YAML 为 apache-2.0，正文未再写许可证，仓库内无 LICENSE 文件；权重发布说明见 upstream_license。Tatoeba-test.eng.zho BLEU 31.4、chrF 0.268（模型卡）。Marian base，d_model 512，6+6 层，8 头，FFN 2048。"
+      "notes": "旧版 en→zh，已被 opus-mt-eng-zho-tc-big-2022-05-14 取代（Issue #83），不再属于 mvp。只在新模型未安装时作为回退使用（服务启动时告警并提示补装命令）。直连 en→zh，多目标中文。模型卡要求源文本句首加 >>id<<。本修订 vocab.json 中 >>cmn_Hans<< 的 id 为 5（保留号段）；同时存在 >>cmn<<（361）与 >>cmn_Hant<<（21）。简体默认用 >>cmn_Hans<<，与原文之间加一个空格，字段本身不含空格。模型卡列出的 gan/lzh/cjy 在该词表中没有对应 >>id<<。YAML 为 apache-2.0，正文未再写许可证，仓库内无 LICENSE 文件；权重发布说明见 upstream_license。Tatoeba-test.eng.zho BLEU 31.4、chrF 0.268（模型卡）。Marian base，d_model 512，6+6 层，8 头，FFN 2048。"
     },
     {
       "id": "opus-mt-zho-jpn-tc-big-2022-07-28",
@@ -392,9 +429,9 @@
       "via": "en",
       "legs": [
         "opus-mt-ja-en",
-        "opus-mt-en-zh"
+        "opus-mt-eng-zho-tc-big-2022-05-14"
       ],
-      "notes": "无 Helsinki-NLP Hugging Face 直连模型。第二跳必须使用 opus-mt-en-zh 的 src_prefix_token >>cmn_Hans<<。两次解码，热路径延迟大约加倍，质量有损。"
+      "notes": "无 Helsinki-NLP Hugging Face 直连模型。第二跳用 en→zh 的 tc-big（#83 起），必须加 src_prefix_token >>cmn_Hans<<；只装了旧 opus-mt-en-zh 时回退用它。两次解码，热路径延迟大约加倍，质量有损。"
     }
   ],
   "rejected": [

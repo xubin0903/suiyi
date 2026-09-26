@@ -158,8 +158,8 @@ def test_missing_direct_model_names_manifest_id(tmp_path: Path) -> None:
 
     assert exc_info.value.src == "en"
     assert exc_info.value.tgt == "zh"
-    assert exc_info.value.missing_ids == ("opus-mt-en-zh",)
-    assert "opus-mt-en-zh" in str(exc_info.value)
+    assert exc_info.value.missing_ids == ("opus-mt-eng-zho-tc-big-2022-05-14",)
+    assert "opus-mt-eng-zho-tc-big-2022-05-14" in str(exc_info.value)
 
 
 def test_missing_pivot_lists_leg_ids(tmp_path: Path) -> None:
@@ -168,7 +168,7 @@ def test_missing_pivot_lists_leg_ids(tmp_path: Path) -> None:
     with pytest.raises(UnsupportedPairError) as exc_info:
         translator.translate("こんにちは。", "ja", "zh")
 
-    assert exc_info.value.missing_ids == ("opus-mt-ja-en", "opus-mt-en-zh")
+    assert exc_info.value.missing_ids == ("opus-mt-ja-en", "opus-mt-eng-zho-tc-big-2022-05-14")
 
 
 def test_pivot_rejects_a_different_model_for_the_same_direction(tmp_path: Path) -> None:

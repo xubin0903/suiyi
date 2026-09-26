@@ -75,6 +75,8 @@ _LANG_RE = re.compile(r"^[a-z]{2}$")
 _REPO_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _ZIP_SOURCE_TYPE = "opus-mt-zip"
+# legacy：已被取代、只留作回退的旧模型（#83），不属于任何 --tier，需要时用 --ids 单独转换。
+_TIERS = ("mvp", "optional", "legacy")
 _ZIP_URL_PREFIX = "https://object.pouta.csc.fi/"
 _SPM_FILES = ("source.spm", "target.spm")
 _VOCAB_FILES = ("vocab.json", "source.vocab", "target.vocab")
@@ -602,8 +604,8 @@ def _validate_model_entry(entry: object, index: int) -> None:
     token = entry["src_prefix_token"]
     if token is not None and not isinstance(token, str):
         raise ConvertError(f"{model_id} 的 src_prefix_token 必须是字符串或 null", code=2)
-    if entry["tier"] not in ("mvp", "optional"):
-        raise ConvertError(f"{model_id} 的 tier 必须是 mvp 或 optional", code=2)
+    if entry["tier"] not in _TIERS:
+        raise ConvertError(f"{model_id} 的 tier 必须是 mvp、optional 或 legacy", code=2)
     if not isinstance(entry["notes"], str):
         raise ConvertError(f"{model_id} 的 notes 必须是字符串", code=2)
 

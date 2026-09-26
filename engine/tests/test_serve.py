@@ -273,7 +273,7 @@ def test_cli_passes_decode_flags(
     seen: dict[str, object] = {}
 
     class FakeTranslator:
-        def __init__(self, models_dir: object, **kwargs: int) -> None:
+        def __init__(self, models_dir: object, **kwargs: object) -> None:
             seen["kwargs"] = kwargs
             self.registry = type("Registry", (), {"models_dir": models_dir})()
 
@@ -303,7 +303,9 @@ def test_cli_passes_decode_flags(
         ]
     )
     assert code == 0
-    assert seen["kwargs"] == {"intra_threads": 2, "beam_size": 4, "max_batch_size": 8}
+    kwargs = dict(seen["kwargs"])  # type: ignore[call-overload]
+    assert kwargs.pop("glossary").enabled is True
+    assert kwargs == {"intra_threads": 2, "beam_size": 4, "max_batch_size": 8}
     assert seen["preload"] == [("zh", "en")]
     assert "intra_threads=2 beam_size=4 max_batch_size=8" in capsys.readouterr().out
 

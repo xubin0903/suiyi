@@ -13,6 +13,28 @@
    "notes": "现用 5 个 Marian 模型；ja→zh 走 ja→en→zh 中转。"
   },
   {
+   "name": "suiyi-83",
+   "label": "#83 方案 A：en→zh tc-big + 术语保护（服务默认）",
+   "kind": "suiyi",
+   "glossary": true,
+   "models": ["opus-mt-eng-zho-tc-big-2022-05-14", "opus-mt-zh-en"],
+   "license": "CC-BY-4.0",
+   "redistributable": "是（署名）",
+   "commercial": "是",
+   "notes": "现有 Translator 路径（beam 2，与服务默认一致）+ 内置术语表：先正常翻译，只对没译对的术语做占位符保护；句末标点补全。--models-dir 里 en→zh 装 opus-mt-eng-zho-tc-big-2022-05-14。"
+  },
+  {
+   "name": "suiyi-83-noterms",
+   "label": "#83 方案 A，关闭术语保护",
+   "kind": "suiyi",
+   "glossary": false,
+   "models": ["opus-mt-eng-zho-tc-big-2022-05-14", "opus-mt-zh-en"],
+   "license": "CC-BY-4.0",
+   "redistributable": "是（署名）",
+   "commercial": "是",
+   "notes": "同 suiyi-83，但关闭术语保护（相当于请求里 glossary=false）。"
+  },
+  {
    "name": "opus-tc-big",
    "label": "OPUS-MT tc-big 组合",
    "kind": "ct2",

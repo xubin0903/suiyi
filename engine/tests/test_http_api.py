@@ -141,7 +141,16 @@ def test_health_reports_version_models_dir_and_uptime(tmp_path: Path) -> None:
         "uptime_s",
         "ocr_loaded",
         "ocr_error",
+        "glossary_enabled",
+        "glossary_builtin_entries",
+        "glossary_user_path",
+        "glossary_user_entries",
+        "glossary_error",
+        "glossary_warnings",
     }
+    # 没给术语表的翻译器报告关闭（#83）
+    assert body["glossary_enabled"] is False
+    assert body["glossary_warnings"] == []
     assert "access-control-allow-origin" not in {name.lower() for name in response.headers}
 
 
@@ -178,7 +187,7 @@ def test_translate_direct_and_then_health_shows_loaded_model(tmp_path: Path) -> 
     with _client(_translator(tmp_path)) as client:
         response = client.post(
             "/translate",
-            json={"text": "你好。", "source": "zh", "target": "en", "glossary": {"你": "you"}},
+            json={"text": "你好。", "source": "zh", "target": "en", "future_option": {"x": 1}},
         )
         health = client.get("/health")
     assert response.status_code == 200
@@ -378,15 +387,18 @@ def test_unsupported_pair_names_missing_model(tmp_path: Path) -> None:
     direct_error = direct.json()["error"]
     assert direct.status_code == 422
     assert direct_error["code"] == "unsupported_pair"
-    assert direct_error["details"]["missing_models"] == ["opus-mt-en-zh"]
+    assert direct_error["details"]["missing_models"] == ["opus-mt-eng-zho-tc-big-2022-05-14"]
     assert direct_error["details"]["source"] == "en"
     assert direct_error["details"]["target"] == "zh"
-    assert "opus-mt-en-zh" in direct_error["message"]
+    assert "opus-mt-eng-zho-tc-big-2022-05-14" in direct_error["message"]
     assert "index" not in direct_error["details"]
     pivot_error = pivot.json()["error"]
     assert pivot.status_code == 422
     assert pivot_error["code"] == "unsupported_pair"
-    assert pivot_error["details"]["missing_models"] == ["opus-mt-ja-en", "opus-mt-en-zh"]
+    assert pivot_error["details"]["missing_models"] == [
+        "opus-mt-ja-en",
+        "opus-mt-eng-zho-tc-big-2022-05-14",
+    ]
 
 
 def test_batch_unsupported_pair_includes_index(tmp_path: Path) -> None:

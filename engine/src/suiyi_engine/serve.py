@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from suiyi_engine import langdetect
-from suiyi_engine.api import DEFAULT_MAX_IMAGE_BYTES, ApiSettings, create_app
+from suiyi_engine.api import DEFAULT_MAX_IMAGE_BYTES, ApiSettings, create_app, glossary_status
 from suiyi_engine.api_ocr import OcrProvider, OcrUnavailable
 from suiyi_engine.errors import UnsupportedPairError
 from suiyi_engine.registry import (
@@ -22,6 +22,7 @@ from suiyi_engine.registry import (
     default_intra_threads,
     normalize_lang,
 )
+from suiyi_engine.terms import GlossaryStore, default_user_glossary_path, parse_bool
 from suiyi_engine.translator import Translator
 
 DEFAULT_HOST = "127.0.0.1"
@@ -100,6 +101,42 @@ def resolve_max_image_bytes(cli_value: int | None) -> int:
     return _require_limit(value, "SUIYI_MAX_IMAGE_BYTES")
 
 
+def resolve_glossary_enabled(cli_value: bool | None) -> bool:
+    """命令行 ``--glossary`` / ``--no-glossary`` 优先，其次 ``SUIYI_GLOSSARY``，默认开启。
+
+    环境变量接受 ``1/0``、``true/false``（以及 ``on/off``，不区分大小写）；认不出的值只告警、
+    按默认开启处理，不阻止启动（客户端用环境变量传参，老版引擎会忽略它，#83）。
+    """
+
+    if cli_value is not None:
+        return bool(cli_value)
+    raw = os.environ.get("SUIYI_GLOSSARY", "")
+    if not raw.strip():
+        return True
+    value = parse_bool(raw)
+    if value is None:
+        print(
+            f"警告：SUIYI_GLOSSARY 的值 {raw!r} 无法识别（应为 1/0 或 true/false），"
+            "术语保护按默认开启",
+            file=sys.stderr,
+            flush=True,
+        )
+        return True
+    return value
+
+
+def resolve_user_glossary(cli_value: str | Path | None) -> Path:
+    """命令行 ``--user-glossary`` 优先，其次 ``SUIYI_USER_GLOSSARY``，默认见
+    :func:`suiyi_engine.terms.default_user_glossary_path`。文件可以不存在。"""
+
+    if cli_value is not None and str(cli_value).strip():
+        return Path(str(cli_value).strip())
+    raw = os.environ.get("SUIYI_USER_GLOSSARY", "").strip()
+    if raw:
+        return Path(raw)
+    return default_user_glossary_path()
+
+
 def parse_preload(raw: str | None) -> list[tuple[str, str]]:
     """把 ``zh-en,en-zh`` 解析成语种对。空字符串表示不预热。"""
 
@@ -132,6 +169,8 @@ def serve_from_args(args: argparse.Namespace) -> int:
         max_text_chars = resolve_max_text_chars(args.max_text_chars)
         max_image_bytes = resolve_max_image_bytes(getattr(args, "max_image_bytes", None))
         preload_pairs = parse_preload(args.preload)
+        glossary_enabled = resolve_glossary_enabled(getattr(args, "glossary", None))
+        user_glossary = resolve_user_glossary(getattr(args, "user_glossary", None))
     except ServeError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
@@ -147,6 +186,8 @@ def serve_from_args(args: argparse.Namespace) -> int:
         max_batch_size=args.max_batch_size,
         max_image_bytes=max_image_bytes,
         preload_ocr=bool(getattr(args, "preload_ocr", False)),
+        glossary_enabled=glossary_enabled,
+        user_glossary=user_glossary,
     )
 
 
@@ -163,12 +204,15 @@ def run_server(
     max_batch_size: int | None = None,
     max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
     preload_ocr: bool = False,
+    glossary_enabled: bool = True,
+    user_glossary: Path | str | None = None,
 ) -> int:
     """构建翻译器并阻塞运行，直到进程收到停止信号。
 
     ``intra_threads``、``beam_size``、``max_batch_size`` 为 ``None`` 时用翻译核心的默认值。
     OCR 依赖或模型缺失从不阻止启动，文本翻译不受影响：``preload_ocr`` 加载失败只在 stderr 告警
     （含缺失的模型 id），``/health`` 的 ``ocr_error`` 带上原因，OCR 接口返回 503。
+    术语表同理：用户术语表缺失或格式错误只告警，``/health`` 的 ``glossary_*`` 字段带上状态。
     """
 
     try:
@@ -185,8 +229,9 @@ def run_server(
         print(str(exc), file=sys.stderr)
         return exc.code
 
+    glossary = GlossaryStore(user_glossary, enabled=glossary_enabled)
     try:
-        translator = Translator(models_dir, **decode)
+        translator = Translator(models_dir, glossary=glossary, **decode)
         if preload_pairs:
             translator.preload(preload_pairs)
     except UnsupportedPairError as exc:
@@ -218,6 +263,8 @@ def run_server(
             ocr,
         )
         _print_startup(host, port, translator, decode, detector_ms)
+        _print_glossary(translator)
+        _warn_outdated(translator)
         if ocr_ms is not None:
             print(f"OCR 已预热 {ocr_ms:.0f} ms", flush=True)
         try:
@@ -311,6 +358,36 @@ def _print_startup(
     )
     if detector_ms is not None:
         print(f"语种检测已预热 {detector_ms:.0f} ms", flush=True)
+
+
+def _print_glossary(translator: Translator) -> None:
+    status = glossary_status(translator)
+    state = "开启" if status["glossary_enabled"] else "关闭"
+    print(
+        f"术语保护{state}：内置 {status['glossary_builtin_entries']} 条，"
+        f"用户 {status['glossary_user_entries']} 条（{status['glossary_user_path']}）",
+        flush=True,
+    )
+    if status["glossary_error"]:
+        print(f"警告：{status['glossary_error']}；翻译照常进行", file=sys.stderr, flush=True)
+    warnings = status["glossary_warnings"]
+    if isinstance(warnings, list) and warnings:
+        print(
+            f"警告：用户术语表有 {len(warnings)} 行被跳过，见 /health", file=sys.stderr, flush=True
+        )
+
+
+def _warn_outdated(translator: Translator) -> None:
+    """清单推荐的模型没装、正在用旧模型时告警并给出补装命令；服务照常启动（#83）。"""
+
+    outdated = getattr(translator.registry, "outdated", None)
+    for src, tgt, preferred, installed in outdated() if callable(outdated) else []:
+        print(
+            f"警告：{src}→{tgt} 推荐模型 {preferred} 未安装，暂用 {installed}。"
+            f"补装：python scripts/convert_models.py --ids {preferred}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _listen_url(host: str, port: int) -> str:

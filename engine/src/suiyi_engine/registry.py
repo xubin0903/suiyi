@@ -9,7 +9,7 @@ import json
 import os
 import threading
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from suiyi_engine.backends.base import TranslationBackend
@@ -121,6 +121,9 @@ class Manifest:
 
     direct: Mapping[tuple[str, str], str]
     pivots: Mapping[tuple[str, str], Pivot]
+    # 清单里列出的全部模型 id → 方向（含 tier=legacy 的旧模型）。中转的某一跳没装清单指定的
+    # 模型、但装了清单里同方向的另一个模型（升级前的旧 en→zh）时，用已安装的那个（#83）。
+    known: Mapping[str, tuple[str, str]] = field(default_factory=dict)
 
 
 BackendFactory = Callable[[ModelRecord], TranslationBackend]
@@ -164,7 +167,11 @@ class ModelRegistry:
         for direction, pivot in self.manifest.pivots.items():
             if direction in found or direction in self.manifest.direct:
                 continue
-            if all(leg in self._by_id for leg in pivot.legs):
+            hops = ((pivot.src, pivot.via), (pivot.via, pivot.tgt))
+            if all(
+                leg in self._by_id or self._listed_substitute(hop) is not None
+                for leg, hop in zip(pivot.legs, hops, strict=True)
+            ):
                 found[direction] = "pivot"
         sources = [src for src, tgt in self._by_direction if tgt == "en" and src != "en"]
         targets = [tgt for src, tgt in self._by_direction if src == "en" and tgt != "en"]
@@ -247,6 +254,27 @@ class ModelRegistry:
             for record in self.resolve(src, tgt):
                 self.get(record.id)
 
+    def _listed_substitute(self, direction: tuple[str, str]) -> ModelRecord | None:
+        """该方向已安装、且清单里登记为同方向的模型（清单外的自定义模型不能顶替中转的一跳）。"""
+
+        record = self._by_direction.get(direction)
+        if record is not None and self.manifest.known.get(record.id) == direction:
+            return record
+        return None
+
+    def outdated(self) -> list[tuple[str, str, str, str]]:
+        """清单推荐的直连模型没装、正在用同方向别的模型的语向。
+
+        每项是 ``(src, tgt, 推荐 id, 实际 id)``。服务启动时据此告警并给出补装命令（#83）。
+        """
+
+        found: list[tuple[str, str, str, str]] = []
+        for (src, tgt), record in sorted(self._by_direction.items()):
+            preferred = self.manifest.direct.get((src, tgt))
+            if preferred is not None and preferred != record.id and preferred not in self._by_id:
+                found.append((src, tgt, preferred, record.id))
+        return found
+
     def loaded_model_ids(self) -> list[str]:
         """已经加载进内存的模型 id，按字典序。"""
 
@@ -258,7 +286,7 @@ class ModelRegistry:
         missing: list[str] = []
         records: list[ModelRecord] = []
         for leg, direction in zip(pivot.legs, expected, strict=True):
-            record = self._by_id.get(leg)
+            record = self._by_id.get(leg) or self._listed_substitute(direction)
             if record is None:
                 missing.append(leg)
                 continue
@@ -289,6 +317,7 @@ def load_manifest(path: Path) -> Manifest:
         raise ValueError(f"模型清单缺少 models 或 pivots 数组：{path}")
 
     direct: dict[tuple[str, str], str] = {}
+    known: dict[str, tuple[str, str]] = {}
     for index, entry in enumerate(models):
         if not isinstance(entry, dict):
             raise ValueError(f"models[{index}] 必须是对象")
@@ -296,6 +325,7 @@ def load_manifest(path: Path) -> Manifest:
         src = normalize_lang(_require_str(entry, "src", model_id))
         tgt = normalize_lang(_require_str(entry, "tgt", model_id))
         direct.setdefault((src, tgt), model_id)
+        known[model_id] = (src, tgt)
 
     parsed: dict[tuple[str, str], Pivot] = {}
     for index, entry in enumerate(pivots):
@@ -314,7 +344,7 @@ def load_manifest(path: Path) -> Manifest:
         ):
             raise ValueError(f"pivots[{index}] 的 legs 必须是两个模型 id")
         parsed[(src, tgt)] = Pivot(src, tgt, via, (legs[0], legs[1]))
-    return Manifest(direct=direct, pivots=parsed)
+    return Manifest(direct=direct, pivots=parsed, known=known)
 
 
 def scan_models(
