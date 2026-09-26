@@ -83,9 +83,9 @@ client/
 | 已暂停监听 | 灰 | `随译 · 已暂停监听` |
 | 服务异常 | 红 | `随译 · 翻译服务异常：<原因>` |
 
-**菜单：** 状态行（灰）、翻译剪贴板、框选翻译（Ctrl+Alt+S）、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。「框选翻译」发 `TranslateRegionRequested`，括号内是 `SetRegionHotkey` 设入的实际生效快捷键（禁用或注册失败时只显示「框选翻译」）。
+**菜单：** 状态行（灰）、翻译剪贴板、框选翻译（Ctrl+Alt+S）、暂停监听 ✓、目标语言 ▸ 中文 / English / 日本語、专业术语 ▸ 专业术语保护 ✓ / 编辑我的术语表… / 重新加载术语表 / 灰色状态行（见[专业术语保护](#专业术语保护)）、重启翻译服务、打开设置文件、打开日志目录、关于、退出。左键单击发 `ShowLastPopupRequested`。「框选翻译」发 `TranslateRegionRequested`，括号内是 `SetRegionHotkey` 设入的实际生效快捷键（禁用或注册失败时只显示「框选翻译」）。
 
-**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused` 并写回 `clipboard.monitorEnabled`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言写回 `primaryTarget`（启动时从设置恢复，每次翻译时读取设置）；「翻译剪贴板」→ `TranslateFlowCoordinator.TranslateClipboard`（见[主流程](#主流程)）；「框选翻译」→ `TranslateFlowCoordinator.TranslateRegionAsync(Tray)`，与框选快捷键同一路径（见[框选翻译](#框选翻译)）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：用记事本打开 `SettingsStore.FilePath`，文件不存在时先写出默认设置。
+**当前接线（`App.xaml.cs`）：** 暂停监听 → `ClipboardMonitor.Paused` 并写回 `clipboard.monitorEnabled`；快捷键注册失败 → 托盘气泡；翻译服务状态由 `EngineSupervisor`（#32）驱动：Starting / Restarting → 正在准备，Ready → 就绪，Failed → 异常并弹气泡（崩溃重启时也弹），映射见 `Tray/EngineTrayStatus`；「重启翻译服务」调用 `EngineSupervisor.RestartAsync()`；目标语言写回 `primaryTarget`（启动时从设置恢复，每次翻译时读取设置）；「翻译剪贴板」→ `TranslateFlowCoordinator.TranslateClipboard`（见[主流程](#主流程)）；「框选翻译」→ `TranslateFlowCoordinator.TranslateRegionAsync(Tray)`，与框选快捷键同一路径（见[框选翻译](#框选翻译)）；左键单击 → `PopupViewModel.ShowLast()` 重新显示上一次浮窗（从未显示过时只写日志）。打开设置文件：用记事本打开 `SettingsStore.FilePath`，文件不存在时先写出默认设置。「专业术语 ▸」三项见[专业术语保护](#专业术语保护)；视图在每次右键菜单打开前调 `TrayController.NotifyMenuOpening()`，集成层借 `MenuOpening` 刷新术语表状态行。
 
 **手测：**
 
@@ -198,6 +198,23 @@ TranslateRegionAsync(trigger)
 
 验收（P95 ≤ 2500 ms，热路径，OCR 已预热）：服务就绪后对 ≤ 1280×720 的段落区域连续框选 10 次，看最后一行日志或托盘「关于」里的「框选翻译延迟」。
 
+## 专业术语保护
+
+#84，对接引擎 #83（约定以 [#83 的约定评论](https://github.com/xubin0903/suiyi/issues/83#issuecomment-5845549072) 最新内容为准，客户端侧的名字集中在 `Suiyi.Core/Glossary/GlossaryContract.cs`）。引擎在翻译时保护内置术语表和用户术语表里的专业词（如 Kubernetes 首句出「容器编排引擎」）；客户端只负责开关、打开用户术语表文件和显示状态，**不做表格编辑界面**。
+
+**托盘「专业术语 ▸」：**
+
+- **专业术语保护 ✓**：写回 `glossary.enabled`（默认开），弹气泡说明生效范围。复制翻译**立即生效**：`EngineClient.GlossaryOverride` 每次 `/translate` 读当前设置，请求体带 `"glossary": true|false`（只影响这一次请求）。框选翻译（`/ocr_translate`）约定里没有单次开关，客户端不带，按服务启动时的 `SUIYI_GLOSSARY`，所以**重启翻译服务后**才跟上。
+- **编辑我的术语表…**：路径 `<设置目录>\glossary.tsv`（即 `%APPDATA%\suiyi\glossary.tsv`，随 `SUIYI_CONFIG_DIR`；`UserGlossaryFile.ResolvePath`）。文件不存在时先按 `UserGlossaryFile.Template` 创建（UTF-8 无 BOM、LF，全是注释和注释掉的示例，不添加任何条目），再用 .tsv 的默认程序打开，没有关联程序时退回记事本。服务报告的 `glossary_user_path` 与客户端算出的不同（例如复用了别处启动的服务）时写 Warning 并提示。
+- **重新加载术语表**：`POST /glossary/reload`，气泡显示结果（我的 N 条、被跳过的行或文件级错误）。不点也行：服务每次 `/translate` 前检查文件（最多每秒一次），保存后下一次翻译即生效。
+- **状态行**（灰）：「内置 N 条 · 我的 N 条」；用户术语表有文件级错误时加「我的术语表未生效：…」（此时服务只用内置表，翻译照常）；有被跳过的行时加「有 N 行被跳过，例如：」和第一条原因。每行最多 60 字。旧版引擎（`/health` 没有 `glossary_*`）显示「当前翻译服务不支持术语保护（需要更新引擎，见 #83）」。
+
+**状态来源：** `EngineClient.GetHealthAsync` 解析 `/health` 的 `glossary_enabled`、`glossary_builtin_entries`、`glossary_user_path`、`glossary_user_entries`、`glossary_error`、`glossary_warnings`，缓存为 `KnownGlossaryStatus`（`GlossaryStatus`），`GlossarySupported` 为 `false` 表示旧版引擎。看门狗每 10 s 调一次 `/health`，所以状态行最多滞后 10 s；服务就绪时主动取一次，有新的文件级错误时弹一次气泡。`Invalidate()` 清空缓存。「关于」末尾列出开关、条数、错误和全部被跳过的行（`GlossaryStatusText.About`）。
+
+**文件格式**（引擎解析，这里只为写模板和文档）：UTF-8（允许 BOM）TSV，每行 `源词<Tab>目标词[<Tab>en-zh|zh-en]`；不写方向时双向生效，含中文的一列当中文侧；`#` 开头为注释，不支持行内注释；英文不区分大小写（全大写缩写除外），自动匹配常见复数；同词用户条目优先；上限 1 MiB、5000 条。
+
+**兼容：** main 上的引擎 `TranslateRequest` 设了 `extra="ignore"`（`engine/tests/test_http_api.py` 覆盖了带 `glossary` 字段的请求），所以客户端始终带这个字段，不按 `/health` 判断；环境变量旧引擎也忽略。客户端与 #83 谁先合入都能工作。
+
 ## 设置文件
 
 `Suiyi.Core/Settings`（#27）。路径 `%APPDATA%\suiyi\settings.json`（漫游配置），环境变量 `SUIYI_CONFIG_DIR` 可覆盖目录（测试、便携模式）；路径规则只在 `SettingsPaths` 一处。
@@ -232,6 +249,9 @@ TranslateRegionAsync(trigger)
     "preload": "zh-en,en-zh",
     "preloadOcr": true
   },
+  "glossary": {
+    "enabled": true
+  },
   "startWithWindows": false
 }
 ```
@@ -254,6 +274,7 @@ TranslateRegionAsync(trigger)
 | `engine.modelsDir` | `null` | 不填则不传 `--models-dir` |
 | `engine.preload` | `"zh-en,en-zh"` | `""` 表示不预加载 |
 | `engine.preloadOcr` | `true` | 启动时预热 OCR 模型（#58），`true` 时追加 `--preload-ocr`（#53）；环境变量 `SUIYI_ENGINE_PRELOAD_OCR=1/0` 可覆盖。缺 OCR 依赖或模型时服务只告警、照常启动，文本翻译不受影响，`/health.ocr_error` 带上原因（见[框选翻译](#框选翻译)的错误说明）。关掉可省内存（OCR 模型加载后服务内存增加，见 #54），代价是首次框选多一次 OCR 冷加载（超时按 `TimeoutPolicy` 放宽到 30 s） |
+| `glossary.enabled` | `true` | 专业术语保护（#84，与引擎 #83 约定同名）；托盘「专业术语保护」写回这里。缺这一节或类型不对时按 `true`。新增这一节**不升** `schemaVersion`（升了旧客户端会把文件判为过新），旧客户端读到时当未知字段忽略。见[专业术语保护](#专业术语保护) |
 | `startWithWindows` | `false` | 预留，M2 不实现 |
 
 **读取规则：**
@@ -529,6 +550,8 @@ OCR 联调（`EngineOcrLiveTests`，需 #53 服务端实现）另需 `SUIYI_ENGI
 Python 参数：`-m suiyi_engine serve --port <engine.port，默认 18780> --preload <engine.preload，默认 zh-en,en-zh> [--preload-ocr，engine.preloadOcr 为 true 时，默认带] [--models-dir <engine.modelsDir>]`；工作目录为仓库根（找不到时为 exe 所在目录）。进程以 `CreateNoWindow` 启动，不弹控制台，并加入 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object（`Suiyi.App/Interop/JobObject.cs`），客户端被任务管理器强杀时服务随之退出。
 
 以上 `engine.*` 取自设置文件（见「设置文件」）；开发时也可用环境变量临时覆盖（优先于设置）：`SUIYI_ENGINE_PORT`、`SUIYI_ENGINE_PRELOAD`、`SUIYI_ENGINE_PYTHON`、`SUIYI_ENGINE_MODELS_DIR`、`SUIYI_ENGINE_COMMAND`。
+
+术语保护（#84）**不走命令行参数**，而是给服务进程设环境变量（#83 约定，与引擎的 `--glossary` / `--no-glossary` / `--user-glossary` 等价）：`SUIYI_GLOSSARY=1/0`（`glossary.enabled`）、`SUIYI_USER_GLOSSARY=<设置目录>\glossary.tsv 的完整路径`。旧版引擎忽略不认识的环境变量照常启动，所以客户端不必等引擎先升级。环境变量写在 `EngineCommand.Environment`，由 `ProcessEngineLauncher` 设进子进程，启动日志「翻译服务：启动 …（环境变量 SUIYI_GLOSSARY=1 SUIYI_USER_GLOSSARY=…）」里能看到。监管器每次拉起（含重启）都按当前设置重新解析命令，托盘切换开关后重启服务即带上新值。
 
 **状态**（`StateChanged` 事件，在线程池线程上触发，界面自行切回 UI 线程）：
 
