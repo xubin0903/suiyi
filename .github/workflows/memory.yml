@@ -1,0 +1,111 @@
+# serve 内存测量（#96）：在 GitHub 托管的 Windows / Linux runner 上跑 scripts/measure_serve_memory.py，
+# 对比 main 与当前提交。结果写进 job summary，并上传 JSON。
+# 只在手动触发（workflow_dispatch）时运行，不参与 PR 检查；模型在 Linux 上转换后以 artifact 传给各平台。
+# 权限：只读检出。torch / transformers 只装在转换用的 venv，不进运行环境。
+
+name: 内存测量
+
+on:
+  # 临时：#96 开发期间推送到 feat/96-* 时也跑（workflow_dispatch 要等工作流进了 main 才能用）。合并前删掉。
+  push:
+    branches: ["feat/96-**"]
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: 对比基线（git ref）
+        default: origin/main
+        required: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  models:
+    name: 转换模型
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 缓存转换好的模型
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/suiyi-mem-models
+          key: mem-models-${{ hashFiles('engine/model_manifest.json', 'engine/src/suiyi_engine/tools/convert.py') }}
+      - name: 转换 tc-big en→zh、eng-jpn、zh-en（缓存未命中时）
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        run: |
+          python -m venv "$RUNNER_TEMP/convert-venv"
+          CPY="$RUNNER_TEMP/convert-venv/bin/python"
+          "$CPY" -m pip install --quiet --upgrade pip
+          "$CPY" -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          "$CPY" -m pip install --quiet -e "./engine[convert]"
+          "$CPY" scripts/convert_models.py --out-dir ~/suiyi-mem-models \
+            --ids opus-mt-eng-zho-tc-big-2022-05-14 opus-mt-eng-jpn-2021-02-18 opus-mt-zh-en
+          rm -rf ~/suiyi-mem-models/.cache
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mem-models
+          path: ~/suiyi-mem-models
+          retention-days: 3
+
+  measure:
+    name: 测量（${{ matrix.os }}）
+    needs: models
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    env:
+      PYTHONUTF8: "1"
+      # 与评测机一致；GitHub 托管 runner 一般没有 AMX，设了也无副作用
+      MKL_ENABLE_INSTRUCTIONS: AVX512_E1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: mem-models
+          path: ${{ runner.temp }}/models
+      - name: 安装运行环境（engine[ocr,eval]）并放好 OCR 模型
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          if [ "$RUNNER_OS" = "Windows" ]; then PY="$RUNNER_TEMP/venv/Scripts/python.exe"; else PY="$RUNNER_TEMP/venv/bin/python"; fi
+          "$PY" -m pip install --quiet --upgrade pip
+          "$PY" -m pip install --quiet -e "./engine[ocr,eval]"
+          "$PY" -m pip list | grep -iE 'ctranslate2|onnxruntime|rapidocr|psutil|numpy'
+          mkdir -p "$RUNNER_TEMP/models/ocr"
+          "$PY" -c "import pathlib, rapidocr, shutil, sys; [shutil.copy2(p, sys.argv[1]) for p in (pathlib.Path(rapidocr.__file__).parent / 'models').glob('*.onnx')]" "$RUNNER_TEMP/models/ocr"
+          "$PY" scripts/download_ocr_models.py --manifest engine/ocr_model_manifest.json --models-dir "$RUNNER_TEMP/models" check
+          ls -R "$RUNNER_TEMP/models" | head -40
+          git worktree add "$RUNNER_TEMP/baseline" "${{ inputs.baseline || 'origin/main' }}"
+          git -C "$RUNNER_TEMP/baseline" log --oneline -1
+          echo "PY=$PY" >> "$GITHUB_ENV"
+      - name: 测量
+        run: |
+          OUT="$RUNNER_TEMP/mem"; mkdir -p "$OUT"
+          M="$RUNNER_TEMP/models"; B="$RUNNER_TEMP/baseline/engine/src"; S="$PWD/engine/src"
+          HEAD=$(git rev-parse --short HEAD); BASE=$(git -C "$RUNNER_TEMP/baseline" rev-parse --short HEAD)
+          echo "## ${RUNNER_OS}：基线 $BASE，当前 $HEAD（GitHub 托管 runner，$(nproc 2>/dev/null || echo "$NUMBER_OF_PROCESSORS") 逻辑 CPU）" >> "$GITHUB_STEP_SUMMARY"
+          run() { "$PY" scripts/measure_serve_memory.py "$@" --summary "$GITHUB_STEP_SUMMARY"; }
+          run breakdown --models-dir "$M" --label "进程内分解（当前 $HEAD）" --out "$OUT/breakdown.json"
+          run serve --models-dir "$M" --src "$B" --label "基线 $BASE" --out "$OUT/baseline.json" --port 18801
+          CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_PACKED_GEMM=0" --out "$OUT/baseline-nopack.json" --port 18802
+          run serve --models-dir "$M" --src "$S" --label "当前 $HEAD（默认参数）" --out "$OUT/head.json" --port 18803 --idle-wait 20 -- --model-idle-unload 15
+          run serve --models-dir "$M" --src "$S" --label "当前 $HEAD（默认参数，第二次）" --out "$OUT/head-2.json" --port 18804
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: mem-${{ matrix.os }}
+          path: ${{ runner.temp }}/mem
