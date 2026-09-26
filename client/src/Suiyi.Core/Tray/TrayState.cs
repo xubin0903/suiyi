@@ -1,3 +1,5 @@
+using Suiyi.Core.Glossary;
+
 namespace Suiyi.Core.Tray;
 
 /// <summary>
@@ -25,6 +27,12 @@ public sealed record TrayState
 
     /// <summary>当前实际生效的框选快捷键（如 <c>Ctrl+Alt+S</c>）；禁用、冲突或注册失败时为 <see langword="null"/>。</summary>
     public string? RegionHotkey { get; init; }
+
+    /// <summary>专业术语保护开关（设置 <c>glossary.enabled</c>，#84）。</summary>
+    public bool GlossaryEnabled { get; init; } = GlossaryContract.DefaultEnabled;
+
+    /// <summary>「专业术语」子菜单里的状态行（多行以 <c>\n</c> 分隔，由 <see cref="GlossaryStatusText.MenuLines"/> 生成）。</summary>
+    public string GlossaryStatus { get; init; } = GlossaryStatusText.Unknown;
 
     /// <summary>托盘「框选翻译」菜单文字：有快捷键时带上，例如「框选翻译（Ctrl+Alt+S）」。</summary>
     public string RegionMenuText => string.IsNullOrWhiteSpace(RegionHotkey) ? "框选翻译" : $"框选翻译（{RegionHotkey.Trim()}）";

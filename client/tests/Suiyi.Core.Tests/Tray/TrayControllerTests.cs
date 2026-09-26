@@ -1,3 +1,4 @@
+using Suiyi.Core.Glossary;
 using Suiyi.Core.Tray;
 
 namespace Suiyi.Core.Tests.Tray;
@@ -22,6 +23,54 @@ public sealed class TrayControllerTests
         _tray.ExitRequested += (_, _) => _events.Add("exit");
         _tray.ShowLastPopupRequested += (_, _) => _events.Add("popup");
         _tray.NotificationRequested += (_, e) => _events.Add($"notify:{e.Title}:{e.Message}");
+        _tray.GlossaryToggled += (_, e) => _events.Add($"glossary:{e.Enabled}:{_tray.State.GlossaryEnabled}");
+        _tray.EditGlossaryRequested += (_, _) => _events.Add("edit-glossary");
+        _tray.ReloadGlossaryRequested += (_, _) => _events.Add("reload-glossary");
+        _tray.MenuOpening += (_, _) => _events.Add("menu");
+    }
+
+    [Fact]
+    public void ToggleGlossary_FlipsStateAndRaises()
+    {
+        Assert.True(_tray.State.GlossaryEnabled);
+
+        _tray.Invoke(TrayCommand.ToggleGlossary);
+        _tray.Invoke(TrayCommand.ToggleGlossary);
+
+        Assert.Equal(["glossary:False:False", "glossary:True:True"], _events);
+    }
+
+    [Fact]
+    public void EditAndReloadGlossary_Raise()
+    {
+        _tray.Invoke(TrayCommand.EditGlossary);
+        _tray.Invoke(TrayCommand.ReloadGlossary);
+        _tray.NotifyMenuOpening();
+
+        Assert.Equal(["edit-glossary", "reload-glossary", "menu"], _events);
+    }
+
+    [Fact]
+    public void SetGlossaryEnabled_DoesNotRaiseToggled()
+    {
+        _tray.SetGlossaryEnabled(false);
+
+        Assert.False(_tray.State.GlossaryEnabled);
+        Assert.Empty(_events);
+        Assert.Equal(1, _stateChanges);
+    }
+
+    [Fact]
+    public void SetGlossaryStatus_ShowsLinesInSubmenu()
+    {
+        _tray.SetGlossaryStatus("内置 300 条 · 我的 2 条\n我的术语表未生效：坏了");
+
+        var submenu = _tray.Menu.Single(i => i.Text == "专业术语");
+        Assert.Equal(["专业术语保护", "编辑我的术语表…", "重新加载术语表", "-", "内置 300 条 · 我的 2 条", "我的术语表未生效：坏了"], submenu.Children.Select(c => c.IsSeparator ? "-" : c.Text));
+        Assert.All(submenu.Children.Skip(4), c => Assert.False(c.IsEnabled));
+
+        _tray.SetGlossaryStatus(null);
+        Assert.Equal(GlossaryStatusText.Unknown, _tray.State.GlossaryStatus);
     }
 
     [Theory]

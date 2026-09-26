@@ -10,7 +10,7 @@ public sealed class TrayMenuBuilderTests
         var menu = TrayMenuBuilder.Build(new TrayState { Status = TrayStatus.Ready });
 
         Assert.Equal(
-            ["就绪（中文）", "-", "翻译剪贴板", "框选翻译", "暂停监听", "目标语言", "-", "重启翻译服务", "打开设置文件", "打开日志目录", "-", "关于", "退出"],
+            ["就绪（中文）", "-", "翻译剪贴板", "框选翻译", "暂停监听", "目标语言", "专业术语", "-", "重启翻译服务", "打开设置文件", "打开日志目录", "-", "关于", "退出"],
             menu.Select(i => i.IsSeparator ? "-" : i.Text));
     }
 
@@ -45,6 +45,21 @@ public sealed class TrayMenuBuilderTests
         Assert.Equal(["中文", "English", "日本語"], submenu.Children.Select(c => c.Text));
         Assert.All(submenu.Children, c => Assert.Equal(TrayCommand.SetTarget, c.Command));
         Assert.Equal(target, Assert.Single(submenu.Children, c => c.IsChecked).Argument);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GlossarySubmenu_ChecksToggleAndShowsStatus(bool enabled)
+    {
+        var submenu = TrayMenuBuilder.Build(new TrayState { GlossaryEnabled = enabled }).Single(i => i.Text == "专业术语");
+
+        Assert.Equal(
+            [TrayCommand.ToggleGlossary, TrayCommand.EditGlossary, TrayCommand.ReloadGlossary],
+            submenu.Children.Where(c => c.Command != TrayCommand.None).Select(c => c.Command));
+        Assert.Equal(enabled, Find(submenu.Children, TrayCommand.ToggleGlossary).IsChecked);
+        Assert.Equal("术语表状态：等待翻译服务就绪", submenu.Children[^1].Text);
+        Assert.False(submenu.Children[^1].IsEnabled);
     }
 
     [Fact]

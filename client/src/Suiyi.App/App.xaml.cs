@@ -12,6 +12,7 @@ using Suiyi.Core.Capture;
 using Suiyi.Core.Clipboard;
 using Suiyi.Core.Engine;
 using Suiyi.Core.Flow;
+using Suiyi.Core.Glossary;
 using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Lifecycle;
 using Suiyi.Core.Logging;
@@ -65,6 +66,7 @@ public partial class App : Application
     private OcrTranslationService? _ocrTranslation;
     private CancellationTokenSource? _regionCaptureCts;
     private bool _regionDemo;
+    private string? _notifiedGlossaryError;
 
     /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)
@@ -92,6 +94,7 @@ public partial class App : Application
         {
             Target = settings.PrimaryTarget,
             Paused = !settings.Clipboard.MonitorEnabled,
+            GlossaryEnabled = settings.Glossary.Enabled,
         });
         _trayView = new NotifyIconTrayView(_tray);
         _activation = new InstanceActivation(
@@ -248,10 +251,12 @@ public partial class App : Application
             _ = _engine?.RestartAsync();
         };
 
+        WireGlossary(tray);
+
         tray.OpenSettingsRequested += (_, _) => OpenSettings();
         tray.OpenLogsRequested += (_, _) => OpenFolder(LogPaths.ResolveDirectory());
         tray.AboutRequested += (_, _) => MessageBox.Show(
-            $"随译 {GetVersion()}\n开源免费的本地翻译工具\n\n{RepositoryUrl}\n\n端到端延迟：{_flow?.Latency.Summary() ?? "未启用"}\n框选翻译延迟：{_flow?.OcrLatency.Summary() ?? "未启用"}",
+            $"随译 {GetVersion()}\n开源免费的本地翻译工具\n\n{RepositoryUrl}\n\n端到端延迟：{_flow?.Latency.Summary() ?? "未启用"}\n框选翻译延迟：{_flow?.OcrLatency.Summary() ?? "未启用"}\n\n{GlossaryStatusText.About(_settings?.Current.Glossary.Enabled ?? GlossaryContract.DefaultEnabled, _engineClient?.KnownGlossaryStatus, _engineClient?.GlossarySupported)}",
             "关于随译",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -360,7 +365,12 @@ public partial class App : Application
     private void StartEngine(TrayController tray)
     {
         // 翻译服务进程（#32）。配置取自设置 engine.*，再由 SUIYI_ENGINE_* 环境变量覆盖。
-        var options = EngineOptionsOverrides.Apply(_settings!.Current.Engine.ToEngineOptions(), Environment.GetEnvironmentVariable);
+        // 术语保护（#84）：glossary.enabled 与用户术语表路径经环境变量 SUIYI_GLOSSARY / SUIYI_USER_GLOSSARY 交给服务（#83 约定）。
+        // 每次拉起（含托盘「重启翻译服务」、崩溃重启）都按当前设置重新解析，托盘切换开关后下一次拉起即带上新值。
+        EngineOptions CurrentOptions() => EngineOptionsOverrides.Apply(
+            _settings!.Current.ToEngineOptions(SettingsPaths.ResolveDirectory()),
+            Environment.GetEnvironmentVariable);
+        var options = CurrentOptions();
         _engineLog = new FileLogger(LogPaths.ResolveDirectory(), LogPaths.EnginePrefix);
         try
         {
@@ -371,11 +381,16 @@ public partial class App : Application
             _logger?.Warn("无法创建 Job Object，客户端被强杀时翻译服务可能残留", ex);
         }
 
-        _engineClient = new EngineClient(options.Port);
+        _engineClient = new EngineClient(options.Port)
+        {
+            // 每次 /translate 都按当前设置带 "glossary": true|false，托盘切换后下一次复制翻译即生效，不用重启服务。
+            GlossaryOverride = () => _settings?.Current.Glossary.Enabled,
+        };
         _engine = new EngineSupervisor(
             options,
             new ProcessEngineLauncher(process => _engineJob?.Assign(process)),
             new EngineClientEndpoint(_engineClient),
+            commandFactory: () => EngineCommandResolver.Resolve(CurrentOptions(), EngineCommandEnvironment.Current()),
             logger: _logger,
             outputLogger: _engineLog);
 
@@ -386,6 +401,7 @@ public partial class App : Application
             {
                 // 服务（重新）就绪后刷新 /languages 缓存。
                 _engineClient?.Invalidate();
+                _ = RefreshGlossaryStatusAsync();
             }
 
             var (status, detail) = EngineTrayStatus.Map(change);
@@ -396,6 +412,130 @@ public partial class App : Application
             }
         });
         _engine.Start();
+    }
+
+    private void WireGlossary(TrayController tray)
+    {
+        tray.GlossaryToggled += (_, args) =>
+        {
+            _logger?.Info($"托盘：专业术语保护{(args.Enabled ? "开启" : "关闭")}");
+            _settings?.Update(s => s with { Glossary = s.Glossary with { Enabled = args.Enabled } });
+
+            // 复制翻译每次请求都带开关，立即生效；框选翻译（/ocr_translate 没有单次覆盖字段）按服务启动时的设置，下次重启翻译服务后跟上。
+            tray.ShowNotification(AppTitle, GlossaryStatusText.Toggled(args.Enabled));
+            UpdateGlossaryStatus();
+        };
+        tray.EditGlossaryRequested += (_, _) => EditUserGlossary();
+        tray.ReloadGlossaryRequested += (_, _) => _ = ReloadGlossaryAsync();
+
+        // 右键菜单打开时用缓存（看门狗每 10 秒取一次 /health）刷新状态行，不发请求。
+        tray.MenuOpening += (_, _) => UpdateGlossaryStatus();
+    }
+
+    private void UpdateGlossaryStatus() =>
+        _tray?.SetGlossaryStatus(string.Join('\n', GlossaryStatusText.MenuLines(_engineClient?.KnownGlossaryStatus, _engineClient?.GlossarySupported)));
+
+    private async Task RefreshGlossaryStatusAsync()
+    {
+        if (_engineClient is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _engineClient.GetHealthAsync().ConfigureAwait(true);
+        }
+        catch (EngineException ex)
+        {
+            _logger?.Warn($"术语表：读取服务状态失败：{ex.Message}");
+            return;
+        }
+
+        UpdateGlossaryStatus();
+        var status = _engineClient.KnownGlossaryStatus;
+        if (status is null)
+        {
+            _logger?.Info("术语表：当前翻译服务未报告术语表状态（旧版引擎），glossary 字段会被忽略");
+            return;
+        }
+
+        _logger?.Info($"术语表：内置 {status.BuiltinEntries} 条，我的 {status.UserEntries} 条，警告 {status.Warnings.Count} 条{(status.HasError ? "，用户术语表未生效：" + status.Error : string.Empty)}");
+        var path = UserGlossaryFile.ResolvePath(SettingsPaths.ResolveDirectory());
+        if (UserGlossaryFile.IsMismatch(path, status.UserPath))
+        {
+            _logger?.Warn($"术语表：服务使用的用户术语表是 {status.UserPath}，与客户端的 {path} 不同（可能复用了别处启动的服务）");
+        }
+
+        // 用户术语表有文件级错误时提示一次（同一个错误不重复提示）。
+        if (status.HasError && !string.Equals(status.Error, _notifiedGlossaryError, StringComparison.Ordinal))
+        {
+            _notifiedGlossaryError = status.Error;
+            _tray?.ShowNotification(AppTitle, GlossaryStatusText.Reloaded(status));
+        }
+    }
+
+    private async Task ReloadGlossaryAsync()
+    {
+        if (_engineClient is null)
+        {
+            _tray?.ShowNotification(AppTitle, "翻译服务未启用");
+            return;
+        }
+
+        try
+        {
+            var status = await _engineClient.ReloadGlossaryAsync().ConfigureAwait(true);
+            UpdateGlossaryStatus();
+            if (status is null)
+            {
+                _tray?.ShowNotification(AppTitle, GlossaryStatusText.NotSupported);
+                return;
+            }
+
+            _notifiedGlossaryError = status.Error;
+            _logger?.Info($"托盘：重新加载术语表：我的 {status.UserEntries} 条，警告 {status.Warnings.Count} 条{(status.HasError ? "，未生效：" + status.Error : string.Empty)}");
+            _tray?.ShowNotification(AppTitle, GlossaryStatusText.Reloaded(status));
+        }
+        catch (EngineException ex)
+        {
+            _logger?.Warn($"托盘：重新加载术语表失败：{ex.Message}");
+            _tray?.ShowNotification(AppTitle, "重新加载术语表失败：翻译服务未就绪，请稍后再试");
+        }
+    }
+
+    private void EditUserGlossary()
+    {
+        var file = UserGlossaryFile.ResolvePath(SettingsPaths.ResolveDirectory());
+        try
+        {
+            if (UserGlossaryFile.EnsureExists(file))
+            {
+                _logger?.Info($"托盘：已按模板创建用户术语表 {file}");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger?.Error($"无法创建用户术语表 {file}", ex);
+            _tray?.ShowNotification(AppTitle, $"无法创建 {file}");
+            return;
+        }
+
+        if (UserGlossaryFile.IsMismatch(file, _engineClient?.KnownGlossaryStatus?.UserPath))
+        {
+            _tray?.ShowNotification(AppTitle, $"注意：当前翻译服务读取的是 {_engineClient!.KnownGlossaryStatus!.UserPath}，改这个文件需要重启翻译服务才生效");
+        }
+
+        // 用系统默认程序打开 .tsv；没有关联程序时退回记事本。
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(file) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        {
+            _logger?.Info($"用默认程序打开 {file} 失败（{ex.Message}），改用记事本");
+            StartProcess("notepad.exe", file);
+        }
     }
 
     private void StartTrayDemo(TrayController tray)

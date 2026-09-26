@@ -49,6 +49,10 @@ public sealed class ProcessEngineLauncher : IEngineProcessLauncher
         startInfo.Environment["PYTHONUTF8"] = "1";
         startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
         startInfo.Environment["PYTHONUNBUFFERED"] = "1";
+        foreach (var (name, value) in command.Environment)
+        {
+            startInfo.Environment[name] = value;
+        }
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         process.OutputDataReceived += (_, e) => Forward(e.Data, isError: false);

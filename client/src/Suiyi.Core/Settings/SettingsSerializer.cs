@@ -101,6 +101,7 @@ public static class SettingsSerializer
             var hotkey = reader.Object(root, "hotkey");
             var popup = reader.Object(root, "popup");
             var engine = reader.Object(root, "engine");
+            var glossary = reader.Object(root, "glossary");
 
             var settings = new AppSettings
             {
@@ -134,6 +135,10 @@ public static class SettingsSerializer
                     ModelsDir = reader.String(engine, "modelsDir", null, "engine.", nullable: true),
                     Preload = reader.String(engine, "preload", d.Engine.Preload, "engine.")!,
                     PreloadOcr = reader.Bool(engine, "preloadOcr", d.Engine.PreloadOcr, "engine."),
+                },
+                Glossary = new GlossarySettings
+                {
+                    Enabled = reader.Bool(glossary, "enabled", d.Glossary.Enabled, "glossary."),
                 },
             };
 
