@@ -66,7 +66,7 @@ ja→zh 与 ja→en 用同一批 20 句日文原文；zh→ja、en→ja 的原�
 
 - **原创（MIT）**：绝大多数条目是为本测试集新写的句子和段落（`origin` 为 `original (Suiyi domain_v1)`），
   随仓库以 MIT 许可发布。没有复制新闻、论文、说明书或其他受版权保护的文本；产品、机构和药品只用通用名称。
-  参考译文由开发人工撰写，**没有**调用 Google / DeepL 或任何候选模型生成，状态为 `draft`，待负责人抽查。
+  参考译文由开发人工撰写，**没有**调用 Google / DeepL 或任何候选模型生成，状态为 `draft`。负责人已抽查 14 条，全部准确，`draft` 标记保留。
 - **Kubernetes 文档（CC BY 4.0）**：8 条 en→zh 与 5 条 en→ja 取自 Kubernetes 官方文档「概述」页
   （[英文原文](https://github.com/kubernetes/website/blob/main/content/en/docs/concepts/overview/_index.md)），
   参考译文用官方中文 / 日文本地化的已发布译文
