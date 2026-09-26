@@ -466,14 +466,15 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
 
 - **`EngineClient`**：整个进程一个实例，连接 `http://127.0.0.1:{port}`（默认 18780）。内部只有一个长寿命 `HttpClient`，处理器为 `SocketsHttpHandler { UseProxy = false }`（系统代理不能拦截回环地址），`HttpClient.Timeout` 为无限，每次请求由 `TimeoutPolicy` 算出超时并用 `CancellationTokenSource`（基于注入的 `TimeProvider`）取消。
   - `GetHealthAsync()`：刷新已加载模型；`GetLanguagesAsync()`：结果缓存；服务重启或模型目录变化后调用 `Invalidate()`。
-  - `TranslateAsync(text, source = "auto", target)`：缓存未知时先各取一次 `/languages`、`/health`（失败按「可能懒加载」处理），请求体为 UTF-8 JSON；成功后把 `route` 里的模型记为已加载。
+  - `TranslateAsync(text, source = "auto", target)`：缓存未知时先各取一次 `/languages`、`/health`（失败按「可能懒加载」处理），请求体为 UTF-8 JSON；成功后把 `route` 里的模型记为已加载，并记下使用时刻（`ModelUsage`，#94）。超时后自动重试一次（见[空闲卸载与超时重试](#空闲卸载与超时重试94)）。
+  - `KnownModelIdleUnloadSeconds`：最近一次 `/health.model_idle_unload_s`（#93），旧引擎没有该字段时为 `null`；`Logger`：冷方向与自动重试各写一行日志（不含原文），`App` 里接到客户端日志。
   - 响应 DTO 忽略未知字段（服务 0.0.x 内字段只增不改），不要打开 `UnmappedMemberHandling.Disallow`。
-- **`TranslationService`**：界面调用的入口。目标语言由注入的 `Func<(primary, secondary)>` 每次读取。
+- **`TranslationService`**：界面调用的入口（本层不重试，超时的自动重试在 `EngineClient` 里）。目标语言由注入的 `Func<(primary, secondary)>` 每次读取。
   - 默认 `auto → 主目标`；服务检测到原文就是主目标语种（`route` 为空、原样返回）时，再以 `检测结果 → 第二目标` 请求一次。
   - `sourceOverride`：用户手动指定原文语种（如纯汉字日语被检测成 zh），不再自动检测；指定语种等于主目标时直接译为第二目标。
   - **最新请求优先**：新调用会取消上一条未完成的调用；被取消的调用抛 `OperationCanceledException`，不是错误，界面直接丢弃即可。
   - 结果 `TranslationOutcome`：译文、原文语种、是否自动检测、实际目标、是否改译、`route`、服务端 `elapsed_ms`（改译为两次之和）、客户端往返耗时、请求次数。
-  - 不自动重试，重试由界面决定。
+  - 本层不自动重试，其余错误的重试由界面决定。
 
 ### OCR 调用（#56，#53）
 
@@ -498,6 +499,8 @@ M3 框选翻译的入口（#55）：按 `hotkey.region`（默认 `Ctrl+Alt+S`）
 
 字符数按 Unicode 码位计（与服务端 Python `len` 一致）。`/health`、`/languages` 固定 2000 ms。
 
+表里的「模型已加载」指：在 `loaded_models` 里，**并且**按下面的空闲卸载规则判为热（#94）。
+
 OCR 请求（暂无 OCR 性能基线，等 #52 后按 P95 调整）：
 
 | 条件 | 超时 |
@@ -505,6 +508,32 @@ OCR 请求（暂无 OCR 性能基线，等 #52 后按 P95 调整）：
 | `/ocr_translate`：`ocr_loaded == true`，且 `source→target` 候选路线与 `target→fallback_target` 路线的模型都已加载 | 15000 ms（#56 建议值） |
 | 其他（OCR 或翻译模型可能冷加载、`/health` / `/languages` 未知、旧引擎无 `ocr_loaded`） | 30000 ms（15000 + OCR 冷加载余量 + 翻译懒加载 10000） |
 | `/ocr`：`ocr_loaded == true` / 其他 | 15000 / 30000 ms |
+
+### 空闲卸载与超时重试（#94）
+
+引擎 #93 起，翻译模型连续 `model_idle_unload_s` 秒（`/health` 报告，默认 600，`0` 表示不卸载）没被用到就卸载，下次用到时重新加载（en→zh 约多 0.2–0.35 s，慢盘更久，见[性能基线 · #92](../docs/engine/性能基线.md#92-服务进程内存)）。看门狗 10 s 才刷新一次 `loaded_models`，卸载后第一句仍可能按 1500 ms 短超时发出去，所以客户端自己判断冷热。代码在 `Engine/ColdStart.cs`（纯逻辑）与 `EngineClient`。
+
+**冷热判断（`ColdStartRule`、`ModelUsageTracker`）：** 按**模型**记本客户端上次成功用到的时刻（`/translate` 响应的 `route`、`/ocr_translate` 各段的 `route`，单调时钟），因为引擎也是按模型计时（中转语向用两个模型，各自计时；框选翻译用过的模型复制翻译也算热）。一个方向的所有候选路线的所有模型都热，才算热。
+
+| 条件 | 判定 |
+|------|------|
+| `model_idle_unload_s` 未知（旧引擎没有该字段、还没取到 `/health`）或为 `0` | 本规则不起作用，按老逻辑只看 `loaded_models` |
+| 本次运行（或服务重启后，`Invalidate()` 会清空记录）从没成功用过该模型 | 冷 |
+| 距上次成功使用 ≥ `model_idle_unload_s − 30 s`（不小于 0） | 冷 |
+| 其他 | 热 |
+
+30 s 余量：引擎在开始翻译时记时刻，客户端在收到响应时才记；引擎每秒检查一次；请求还可能在服务端排队。判冷只是多等，判热却已卸载会误报超时，所以宁早勿晚。
+
+**冷方向的超时：** 冷模型按「未加载」交给 `TimeoutPolicy`，即落到上面两张表的冷加载档：复制翻译 10000 ms（长文本不低于段落档），框选翻译 30000 ms。与服务启动后首次加载模型用的是同一组值。只有冷热判断改变了结果时写一行 Info：`翻译：en→zh 的模型可能已被空闲卸载（model_idle_unload_s=600；opus-mt-en-zh=冷(612s)），按冷启动超时 10000 ms（原 1500 ms）`。
+
+**超时自动重试（`TimeoutRetry`）：** `/translate` 与 `/ocr_translate` 超时（`EngineErrorKind.Timeout`）后不立即报错，按冷启动超时（`TimeoutPolicy.ComputeColdMilliseconds(text)` / `OcrColdMs`）重发一次（框选重发同一张 PNG），写一行 Warning `翻译：/translate en→zh 1500 ms 超时，按冷启动超时 10000 ms 自动重试一次`；重试仍失败才抛出，浮窗显示「翻译超时」。
+
+- 只重试一次；热方向超时也重试（可能是意外卸载、睡眠唤醒后两边时钟不一致等）。
+- 只对超时重试：服务不可用、语向缺失等其他错误原样抛出，由主流程处理。
+- 调用方取消（新请求取代、用户关闭浮窗）不重试；超时与取消同时发生按取消处理。
+- 服务端翻译是串行的（翻译锁），第一次请求超时后服务端仍在做，重发的请求排在它后面；第一次已把模型加载好，重发一般很快返回。
+- 最坏等待：复制翻译短句 1.5 + 10 s，冷方向 10 + 10 s；框选 15 + 30 s，冷方向 30 + 30 s。期间浮窗一直是「正在翻译 / 正在识别」，用户可以关闭浮窗取消。
+- `/ocr`（只识别）不重试：服务端不卸载 OCR 模型。
 
 ### 错误
 
