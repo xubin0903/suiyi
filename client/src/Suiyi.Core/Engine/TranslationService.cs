@@ -10,7 +10,7 @@ namespace Suiyi.Core.Engine;
 /// <item>传入 <c>sourceOverride</c>（用户在浮窗手动指定原文语种，例如纯汉字日语被检测成 zh）时不再自动检测；
 /// 该语种等于主目标时直接译为第二目标。</item>
 /// <item>最新请求优先：新调用开始时取消上一条未完成的调用，被取消的调用抛 <see cref="OperationCanceledException"/>，不算错误。</item>
-/// <item>不重试；失败抛 <see cref="EngineException"/>，由界面决定是否重试。</item>
+/// <item>本层不重试；失败抛 <see cref="EngineException"/>，由界面决定是否重试。超时的自动重试一次在 <see cref="EngineClient"/> 里（#94）。</item>
 /// </list>
 /// </remarks>
 public sealed class TranslationService : ITranslationService, IDisposable

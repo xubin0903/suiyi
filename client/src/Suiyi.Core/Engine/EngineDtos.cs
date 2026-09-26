@@ -31,6 +31,13 @@ public sealed record HealthResponse
     public double UptimeSeconds { get; init; }
 
     /// <summary>
+    /// 翻译模型空闲卸载的秒数（#92/#93），0 表示不卸载。旧版引擎没有该字段时为 <see langword="null"/>，客户端按老逻辑处理（#94）。
+    /// 引擎报整数；这里用 <see cref="double"/> 接收，避免将来改成小数时整个 <c>/health</c> 解析失败。
+    /// </summary>
+    [JsonPropertyName("model_idle_unload_s")]
+    public double? ModelIdleUnloadSeconds { get; init; }
+
+    /// <summary>
     /// OCR 模型是否已加载（#53）。旧版引擎没有该字段时为 <see langword="null"/>。
     /// 只表示是否已加载，不表示 OCR 可用；加载失败的原因见 <see cref="OcrError"/>。
     /// </summary>

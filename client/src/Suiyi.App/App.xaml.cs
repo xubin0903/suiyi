@@ -385,6 +385,8 @@ public partial class App : Application
         {
             // 每次 /translate 与 /ocr_translate 都按当前设置带 glossary（请求体字段 / query 参数），托盘切换后下一次翻译即生效，不用重启服务。
             GlossaryOverride = () => _settings?.Current.Glossary.Enabled,
+            // #94：方向冷（模型可能已被服务空闲卸载）时按冷启动超时、超时后自动重试一次，各写一行日志。
+            Logger = _logger,
         };
         _engine = new EngineSupervisor(
             options,

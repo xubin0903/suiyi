@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Suiyi.Core.Logging;
 using Suiyi.Core.Ocr;
 
 namespace Suiyi.Core.Engine;
@@ -49,20 +50,31 @@ public sealed partial class EngineClient
     /// <param name="source">原文语种或 <c>"auto"</c>。</param>
     /// <param name="target">目标语种。</param>
     /// <param name="fallbackTarget">次目标；没有时为 <see langword="null"/>。</param>
-    public TimeSpan GetOcrTranslateTimeout(string source, string target, string? fallbackTarget)
+    /// <remarks>#94：与 <see cref="GetTimeout"/> 一样，可能已被空闲卸载的翻译模型按未加载处理（OCR 模型服务端不卸载）。</remarks>
+    public TimeSpan GetOcrTranslateTimeout(string source, string target, string? fallbackTarget) =>
+        TimeSpan.FromMilliseconds(ComputeOcrTranslateTimeout(source, target, fallbackTarget).Effective);
+
+    private (int Effective, int Baseline, LanguagesResponse? Languages, double? Idle) ComputeOcrTranslateTimeout(
+        string source,
+        string target,
+        string? fallbackTarget)
     {
         LanguagesResponse? languages;
         IReadOnlyCollection<string>? loaded;
         bool? ocrLoaded;
+        double? idle;
         lock (_gate)
         {
             languages = _languages;
             loaded = _loadedModels is null ? null : [.. _loadedModels];
             ocrLoaded = _ocrLoaded;
+            idle = _modelIdleUnloadSeconds;
         }
 
-        return TimeSpan.FromMilliseconds(
-            TimeoutPolicy.ComputeOcrTranslateMilliseconds(source, target, fallbackTarget, ocrLoaded, languages, loaded));
+        var baseline = TimeoutPolicy.ComputeOcrTranslateMilliseconds(source, target, fallbackTarget, ocrLoaded, languages, loaded);
+        var effective = TimeoutPolicy.ComputeOcrTranslateMilliseconds(
+            source, target, fallbackTarget, ocrLoaded, languages, _usage.FilterWarm(loaded, idle));
+        return (effective, baseline, languages, idle);
     }
 
     /// <summary>
@@ -73,7 +85,8 @@ public sealed partial class EngineClient
     /// <item>请求体为原始 PNG 字节，<c>Content-Type: image/png</c>；查询参数 <c>source</c>、<c>target</c>、
     /// 可选 <c>fallback_target</c>（为空或与 <c>target</c> 相同则不发）。</item>
     /// <item>先做客户端预检（<see cref="PrecheckImage"/>），超限直接抛 <see cref="EngineErrorKind.ImageTooLarge"/>，不发请求。</item>
-    /// <item>超时见 <see cref="TimeoutPolicy.ComputeOcrTranslateMilliseconds"/>；缓存未知时先各取一次 <c>/languages</c>、<c>/health</c>（失败忽略）。</item>
+    /// <item>超时见 <see cref="TimeoutPolicy.ComputeOcrTranslateMilliseconds"/>（可能已被空闲卸载的翻译模型按未加载处理，#94）；缓存未知时先各取一次 <c>/languages</c>、<c>/health</c>（失败忽略）。</item>
+    /// <item>超时后按 <see cref="TimeoutPolicy.OcrColdMs"/> 自动重试一次（<see cref="TimeoutRetry"/>，#94），调用方取消不重试。</item>
     /// <item>成功后把 OCR 记为已加载、把各段 <c>route</c> 里的模型记为已加载。识别为空是正常结果（200，<c>paragraphs: []</c>）。</item>
     /// </list>
     /// </remarks>
@@ -95,10 +108,26 @@ public sealed partial class EngineClient
         ThrowIfPrecheckFails(png);
 
         await WarmCachesAsync(cancellationToken).ConfigureAwait(false);
-        var timeout = GetOcrTranslateTimeout(source, target, fallbackTarget);
+        var (timeoutMs, baselineMs, languages, idle) = ComputeOcrTranslateTimeout(source, target, fallbackTarget);
+        var direction = TimeoutPolicy.Normalize(source) + "→" + TimeoutPolicy.Normalize(target);
+        if (timeoutMs != baselineMs && languages is not null)
+        {
+            var models = TimeoutPolicy.CandidateRoutes(source, target, languages)
+                .Concat(string.IsNullOrWhiteSpace(fallbackTarget) ? [] : TimeoutPolicy.CandidateRoutes(target, fallbackTarget, languages))
+                .SelectMany(pair => pair.Models);
+            Logger?.Info(string.Create(
+                CultureInfo.InvariantCulture,
+                $"框选翻译：{direction} 的模型可能已被空闲卸载（model_idle_unload_s={idle}；{_usage.Describe(models, idle)}），按冷启动超时 {timeoutMs} ms（原 {baselineMs} ms）"));
+        }
+
         var pathAndQuery = BuildOcrTranslatePath(source, target, fallbackTarget, GlossaryOverride?.Invoke());
-        var response = await SendAsync<OcrTranslateResponse>(HttpMethod.Post, pathAndQuery, PngContent(png), timeout, cancellationToken)
-            .ConfigureAwait(false);
+        var response = await TimeoutRetry.ExecuteAsync(
+            (timeout, ct) => SendAsync<OcrTranslateResponse>(HttpMethod.Post, pathAndQuery, PngContent(png), timeout, ct),
+            TimeSpan.FromMilliseconds(timeoutMs),
+            TimeSpan.FromMilliseconds(TimeoutPolicy.OcrColdMs),
+            (ex, retry) => LogTimeoutRetry("/ocr_translate", direction, ex, retry),
+            cancellationToken).ConfigureAwait(false);
+        var used = new List<string>();
         lock (_gate)
         {
             _ocrLoaded = true;
@@ -108,10 +137,12 @@ public sealed partial class EngineClient
                 if (result?.Route is { Count: > 0 } route)
                 {
                     _loadedModels?.UnionWith(route);
+                    used.AddRange(route);
                 }
             }
         }
 
+        _usage.MarkUsed(used);
         return response;
     }
 
