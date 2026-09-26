@@ -22,3 +22,12 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if item.get_closest_marker("model") is not None:
             item.add_marker(skip_model)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """语种检测缓存（#92）写到临时目录，不碰用户的 ~/.cache。子进程继承这个环境变量。"""
+
+    if not os.environ.get("SUIYI_CACHE_DIR", "").strip():
+        import tempfile
+
+        os.environ["SUIYI_CACHE_DIR"] = tempfile.mkdtemp(prefix="suiyi-test-cache-")

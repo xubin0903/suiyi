@@ -95,6 +95,13 @@ def main(argv: list[str] | None = None) -> int:
         help="单模型 intra 线程数，默认环境变量 SUIYI_INTRA_THREADS 或 min(4, CPU 数)",
     )
     serve.add_argument(
+        "--model-idle-unload",
+        type=int,
+        default=None,
+        metavar="SECONDS",
+        help="翻译模型空闲这么多秒后卸载，0 不卸载；默认环境变量 SUIYI_MODEL_IDLE_UNLOAD 或 600",
+    )
+    serve.add_argument(
         "--beam-size",
         type=int,
         default=None,

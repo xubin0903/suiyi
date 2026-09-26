@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -158,6 +159,7 @@ class ModelRegistry:
         options = dict(backend_options or {})
         self._factory = backend_factory or _default_factory(options)
         self._backends: dict[str, TranslationBackend] = {}
+        self._last_used: dict[str, float] = {}
         self._lock = threading.Lock()
 
     def available_pairs(self) -> list[tuple[str, str, str]]:
@@ -240,17 +242,57 @@ class ModelRegistry:
 
         cached = self._backends.get(model_id)
         if cached is not None:
+            self._last_used[model_id] = time.monotonic()
             return cached
         with self._lock:
             cached = self._backends.get(model_id)
-            if cached is not None:
-                return cached
-            record = self._by_id.get(model_id)
-            if record is None:
-                raise KeyError(f"未安装模型 {model_id}")
-            backend = self._factory(record)
-            self._backends[model_id] = backend
-            return backend
+            if cached is None:
+                record = self._by_id.get(model_id)
+                if record is None:
+                    raise KeyError(f"未安装模型 {model_id}")
+                cached = self._factory(record)
+                self._backends[model_id] = cached
+            self._last_used[model_id] = time.monotonic()
+            return cached
+
+    def unload_idle(self, idle_s: float, *, now: float | None = None) -> list[str]:
+        """卸载超过 ``idle_s`` 秒没用过的模型，返回卸载的 id（#92）。
+
+        调用方要保证此刻没有翻译在用这些模型（``serve`` 里由翻译锁保证）。即使有，
+        正在用的调用仍持有后端引用，翻译照常完成；下一次请求会重新加载。
+        """
+
+        current = time.monotonic() if now is None else now
+        with self._lock:
+            stale = [
+                model_id
+                for model_id in self._backends
+                if current - self._last_used.get(model_id, current) >= idle_s
+            ]
+            for model_id in stale:
+                self._unload_locked(model_id)
+        return sorted(stale)
+
+    def last_activity(self) -> float | None:
+        """最近一次取用任一模型的 ``time.monotonic()`` 时刻；从没用过时为 ``None``。"""
+
+        return max(self._last_used.values(), default=None)
+
+    def unload(self, model_id: str) -> bool:
+        """卸载一个已加载的模型。没加载时返回 ``False``。"""
+
+        with self._lock:
+            if model_id not in self._backends:
+                return False
+            self._unload_locked(model_id)
+            return True
+
+    def _unload_locked(self, model_id: str) -> None:
+        backend = self._backends.pop(model_id)
+        self._last_used.pop(model_id, None)
+        close = getattr(backend, "close", None)
+        if callable(close):
+            close()
 
     def preload(self, pairs: Sequence[tuple[str, str]]) -> None:
         """按语种对预热。中转会加载两段模型。``src == tgt`` 不加载。"""
