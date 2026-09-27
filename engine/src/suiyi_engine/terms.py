@@ -352,6 +352,8 @@ class TermStats:
     fallbacks: int = 0
     retry_fixes: int = 0
     """占位符还原失败后，只保护首遍丢了的术语再翻一遍、救回来的句数（#89）。"""
+    repeat_trims: int = 0
+    """占位符版末尾多出重复分句、原文只有一个分句，截掉重复分句后采用的句数（#89）。"""
     # 不翻译片段（#101）
     verbatim_sentences: int = 0
     verbatim_copied: int = 0
@@ -660,6 +662,11 @@ def _speculative(
             continue
         repeated = _new_repeat(restored, outputs[index], item, tgt)
         if repeated:
+            trimmed = _trim_repeat_clause(restored, outputs[index], item, sentences[index], tgt)
+            if trimmed is not None:
+                record.repeat_trims += 1
+                outputs[index] = trimmed
+                continue
             record.fallbacks += 1
             ids = " ".join(slot.term.id for slot in item.slots)
             logger.info("术语保护回退 %s→%s %s repeat", src, tgt, ids)
@@ -787,6 +794,28 @@ def _new_repeat(restored: str, first: str, item: Protected, tgt: str) -> str | N
         if count >= 2 and before.get(gram, 0) < count:
             return gram
     return None
+
+
+_CLAUSE_BREAK = re.compile(r"[,，;；、]")
+
+
+def _trim_repeat_clause(
+    restored: str, first: str, item: Protected, source: str, tgt: str
+) -> str | None:
+    """原文只有一个分句、占位符版却在后面多出重复分句（「ZXQ被隔离了,他们被隔离了」）时，
+    截到重复开始前的那个分句；截完仍有新重复、或第一个分句里没有全部术语时返回 ``None``（#89）。"""
+
+    if tgt not in ("zh", "ja") or _CLAUSE_BREAK.search(source):
+        return None
+    match = _CLAUSE_BREAK.search(restored)
+    if match is None:
+        return None
+    head = restored[: match.start()].rstrip()
+    if not head or _new_repeat(head, first, item, tgt):
+        return None
+    if any(slot.target not in head for slot in item.slots):
+        return None
+    return head
 
 
 def _fix_first_pass(output: str, item: Protected, tgt: str) -> str | None:

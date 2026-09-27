@@ -137,7 +137,7 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "ocr_idle_unload_s": 600,
   "max_loaded_models": 2,
   "glossary_enabled": true,
-  "glossary_builtin_entries": 608,
+  "glossary_builtin_entries": 610,
   "glossary_user_path": "C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv",
   "glossary_user_entries": 6,
   "glossary_error": null,

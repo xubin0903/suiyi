@@ -383,7 +383,30 @@ def restore(translation: str, protected: Protected, tgt_lang: str) -> tuple[str,
     if tgt_lang in _CJK_LANGS and len(failed) < len(protected.slots):
         # 占位符两侧常被模型加上空格（「开源 ZXQ 引擎」），写回中日文术语后去掉汉字 / 假名之间的空白
         text = _CJK_GAP.sub("", text)
+        restored = [slot for slot in protected.slots if slot not in failed]
+        text = _pad_mixed_terms(text, restored)
     return text, failed
+
+
+# 术语写法本身在西文和汉字之间留空格（「CI 流水线」）时，写回后两侧紧贴汉字的地方也补一个空格，
+# 免得出现「在CI 流水线」这种一边有一边没有的写法（#89）
+_MIXED_SPACED = re.compile(
+    r"[A-Za-z0-9] [\u3040-\u30ff\u3400-\u9fff]|[\u3040-\u30ff\u3400-\u9fff] [A-Za-z0-9]"
+)
+_CJK_CHAR = "[\u3040-\u30ff\u3400-\u9fff]"
+
+
+def _pad_mixed_terms(text: str, slots: Sequence[Slot]) -> str:
+    for slot in slots:
+        value = slot.target
+        if not _MIXED_SPACED.search(value):
+            continue
+        escaped = re.escape(value)
+        if value[:1].isascii() and value[:1].isalnum():
+            text = re.sub(rf"(?<={_CJK_CHAR}){escaped}", lambda _m, v=value: " " + v, text)
+        if value[-1:].isascii() and value[-1:].isalnum():
+            text = re.sub(rf"{escaped}(?={_CJK_CHAR})", lambda _m, v=value: v + " ", text)
+    return text
 
 
 def _sentence_start(text: str, index: int) -> bool:
