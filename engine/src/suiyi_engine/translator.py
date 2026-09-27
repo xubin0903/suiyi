@@ -20,6 +20,7 @@ from suiyi_engine.registry import (
     DEFAULT_MAX_BATCH_SIZE,
     DEFAULT_MAX_DECODING_LENGTH,
     BackendFactory,
+    ModelRecord,
     ModelRegistry,
     default_intra_threads,
     normalize_lang,
@@ -27,6 +28,7 @@ from suiyi_engine.registry import (
 from suiyi_engine.segment import join_segments, split_sentences
 from suiyi_engine.terms import GlossaryStore, TermStats, translate_with_terms
 from suiyi_engine.verbatim import Block, find_spans, space_spans, split_blocks
+from suiyi_engine.zh_guard import ZhGuardStats, ZhOutputGuard
 from suiyi_engine.zh_punct import normalize_zh_punct
 
 __all__ = ["TranslationResult", "Translator", "UnsupportedPairError"]
@@ -106,6 +108,8 @@ class Translator:
         self.glossary = glossary
         self.verbatim = bool(verbatim)
         self.term_stats = TermStats()
+        self.zh_guard_stats = ZhGuardStats()
+        """中文译文检查（#106）的累计计数。"""
 
     def glossary_status(self) -> dict[str, object]:
         """``/health`` 的 ``glossary_*`` 字段。没有术语表时报告关闭。"""
@@ -171,7 +175,14 @@ class Translator:
         blocks = split_blocks(text) if protect else [Block(text, True)]
         if not any(block.translate for block in blocks):
             return _result(text, src_code, tgt_code, [], started)
-        backends = [self.registry.get(record.id) for record in records]
+        backends: list[TranslationBackend] = [self.registry.get(r.id) for r in records]
+        if tgt_code == "zh":  # 乱码 / 繁体检查包在中文目标的最后一跳外面（#106）
+            last = records[-1]
+            backends[-1] = ZhOutputGuard(  # type: ignore[assignment]
+                backends[-1],
+                fallback=lambda: self._zh_fallback(last),
+                stats=self.zh_guard_stats,
+            )
         terms = self._terms(src_code, tgt_code, glossary) if len(backends) == 1 else ()
         output = _translate_blocks(
             blocks, src_code, tgt_code, backends, terms, self.term_stats, protect
@@ -203,6 +214,12 @@ class Translator:
             self.translate(text, src_code, tgt_code, glossary=glossary, verbatim=verbatim)
             for text in texts
         ]
+
+    def _zh_fallback(self, record: ModelRecord) -> TranslationBackend | None:
+        """同方向另一个已安装的模型（如 ``opus-mt-en-zh``），临时构造，不进缓存（#106）。"""
+
+        alternate = self.registry.alternate_record(record.src, record.tgt, record.id)
+        return None if alternate is None else self.registry.build_transient(alternate)
 
     def _terms(self, src: str, tgt: str, override: bool | None) -> tuple[Term, ...]:
         store = self.glossary

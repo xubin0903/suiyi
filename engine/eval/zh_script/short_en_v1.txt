@@ -1,0 +1,312 @@
+This is a test.
+This is just a test.
+This is only a test.
+It is a test.
+That was a test.
+Is this a test?
+Hello.
+Hello, world.
+Good morning.
+Good night.
+Thank you.
+Thank you very much.
+You're welcome.
+I'm sorry.
+Excuse me.
+How are you?
+I'm fine, thanks.
+What is your name?
+My name is Tom.
+Nice to meet you.
+See you tomorrow.
+Where is the station?
+How much is this?
+I don't know.
+I don't understand.
+Please wait a moment.
+Please sit down.
+Please try again.
+Please try again later.
+Can you help me?
+Of course.
+No problem.
+That's right.
+That's wrong.
+I agree.
+I disagree.
+It's raining.
+It's very cold today.
+It's hot outside.
+The weather is nice.
+What time is it?
+It's three o'clock.
+I'm hungry.
+I'm tired.
+Let's go.
+Let's eat.
+Wait for me.
+Come here.
+Be careful.
+Watch out!
+Happy birthday!
+Congratulations!
+Good luck.
+Have a nice day.
+I love you.
+I miss you.
+I like this book.
+This book is interesting.
+The door is open.
+The window is closed.
+The meeting starts at nine.
+The meeting has been cancelled.
+The file was saved.
+The file could not be found.
+The file is too large.
+The server is down.
+The server is running.
+The build failed.
+The build succeeded.
+The test passed.
+The test failed.
+All tests passed.
+The download is complete.
+The update is available.
+Please restart the application.
+Please check your network connection.
+Your password is incorrect.
+Your account has been locked.
+Access denied.
+Permission denied.
+Something went wrong.
+An error occurred.
+Unknown error.
+Operation completed successfully.
+Are you sure?
+Do you want to save changes?
+Do you want to continue?
+Click the button.
+Press any key to continue.
+Loading, please wait.
+No results found.
+Search results.
+Settings saved.
+Changes have been applied.
+Connection lost.
+Connection established.
+Invalid input.
+Invalid email address.
+The field is required.
+The value is too long.
+Select a file.
+Open the file.
+Close the window.
+Copy the text.
+Paste the text.
+Delete this item?
+The item was deleted.
+Undo.
+Redo.
+Sign in.
+Sign out.
+Create an account.
+Forgot your password?
+Reset your password.
+Enter your name.
+Enter your email.
+Send a message.
+The message was sent.
+You have a new message.
+You have no new messages.
+The task is done.
+The task is pending.
+The job is running.
+The job was cancelled.
+This feature is not supported.
+This version is outdated.
+A new version is available.
+Update now.
+Remind me later.
+Learn more.
+Read more.
+Show more.
+Show less.
+Go back.
+Next page.
+Previous page.
+The page could not be loaded.
+The page is loading.
+The request timed out.
+The request was successful.
+It works.
+It doesn't work.
+It is broken.
+It is fixed.
+The bug has been fixed.
+The issue is resolved.
+The issue is still open.
+This is important.
+This is a problem.
+This is a mistake.
+This is a secret.
+This is my friend.
+This is my house.
+This is my phone.
+This is your seat.
+That is a good idea.
+That is a bad idea.
+He is a doctor.
+She is a teacher.
+They are students.
+We are friends.
+I am a programmer.
+I work from home.
+I live in Beijing.
+He speaks English.
+She speaks Chinese.
+Do you speak Japanese?
+I'm learning Chinese.
+I can't hear you.
+Speak slowly, please.
+Say it again.
+What does this mean?
+How do you say this in English?
+The cat is sleeping.
+The dog is barking.
+The baby is crying.
+The water is cold.
+The coffee is hot.
+The tea is ready.
+Dinner is ready.
+The shop is closed.
+The shop is open.
+The train is late.
+The bus is coming.
+My phone is dead.
+My computer is slow.
+The battery is low.
+The screen is black.
+The sound is too loud.
+Turn it off.
+Turn it on.
+Turn up the volume.
+It is late.
+It is early.
+It is free.
+It is expensive.
+It is cheap.
+It is easy.
+It is difficult.
+It is simple.
+It is possible.
+It is impossible.
+It is true.
+It is false.
+It is new.
+It is old.
+It is ready.
+This is a trial.
+This is an exam.
+This is a demo.
+This is a sample.
+This is an example.
+This is a book.
+This is a pen.
+This is an apple.
+This is a car.
+This is a house.
+This is a dog.
+This is a cat.
+This is a table.
+This is a chair.
+This is a phone.
+This is a computer.
+This is a file.
+This is a folder.
+This is a window.
+This is a door.
+This is a key.
+This is a map.
+This is a question.
+This is an answer.
+This is a plan.
+This is a project.
+This is an idea.
+This is a bug.
+This is a feature.
+This is an error.
+This is a warning.
+This is a message.
+This is a note.
+This is a story.
+This is a song.
+This is a game.
+This is a movie.
+This is a picture.
+This is a photo.
+This is a letter.
+This is a gift.
+This is a ticket.
+This is a road.
+This is a city.
+This is a school.
+This is a hospital.
+This is a bank.
+This is a store.
+This is a park.
+This is a river.
+This is a mountain.
+This is a tree.
+This is a flower.
+This is a bird.
+This is a fish.
+That is my test.
+That is my trial.
+That is my exam.
+That is my demo.
+That is my sample.
+That is my example.
+That is my book.
+That is my pen.
+That is my apple.
+That is my car.
+That is my house.
+That is my dog.
+That is my cat.
+That is my table.
+That is my chair.
+That is my phone.
+That is my computer.
+That is my file.
+That is my folder.
+That is my window.
+That is my door.
+That is my key.
+That is my map.
+That is my problem.
+That is my question.
+That is my answer.
+That is my plan.
+That is my project.
+That is my idea.
+That is my bug.
+This is very good.
+This is very bad.
+This is very big.
+This is very small.
+This is very new.
+This is very old.
+This is very easy.
+This is very hard.
+This is very fast.
+This is very slow.
+This is very hot.
+This is very cold.
+This is very important.
+This is very strange.
+This is very simple.
+This is very useful.
+This is very dangerous.
+This is very safe.
+This is very beautiful.
+This is very quiet.
