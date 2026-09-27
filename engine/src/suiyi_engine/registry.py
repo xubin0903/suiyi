@@ -322,6 +322,20 @@ class ModelRegistry:
             for record in self.resolve(src, tgt):
                 self.get(record.id)
 
+    def alternate_record(self, src: str, tgt: str, exclude: str) -> ModelRecord | None:
+        """同方向、已安装、不是 ``exclude`` 的另一个模型（#106 回退用），按 id 排序取第一个。"""
+
+        for model_id in sorted(self._by_id):
+            record = self._by_id[model_id]
+            if (record.src, record.tgt) == (src, tgt) and record.id != exclude:
+                return record
+        return None
+
+    def build_transient(self, record: ModelRecord) -> TranslationBackend:
+        """构造一个不进缓存、不占常驻名额的后端（#106 回退用）。用完丢掉引用即释放。"""
+
+        return self._factory(record)
+
     def _listed_substitute(self, direction: tuple[str, str]) -> ModelRecord | None:
         """该方向已安装、且清单里登记为同方向的模型（清单外的自定义模型不能顶替中转的一跳）。"""
 
