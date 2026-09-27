@@ -83,7 +83,7 @@ def target_pid(pid: int) -> int:
     return serve_pids(pid)[0]
 
 
-SUM_KEYS = ("rss_mib", "uss_mib", "ws_mib", "private_mib")
+SUM_KEYS = ("rss_mib", "uss_mib", "ws_mib", "private_mib", "vmdata_mib")
 
 
 def family_memory(pid: int) -> dict[str, float]:
@@ -212,10 +212,10 @@ def _headline(mem: dict[str, float]) -> str:
         extra = ("ws_mib", "private_mib")
     else:
         text = (
-            f"RSS {mem.get('rss_mib', 0):.1f} / USS {mem.get('uss_mib', 0):.1f} / "
-            f"峰值 {mem.get('vmhwm_mib', 0):.1f} MiB"
+            f"RSS {mem.get('rss_mib', 0):.1f} / VmData（≈提交）{mem.get('vmdata_mib', 0):.1f} / "
+            f"USS {mem.get('uss_mib', 0):.1f} / 峰值 {mem.get('vmhwm_mib', 0):.1f} MiB"
         )
-        extra = ("rss_mib",)
+        extra = ("rss_mib", "vmdata_mib")
     if mem.get("ocr_worker_pid"):
         child = " / ".join(f"{mem.get('ocr_' + key, 0):.1f}" for key in extra)
         total = " / ".join(f"{mem.get('total_' + key, 0):.1f}" for key in extra)
@@ -445,14 +445,21 @@ def _markdown(result: dict) -> str:
     steps = result["steps"]
     if WINDOWS:
         cols = ["ws_mib", "private_mib", "uss_mib", "peak_ws_mib", "vm_commit_private_mib"]
-        heads = ["WS", "Private Bytes", "私有 WS", "峰值 WS", "已提交私有（VirtualQuery）"]
+        heads = ["WS", "Private Bytes（提交）", "私有 WS", "峰值 WS", "已提交私有（VirtualQuery）"]
         sums = ["ws_mib", "private_mib"]
     else:
-        cols = ["rss_mib", "uss_mib", "vmhwm_mib", "vmdata_mib"]
-        heads = ["RSS", "USS", "峰值 RSS", "VmData"]
-        sums = ["rss_mib", "uss_mib"]
+        # #113：VmData（私有可写映射，≈ Windows 的提交量）放到第二列，并算进子进程与合计
+        cols = ["rss_mib", "vmdata_mib", "uss_mib", "vmhwm_mib"]
+        heads = ["RSS", "VmData（≈提交）", "USS", "峰值 RSS"]
+        sums = ["rss_mib", "vmdata_mib"]
     if result.get("mode", "serve") == "serve":  # #104：主进程列之后是 OCR 子进程与合计
-        names = {"ws_mib": "WS", "private_mib": "Private", "rss_mib": "RSS", "uss_mib": "USS"}
+        names = {
+            "ws_mib": "WS",
+            "private_mib": "Private",
+            "rss_mib": "RSS",
+            "uss_mib": "USS",
+            "vmdata_mib": "VmData",
+        }
         cols = cols[:2] + [f"ocr_{k}" for k in sums] + [f"total_{k}" for k in sums] + cols[2:]
         heads = (
             [f"主进程 {h}" for h in heads[:2]]

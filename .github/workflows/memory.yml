@@ -13,7 +13,7 @@ on:
         default: origin/main
         required: false
       mode:
-        description: full = 全部内存场景；desktop-latency = 只测桌面默认场景的延迟，基线/当前交替各 3 次、OCR 30 轮（#104）
+        description: full = 全部内存场景；desktop-latency = 只测桌面默认场景的延迟，基线/当前交替各 3 次、OCR 30 轮（#104）；packed-gemm = 只对比 MKL 预打包开/关的提交量、P95 与译文（#113）
         default: full
         required: false
 
@@ -110,6 +110,16 @@ jobs:
             done
             exit 0
           fi
+          # #113：强制 MKL（runner 是 AMD，默认走 oneDNN），对比预打包开 / 自动关（把阈值调到 1 TB 触发）/ 手动关。
+          # 内存列：Windows 为 WS 与 Private Bytes（提交），Linux 为 RSS 与 VmData。Linux 未开严格 overcommit，自动关不触发。
+          PG=(--config "MKL 打包=CT2_USE_MKL=1"
+              --config "MKL 自动关打包=CT2_USE_MKL=1,SUIYI_PACKED_GEMM_MIN_COMMIT_MIB=1000000"
+              --config "MKL 手动关打包=CT2_USE_MKL=1,CT2_PACKED_GEMM=0"
+              --config "默认后端=")
+          if [ "${{ inputs.mode || 'full' }}" = "packed-gemm" ]; then
+            "$PY" scripts/compare_packed_gemm.py --models-dir "$M" --rounds 1 --alternate 2 --summary "$GITHUB_STEP_SUMMARY" --out "$OUT/packed-gemm.json" "${PG[@]}"
+            exit 0
+          fi
           run breakdown --models-dir "$M" --label "进程内分解（当前 $HEAD）" --out "$OUT/breakdown.json"
           # Issue #96 的顺序：en→zh → zh→en → 段落 P95 → en→ja → OCR
           run serve --models-dir "$M" --src "$B" --label "基线 $BASE" --out "$OUT/baseline.json" --port 18801
@@ -122,6 +132,9 @@ jobs:
           CT2_USE_MKL=1 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1" --out "$OUT/baseline-mkl.json" --port 18805 --rounds 1
           CT2_USE_MKL=1 CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1 + CT2_PACKED_GEMM=0" --out "$OUT/baseline-mkl-nopack.json" --port 18806 --rounds 1
           CT2_USE_MKL=1 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1" --out "$OUT/head-mkl.json" --port 18807 --rounds 1
+          # #113：可用提交量低于阈值时自动关预打包；阈值调到 1 TB 在 runner 上触发
+          CT2_USE_MKL=1 SUIYI_PACKED_GEMM_MIN_COMMIT_MIB=1000000 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1 + 提交量不足自动关预打包" --out "$OUT/head-mkl-auto.json" --port 18808 --rounds 1
+          "$PY" scripts/compare_packed_gemm.py --models-dir "$M" --rounds 1 --summary "$GITHUB_STEP_SUMMARY" --out "$OUT/packed-gemm.json" "${PG[@]}"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
