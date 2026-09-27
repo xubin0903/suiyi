@@ -222,6 +222,7 @@ def build_serve_command(
     intra_threads: int | None,
     beam_size: int | None,
     max_batch_size: int | None,
+    max_loaded_models: int | None = None,
 ) -> list[str]:
     """拼出子进程参数列表。不用 shell，Windows 与 Linux 同一形式。"""
 
@@ -245,6 +246,8 @@ def build_serve_command(
         command.extend(["--beam-size", str(beam_size)])
     if max_batch_size is not None:
         command.extend(["--max-batch-size", str(max_batch_size)])
+    if max_loaded_models is not None:
+        command.extend(["--max-loaded-models", str(max_loaded_models)])
     return command
 
 
@@ -826,6 +829,8 @@ def render_markdown(report: Mapping[str, object]) -> str:
             "- 冷启动含解释器启动。预加载在监听前完成，第一次 `/health` 成功时模型已在内存里。",
             "- RSS 是服务进程及其子进程，不是整机占用。采样取最大值，避免读到刚加载完的偏低值。",
             "- 全部 mvp 只包括清单里 `tier=mvp` 的模型，不含 optional。",
+            "- 测 RSS 的服务以 `--max-loaded-models 0` 启动（不设常驻上限），"
+            "所以「全部 mvp」是所有模型同时常驻；serve 默认最多常驻 2 个（#96）。",
             "- 网格的重复次数可以少于热路径的 50 次，用来选默认参数，不替代热路径数字。",
             "- Linux 与 Windows 都用参数列表启动子进程。报告里的数字只代表跑脚本的那台机器。",
             "",
@@ -960,6 +965,7 @@ def start_server(
     intra_threads: int | None = None,
     beam_size: int | None = None,
     max_batch_size: int | None = None,
+    max_loaded_models: int | None = None,
 ) -> RunningServer:
     port = _free_port()
     command = build_serve_command(
@@ -971,6 +977,7 @@ def start_server(
         intra_threads=intra_threads,
         beam_size=beam_size,
         max_batch_size=max_batch_size,
+        max_loaded_models=max_loaded_models,
     )
     log_path.parent.mkdir(parents=True, exist_ok=True)
     handle = log_path.open("wb")
@@ -1218,7 +1225,8 @@ def _measure_rss(
 ) -> dict[str, object]:
     print("测量 RSS：空载 → 中英双向 → 全部 mvp", flush=True)
     log_path = options.out_dir / "logs" / "rss.log"
-    server = start_server(options, log_path=log_path, preload="")
+    # 「全部 mvp」要所有模型同时常驻；#96 起 serve 默认最多常驻 2 个（LRU），这里不设上限
+    server = start_server(options, log_path=log_path, preload="", max_loaded_models=0)
     try:
         wait_until_ready(server, set(), options.cold_timeout_s)
         idle_health = try_get_json(f"{server.base_url}/health", timeout=2)

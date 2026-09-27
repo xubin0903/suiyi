@@ -543,7 +543,7 @@ def _read_json(url: str, payload: dict[str, object] | None = None, timeout: floa
 def test_model_languages_and_auto_translate() -> None:
     required = (
         "opus-mt-zh-en",
-        "opus-mt-en-zh",
+        "opus-mt-eng-zho-tc-big-2022-05-14",
         "opus-mt-zho-jpn-tc-big-2022-07-28",
         "opus-mt-ja-en",
         "opus-mt-eng-jpn-2021-02-18",
@@ -557,9 +557,9 @@ def test_model_languages_and_auto_translate() -> None:
     app = create_app(Translator(root), detect, ApiSettings())
     expected = {
         ("zh", "en"): ("direct", ["opus-mt-zh-en"]),
-        ("en", "zh"): ("direct", ["opus-mt-en-zh"]),
+        ("en", "zh"): ("direct", ["opus-mt-eng-zho-tc-big-2022-05-14"]),
         ("zh", "ja"): ("direct", ["opus-mt-zho-jpn-tc-big-2022-07-28"]),
-        ("ja", "zh"): ("pivot", ["opus-mt-ja-en", "opus-mt-en-zh"]),
+        ("ja", "zh"): ("pivot", ["opus-mt-ja-en", "opus-mt-eng-zho-tc-big-2022-05-14"]),
         ("en", "ja"): ("direct", ["opus-mt-eng-jpn-2021-02-18"]),
         ("ja", "en"): ("direct", ["opus-mt-ja-en"]),
     }

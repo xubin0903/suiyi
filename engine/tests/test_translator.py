@@ -534,6 +534,10 @@ def test_cli_reports_missing_model_id(tmp_path: Path) -> None:
     assert "opus-mt-zh-en" in completed.stderr
 
 
+EN_ZH = "opus-mt-eng-zho-tc-big-2022-05-14"
+"""清单推荐的 en→zh 模型（#83 起为 tc-big）；旧的 ``opus-mt-en-zh`` 只作为兼容保留。"""
+
+
 def _require_models(*model_ids: str) -> None:
     root = Path(os.environ["SUIYI_MODELS_DIR"])
     missing = [
@@ -568,18 +572,18 @@ def test_model_zh_en_direct() -> None:
 
 @pytest.mark.model
 def test_model_en_zh_direct_has_no_cjk_gaps() -> None:
-    _require_models("opus-mt-en-zh")
+    _require_models(EN_ZH)
     result = _real_translator().translate("The weather is nice today.", "en", "zh")
-    assert result.route == ["opus-mt-en-zh"]
+    assert result.route == [EN_ZH]
     assert re.search(r"[\u4e00-\u9fff]", result.text)
     assert not has_spurious_cjk_spacing(result.text)
 
 
 @pytest.mark.model
 def test_model_ja_zh_pivots_through_english() -> None:
-    _require_models("opus-mt-ja-en", "opus-mt-en-zh")
+    _require_models("opus-mt-ja-en", EN_ZH)
     result = _real_translator().translate("今日はいい天気です。", "ja", "zh")
-    assert result.route == ["opus-mt-ja-en", "opus-mt-en-zh"]
+    assert result.route == ["opus-mt-ja-en", EN_ZH]
     assert len(result.route) == 2
     assert re.search(r"[\u4e00-\u9fff]", result.text)
     assert not has_spurious_cjk_spacing(result.text)
