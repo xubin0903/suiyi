@@ -13,7 +13,7 @@ on:
         default: origin/main
         required: false
       mode:
-        description: full = 全部内存场景；desktop-latency = 只测桌面默认场景的延迟，基线/当前交替各 3 次、OCR 30 轮（#104）；packed-gemm = 只对比 MKL 预打包开/关的提交量、P95 与译文（#113）
+        description: full = 全部内存场景；desktop-latency = 只测桌面默认场景的延迟，基线/当前交替各 3 次、OCR 30 轮（#104）；packed-gemm = 只对比 MKL 预打包开/关的提交量、P95 与译文（#113）；short-fallback = 只对比表外极短句兜底开/关的内存峰值、常驻、冷加载与延迟（#122）
         default: full
         required: false
 
@@ -38,8 +38,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/suiyi-mem-models
-          key: mem-models-${{ hashFiles('engine/model_manifest.json', 'engine/src/suiyi_engine/tools/convert.py') }}
-      - name: 转换 tc-big en→zh、eng-jpn、zh-en（缓存未命中时）
+          key: mem-models-v2-${{ hashFiles('engine/model_manifest.json', 'engine/src/suiyi_engine/tools/convert.py') }}
+      - name: 转换 tc-big en→zh、eng-jpn、zh-en、opus-mt-en-zh（缓存未命中时）
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         run: |
           python -m venv "$RUNNER_TEMP/convert-venv"
@@ -48,7 +48,7 @@ jobs:
           "$CPY" -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
           "$CPY" -m pip install --quiet -e "./engine[convert]"
           "$CPY" scripts/convert_models.py --out-dir ~/suiyi-mem-models \
-            --ids opus-mt-eng-zho-tc-big-2022-05-14 opus-mt-eng-jpn-2021-02-18 opus-mt-zh-en
+            --ids opus-mt-eng-zho-tc-big-2022-05-14 opus-mt-eng-jpn-2021-02-18 opus-mt-zh-en opus-mt-en-zh
           rm -rf ~/suiyi-mem-models/.cache
       - uses: actions/upload-artifact@v4
         with:
@@ -118,6 +118,18 @@ jobs:
               --config "MKL 提交量不足自动关=CT2_USE_MKL=1,SUIYI_PACKED_GEMM_SMALL_RAM_MIB=1,SUIYI_PACKED_GEMM_MIN_COMMIT_MIB=1000000"
               --config "MKL 手动关打包=CT2_USE_MKL=1,CT2_PACKED_GEMM=0"
               --config "默认后端=")
+          if [ "${{ inputs.mode || 'full' }}" = "short-fallback" ]; then
+            # #122：按 Intel 16 GB 机器的默认口径（MKL、CT2_PACKED_GEMM=0）；空闲 0 秒 = 兜底模型立刻挤掉 zh→en（最坏情况）
+            # --config 里的路径不经 MSYS 转换，Windows 上先转成原生路径
+            if [ "$RUNNER_OS" = "Windows" ]; then SB=$(cygpath -w "$B"); SS=$(cygpath -w "$S"); else SB=$B; SS=$S; fi
+            K="CT2_USE_MKL=1,CT2_PACKED_GEMM=0"
+            SF=(--config "基线 $BASE=PYTHONPATH=$SB,$K"
+                --config "当前 $HEAD 兜底关闭=PYTHONPATH=$SS,$K,SUIYI_SHORT_FALLBACK=0"
+                --config "当前 $HEAD 默认（空闲 60 秒）=PYTHONPATH=$SS,$K"
+                --config "当前 $HEAD 空闲 0 秒=PYTHONPATH=$SS,$K,SUIYI_SHORT_FALLBACK_EVICT_IDLE_S=0")
+            "$PY" scripts/measure_short_fallback.py --models-dir "$M" --rounds 1 --cycles 5 --summary "$GITHUB_STEP_SUMMARY" --out "$OUT/short-fallback.json" "${SF[@]}"
+            exit 0
+          fi
           if [ "${{ inputs.mode || 'full' }}" = "packed-gemm" ]; then
             "$PY" scripts/compare_packed_gemm.py --models-dir "$M" --rounds 1 --alternate 2 --summary "$GITHUB_STEP_SUMMARY" --out "$OUT/packed-gemm.json" "${PG[@]}"
             exit 0

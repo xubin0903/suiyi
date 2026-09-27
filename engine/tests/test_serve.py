@@ -370,6 +370,8 @@ def test_cli_passes_decode_flags(
         "beam_size": 4,
         "max_batch_size": 8,
         "max_loaded_models": 2,  # #96 默认
+        "short_fallback": True,  # #122 默认
+        "short_fallback_evict_idle_s": 60.0,
     }
     assert seen["preload"] == [("zh", "en")]
     assert "intra_threads=2 beam_size=4 max_batch_size=8" in capsys.readouterr().out

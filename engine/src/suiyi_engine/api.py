@@ -210,6 +210,7 @@ def create_app(
                 **_ocr_worker_health(app.state.ocr),
                 **glossary_status(current),
                 "verbatim_enabled": verbatim_status(current),
+                **short_fallback_status(current),
                 **cpu_isa.current().health(),
                 **cpu_isa.pack_governor().health(list(current.loaded_model_ids())),
                 "model_idle_unload_s": app.state.settings.model_idle_unload_s,
@@ -282,6 +283,19 @@ def glossary_status(translator: object) -> dict[str, object]:
     if not callable(status):
         return dict(_GLOSSARY_OFF)
     return {**_GLOSSARY_OFF, **status()}
+
+
+def short_fallback_status(translator: object) -> dict[str, object]:
+    """``/health`` 的 ``short_fallback_*`` 字段（#122）；翻译器不支持时报告关闭。"""
+
+    status = getattr(translator, "short_fallback_status", None)
+    if not callable(status):
+        return {
+            "short_fallback_model": None,
+            "short_fallback_loaded": False,
+            "short_fallback_stats": None,
+        }
+    return dict(status())
 
 
 def verbatim_status(translator: object) -> bool:

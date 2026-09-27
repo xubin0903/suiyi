@@ -13,7 +13,7 @@ from pathlib import Path
 
 from suiyi_engine.backends.base import TranslationBackend
 from suiyi_engine.errors import UnsupportedPairError
-from suiyi_engine.glossary import Term
+from suiyi_engine.glossary import Term, find_terms
 from suiyi_engine.registry import (
     DEFAULT_BEAM_SIZE,
     DEFAULT_INTER_THREADS,
@@ -26,6 +26,10 @@ from suiyi_engine.registry import (
     normalize_lang,
 )
 from suiyi_engine.segment import join_segments, split_sentences
+from suiyi_engine.short_fallback import (
+    DEFAULT_EVICT_IDLE_S as DEFAULT_SHORT_FALLBACK_EVICT_IDLE_S,
+)
+from suiyi_engine.short_fallback import ShortFallbackStats, check, eligible, tidy_fallback
 from suiyi_engine.short_phrases import lookup_short_phrase
 from suiyi_engine.terms import GlossaryStore, TermStats, translate_with_terms
 from suiyi_engine.verbatim import Block, find_spans, space_spans, split_blocks
@@ -72,6 +76,11 @@ class Translator:
 
     ``short_phrases`` 为真（默认）时，en→zh 里整句命中常用极短句表的句子直接用表里的译法（#89，
     见 :mod:`suiyi_engine.short_phrases`）。
+
+    ``short_fallback`` 为真（默认）时，en→zh 里单独成块、没命中表的极短句（一到五个词、带句末
+    标点）改用同方向另一个已安装模型（``opus-mt-en-zh``）翻译，过了质量门才用，否则用默认模型的
+    译文（#122，见 :mod:`suiyi_engine.short_fallback`）。兜底模型按需加载、占常驻名额，要名额时
+    最先被挤掉；名额满时只在某个常驻模型超过 ``short_fallback_evict_idle_s`` 秒没用过时才挤掉它。
     """
 
     def __init__(
@@ -91,6 +100,8 @@ class Translator:
         max_loaded_models: int = 0,
         verbatim: bool = True,
         short_phrases: bool = True,
+        short_fallback: bool = True,
+        short_fallback_evict_idle_s: float = DEFAULT_SHORT_FALLBACK_EVICT_IDLE_S,
     ) -> None:
         intra = default_intra_threads() if intra_threads is None else intra_threads
         options: dict[str, object] = {
@@ -115,6 +126,10 @@ class Translator:
         self.short_phrases = bool(short_phrases)
         self.short_phrase_hits = 0
         """整句命中极短句表的句子数（#89）。"""
+        self.short_fallback = bool(short_fallback)
+        self.short_fallback_evict_idle_s = float(short_fallback_evict_idle_s)
+        self.short_fallback_stats = ShortFallbackStats()
+        """表外极短句兜底（#122）的累计计数。"""
         self.term_stats = TermStats()
         self.zh_guard_stats = ZhGuardStats()
         """中文译文检查（#106）的累计计数。"""
@@ -193,6 +208,14 @@ class Translator:
             )
         terms = self._terms(src_code, tgt_code, glossary) if len(backends) == 1 else ()
         phrases: dict[str, str] = {}
+        short = None
+        if (
+            self.short_fallback
+            and (src_code, tgt_code) == ("en", "zh")
+            and len(records) == 1
+            and self.registry.alternate_record("en", "zh", records[0].id) is not None
+        ):
+            short = _ShortRoute(self, records[0])
         output = _translate_blocks(
             blocks,
             src_code,
@@ -202,6 +225,7 @@ class Translator:
             self.term_stats,
             protect,
             phrases if self.short_phrases else None,
+            short,
         )
         self.short_phrase_hits += len(phrases)
         return _result(output, src_code, tgt_code, [record.id for record in records], started)
@@ -232,6 +256,28 @@ class Translator:
             for text in texts
         ]
 
+    def short_fallback_model(self) -> str | None:
+        """表外极短句兜底用的模型 id（没装或关闭时为 ``None``）。"""
+
+        if not self.short_fallback:
+            return None
+        try:
+            (record,) = self.registry.resolve("en", "zh")
+        except Exception:
+            return None
+        alternate = self.registry.alternate_record("en", "zh", record.id)
+        return None if alternate is None else alternate.id
+
+    def short_fallback_status(self) -> dict[str, object]:
+        """``/health`` 的 ``short_fallback_*`` 字段（#122）。"""
+
+        model = self.short_fallback_model()
+        return {
+            "short_fallback_model": model,
+            "short_fallback_loaded": model is not None and self.registry.is_auxiliary(model),
+            "short_fallback_stats": self.short_fallback_stats.as_dict(),
+        }
+
     def _zh_fallback(self, record: ModelRecord) -> TranslationBackend | None:
         """同方向另一个已安装的模型（如 ``opus-mt-en-zh``），临时构造，不进缓存（#106）。"""
 
@@ -249,6 +295,51 @@ class Translator:
         if not isinstance(text, str):
             raise TypeError("text 必须是 str")
         return normalize_lang(src), normalize_lang(tgt)
+
+
+class _ShortRoute:
+    """一次翻译里表外极短句的兜底：按需取兜底模型，逐句过质量门（#122）。"""
+
+    def __init__(self, translator: Translator, primary: ModelRecord) -> None:
+        self._translator = translator
+        self._primary = primary
+
+    def translate(self, sources: list[str]) -> list[str | None]:
+        """返回每句采用的兜底译文；没过质量门或没有兜底模型的为 ``None``。"""
+
+        translator = self._translator
+        stats = translator.short_fallback_stats
+        registry = translator.registry
+        stats.candidates += len(sources)
+        alternate = registry.alternate_record("en", "zh", self._primary.id)
+        backend = (
+            None
+            if alternate is None
+            else registry.get_auxiliary(
+                alternate.id, min_idle_s=translator.short_fallback_evict_idle_s
+            )
+        )
+        if backend is None:
+            stats.skipped += len(sources)
+            return [None] * len(sources)
+        guard = ZhOutputGuard(backend, stats=translator.zh_guard_stats)
+        outputs = guard.translate_batch(list(sources))
+        results: list[str | None] = []
+        for source, output in zip(sources, outputs, strict=True):
+            text, reason = check(source, output)
+            if text is None:
+                stats.rejected[reason] = stats.rejected.get(reason, 0) + 1
+            else:
+                stats.used += 1
+                stats.trimmed += reason == "trimmed"
+            results.append(text)
+        return results
+
+    def tidy(self, source: str, output: str) -> str:
+        text = tidy_fallback(source, output)
+        if text != output:
+            self._translator.short_fallback_stats.trimmed += 1
+        return text
 
 
 def _translate_text(
@@ -287,10 +378,13 @@ def _translate_blocks(
     stats: TermStats | None = None,
     verbatim: bool = False,
     phrases: dict[str, str] | None = None,
+    short: _ShortRoute | None = None,
 ) -> str:
     """翻译 ``blocks`` 里要翻译的块，照抄块原样拼回。所有块的句子一次批量送给后端。
 
     ``phrases`` 不为 ``None`` 时查极短句表（#89）：命中的句子不送后端，命中的原文 → 译文记进去。
+    ``short`` 不为 ``None`` 时，单独成块、没命中表、没有术语和不翻译片段的极短句先交给兜底模型
+    （#122）。
     """
 
     units = [
@@ -309,6 +403,22 @@ def _translate_blocks(
                 if value is not None:
                     fixed[index] = value
                     phrases[source] = value
+    shorts: list[int] = []
+    if short is not None:
+        alone = [len(unit) == 1 for unit in units for _ in unit]
+        shorts = [
+            index
+            for index, source in enumerate(sources)
+            if index not in fixed
+            and eligible(source, alone=alone[index])
+            and (spans is None or not spans[index])
+            and not (terms and find_terms(source, src, terms))
+        ]
+        if shorts:
+            results = short.translate([sources[index] for index in shorts])
+            for index, value in zip(shorts, results, strict=True):
+                if value is not None:
+                    fixed[index] = value
     todo = [index for index in range(len(sources)) if index not in fixed]
     todo_sources = [sources[index] for index in todo]
     todo_spans = [spans[index] for index in todo] if spans is not None else None
@@ -331,6 +441,10 @@ def _translate_blocks(
         raise RuntimeError(f"后端返回了 {len(translated)} 句，期望 {len(todo_sources)} 句")
     merged = dict(fixed)
     merged.update(zip(todo, translated, strict=True))
+    if short is not None:
+        for index in shorts:
+            if index in todo:  # 兜底没用上：tc-big 的译文也截掉多余分句
+                merged[index] = short.tidy(sources[index], merged[index])
     current = [merged[index] for index in range(len(sources))]
     keeps = [
         [source[span.start : span.end] for span in spans[index]] if spans else []

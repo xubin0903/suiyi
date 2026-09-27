@@ -23,6 +23,7 @@ from suiyi_engine.registry import (
     default_intra_threads,
     normalize_lang,
 )
+from suiyi_engine.short_fallback import DEFAULT_EVICT_IDLE_S as DEFAULT_SHORT_FALLBACK_EVICT_IDLE_S
 from suiyi_engine.terms import GlossaryStore, default_user_glossary_path, parse_bool
 from suiyi_engine.translator import Translator
 
@@ -235,6 +236,45 @@ def resolve_verbatim_enabled(cli_value: bool | None) -> bool:
     return value
 
 
+def resolve_short_fallback() -> tuple[bool, float]:
+    """表外极短句兜底的开关与腾名额的空闲秒数（#122）。
+
+    ``SUIYI_SHORT_FALLBACK`` 默认开启；``SUIYI_SHORT_FALLBACK_EVICT_IDLE_S`` 默认 60 秒。
+
+    认不出的值只告警、按默认处理。
+    """
+
+    enabled = True
+    raw = os.environ.get("SUIYI_SHORT_FALLBACK", "")
+    if raw.strip():
+        value = parse_bool(raw)
+        if value is None:
+            print(
+                f"警告：SUIYI_SHORT_FALLBACK 的值 {raw!r} 无法识别（应为 1/0 或 true/false），"
+                "表外极短句兜底按默认开启",
+                file=sys.stderr,
+                flush=True,
+            )
+        else:
+            enabled = value
+    idle = DEFAULT_SHORT_FALLBACK_EVICT_IDLE_S
+    raw = os.environ.get("SUIYI_SHORT_FALLBACK_EVICT_IDLE_S", "")
+    if raw.strip():
+        try:
+            idle = float(raw)
+            if idle < 0 or idle != idle:
+                raise ValueError(raw)
+        except ValueError:
+            print(
+                f"警告：SUIYI_SHORT_FALLBACK_EVICT_IDLE_S 的值 {raw!r} 无效（应为 >= 0 的秒数），"
+                f"按默认 {DEFAULT_SHORT_FALLBACK_EVICT_IDLE_S:g} 秒",
+                file=sys.stderr,
+                flush=True,
+            )
+            idle = DEFAULT_SHORT_FALLBACK_EVICT_IDLE_S
+    return enabled, idle
+
+
 def resolve_user_glossary(cli_value: str | Path | None) -> Path:
     """命令行 ``--user-glossary`` 优先，其次 ``SUIYI_USER_GLOSSARY``，默认见
     :func:`suiyi_engine.terms.default_user_glossary_path`。文件可以不存在。"""
@@ -370,11 +410,14 @@ def run_server(
     memory.configure_allocator()
     glossary = GlossaryStore(user_glossary, enabled=glossary_enabled)
     try:
+        short_fallback, short_fallback_idle = resolve_short_fallback()
         translator = Translator(
             models_dir,
             glossary=glossary,
             max_loaded_models=max_loaded_models,
             verbatim=verbatim_enabled,
+            short_fallback=short_fallback,
+            short_fallback_evict_idle_s=short_fallback_idle,
             **decode,
         )
         if preload_pairs:
@@ -534,11 +577,31 @@ def _print_startup(
     isa = cpu_isa.current()
     print(isa.describe(), flush=True)
     print(cpu_isa.pack_governor().describe(), flush=True)
+    _print_short_fallback(translator)
     if isa.late:
         print(
             f"警告：设置 {cpu_isa.ENV} 前 ctranslate2 已被导入，可能不生效；"
             f"请在启动前设置环境变量 {cpu_isa.ENV}={isa.value}",
             file=sys.stderr,
+            flush=True,
+        )
+
+
+def _print_short_fallback(translator: Translator) -> None:
+    lookup = getattr(translator, "short_fallback_model", None)
+    if not callable(lookup):
+        return
+    model = lookup()
+    if not translator.short_fallback:
+        print("表外极短句兜底：关闭（SUIYI_SHORT_FALLBACK=0）", flush=True)
+    elif model is None:
+        print(
+            "表外极短句兜底：未安装同方向的第二个 en→zh 模型（opus-mt-en-zh），不启用", flush=True
+        )
+    else:
+        print(
+            f"表外极短句兜底：{model}（按需加载，占常驻名额、最先被挤掉；常驻模型空闲 "
+            f"{translator.short_fallback_evict_idle_s:g} 秒以上才为它腾名额，#122）",
             flush=True,
         )
 
