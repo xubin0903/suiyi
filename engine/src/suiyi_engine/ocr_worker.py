@@ -40,7 +40,7 @@ import sys
 import threading
 import time
 import weakref
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
 
@@ -109,22 +109,78 @@ def _read_exact(stream: IO[bytes], size: int, *, allow_eof: bool = False) -> byt
 # ---------------------------------------------------------------- 子进程
 
 
+TRIM_AFTER_S = 2.0
+"""子进程处理完请求、安静这么多秒后整理一次堆（与主进程 ``ModelJanitor`` 的默认值相同）。"""
+
+
+class _IdleTrimmer:
+    """请求处理完、安静 ``after_s`` 秒后调用一次 ``gc.collect()`` + ``trimmer()``（#104）。
+
+    onnxruntime / OpenCV 推理时的临时缓冲在 glibc / Windows 堆里不会自己还给系统，
+    不整理的话子进程用过一次 OCR 后常驻会多出 150 MiB 左右。整理与请求处理互斥，识别中不会整理。
+    """
+
+    def __init__(self, trimmer: Callable[[], object], after_s: float) -> None:
+        self._trimmer = trimmer
+        self.after_s = after_s
+        self._lock = threading.Lock()
+        self._last_done: float | None = None
+        self._trimmed_for: float | None = None
+        self.trims = 0
+        threading.Thread(target=self._loop, name="suiyi-ocr-trim", daemon=True).start()
+
+    def busy(self) -> threading.Lock:
+        return self._lock
+
+    def done(self) -> None:
+        self._last_done = time.monotonic()
+
+    def _loop(self) -> None:
+        import gc
+
+        while True:
+            time.sleep(min(0.5, self.after_s / 2 or 0.05))
+            last = self._last_done
+            if last is None or last == self._trimmed_for:
+                continue
+            if time.monotonic() - last < self.after_s:
+                continue
+            with self._lock:
+                if self._last_done != last:  # 期间又处理了请求，重新计时
+                    continue
+                gc.collect()
+                try:
+                    self._trimmer()
+                except Exception:  # 整理失败不影响服务
+                    logger.debug("OCR 子进程整理堆失败", exc_info=True)
+                self._trimmed_for = last
+                self.trims += 1
+
+
 def run_worker(
     provider: OcrProvider,
     *,
     parent_pid: int | None = None,
     stdin: IO[bytes] | None = None,
     stdout: IO[bytes] | None = None,
+    trimmer: Callable[[], object] | None = None,
+    trim_after_s: float = TRIM_AFTER_S,
 ) -> int:
     """子进程主循环：按帧读请求、用进程内 :class:`OcrProvider` 识别、按帧回结果。
 
-    stdin EOF 即退出。
+    stdin EOF 即退出。每次请求处理完、安静 ``trim_after_s`` 秒后整理一次堆
+    （``trimmer`` 默认 :func:`suiyi_engine.memory.trim`）。
     """
 
     if stdout is None:
         stdout = _claim_stdout()
     if stdin is None:
         stdin = sys.stdin.buffer
+    if trimmer is None:
+        from suiyi_engine import memory
+
+        trimmer = memory.trim
+    idle = _IdleTrimmer(trimmer, trim_after_s)
     if parent_pid:
         _watch_parent(parent_pid)
     write_frame(stdout, {"ok": True, "op": "hello", "pid": os.getpid()})
@@ -137,7 +193,10 @@ def run_worker(
         if op == "exit":
             write_frame(stdout, {"ok": True})
             return 0
-        write_frame(stdout, _handle(provider, str(op), meta, blob))
+        with idle.busy():
+            reply = _handle(provider, str(op), meta, blob)
+            idle.done()
+        write_frame(stdout, reply)
 
 
 def _handle(

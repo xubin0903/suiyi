@@ -454,3 +454,58 @@ def test_real_worker_matches_in_process_and_keeps_main_process_light(tmp_path: P
     assert json.dumps(report["body"], ensure_ascii=False, sort_keys=True) == json.dumps(
         expected, ensure_ascii=False, sort_keys=True
     )  # 与进程内识别逐字节相同
+
+
+# ---------------------------------------------------------------- 子进程空闲整理堆
+
+
+def test_idle_trimmer_trims_once_after_quiet_period() -> None:
+    from suiyi_engine.ocr_worker import _IdleTrimmer
+
+    calls: list[float] = []
+    trimmer = _IdleTrimmer(lambda: calls.append(time.monotonic()), after_s=0.05)
+    time.sleep(0.2)
+    assert calls == []  # 还没处理过请求，不整理
+    trimmer.done()
+    time.sleep(0.4)
+    assert len(calls) == 1  # 安静后整理一次，之后不重复
+    trimmer.done()
+    time.sleep(0.4)
+    assert len(calls) == 2
+
+
+def test_idle_trimmer_never_trims_while_request_in_progress() -> None:
+    from suiyi_engine.ocr_worker import _IdleTrimmer
+
+    calls: list[int] = []
+    trimmer = _IdleTrimmer(lambda: calls.append(1), after_s=0.05)
+    trimmer.done()
+    with trimmer.busy():  # 模拟下一次识别正在进行
+        time.sleep(0.4)
+        assert calls == []
+        trimmer.done()
+    time.sleep(0.4)
+    assert len(calls) == 1
+
+
+def test_run_worker_trims_after_request() -> None:
+    import io
+
+    from suiyi_engine.ocr_worker import read_frame, run_worker, write_frame
+
+    class Provider:
+        def warmup(self) -> float:
+            return 1.0
+
+    request = io.BytesIO()
+    write_frame(request, {"op": "warmup"})
+    request.seek(0)
+    reply = io.BytesIO()
+    calls: list[int] = []
+    assert run_worker(Provider(), stdin=request, stdout=reply, trimmer=lambda: calls.append(1),
+                      trim_after_s=0.05) == 0  # fmt: skip
+    reply.seek(0)
+    assert read_frame(reply)[0]["op"] == "hello"  # type: ignore[index]
+    assert read_frame(reply)[0] == {"ok": True, "ms": 1.0}  # type: ignore[index]
+    time.sleep(0.4)
+    assert calls == [1]
