@@ -318,9 +318,21 @@ class ModelRegistry:
     def preload(self, pairs: Sequence[tuple[str, str]]) -> None:
         """按语种对预热。中转会加载两段模型。``src == tgt`` 不加载。"""
 
+        records: dict[str, ModelRecord] = {}
         for src, tgt in pairs:
             for record in self.resolve(src, tgt):
-                self.get(record.id)
+                records.setdefault(record.id, record)
+        from suiyi_engine.cpu_isa import model_bin_mib, pack_governor
+
+        # 第一次加载模型时决定是否预打包，按这一批要加载的模型整体估算额外提交量（#119）
+        planned = {
+            model_id: model_bin_mib(record.model_dir)
+            for model_id, record in records.items()
+            if model_id not in self._backends
+        }
+        with pack_governor().planned(planned):
+            for model_id in records:
+                self.get(model_id)
 
     def alternate_record(self, src: str, tgt: str, exclude: str) -> ModelRecord | None:
         """同方向、已安装、不是 ``exclude`` 的另一个模型（#106 回退用），按 id 排序取第一个。"""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -114,35 +115,141 @@ def test_current_returns_package_decision() -> None:
     assert cpu_isa.current() is cpu_isa.current()
 
 
-# ---------------------------------------------------------------- MKL 预打包（#113）
+# ---------------------------------------------------------------- MKL 预打包（#113 / #119）
+
+GIB = 1024.0
 
 
-def test_packed_gemm_off_only_when_commit_is_low() -> None:
-    from suiyi_engine.cpu_isa import PackState, configure_packed_gemm
+def test_estimate_is_calibrated_on_measured_models() -> None:
+    from suiyi_engine.cpu_isa import estimate_pack_extra_mib
 
+    # 实测（ctranslate2 4.8.2 + MKL）：base 模型 768 MiB，tc-big 822–824 MiB
+    assert abs(estimate_pack_extra_mib(76) - 768) < 5
+    assert abs(estimate_pack_extra_mib(236) - 823) < 5
+    # tc-big + zh-en 合计约 1590；负责人笔记本实测 1991 − 406 = 1585
+    assert abs(estimate_pack_extra_mib(236) + estimate_pack_extra_mib(76) - 1585) < 10
+
+
+@pytest.mark.parametrize(
+    ("commit", "physical", "expected"),
+    [
+        (6028.0, 15.7 * GIB, (False, "small_ram")),  # 负责人：刚重启、可用约 6 GB、16 GB 内存
+        (60000.0, 15.4 * GIB, (False, "small_ram")),  # 标称 16 GB 的机器系统常报 15.x
+        (60000.0, 16.0 * GIB, (False, "small_ram")),
+        (6028.0, 32 * GIB, (True, "ok")),  # 6028 − 1590 = 4438 ≥ 4096
+        (5000.0, 32 * GIB, (False, "low_commit")),  # 5000 − 1590 < 4096
+        (2400.0, 64 * GIB, (False, "low_commit")),  # #113 的场景
+        (60000.0, 24 * GIB, (True, "ok")),  # 内存富裕：行为不变
+        (None, 64 * GIB, (True, "ok")),  # Linux 默认超额分配：提交量不是瓶颈
+        (None, None, (True, "ok")),
+    ],
+)
+def test_decide_pack_rules(
+    commit: float | None, physical: float | None, expected: tuple[bool, str]
+) -> None:
+    from suiyi_engine.cpu_isa import decide_pack
+
+    assert decide_pack(commit_mib=commit, physical_mib=physical, extra_mib=1590.0) == expected
+
+
+class Clockwork:
+    """可改的可用提交量 / 物理内存。"""
+
+    def __init__(self, commit: float | None, physical: float | None) -> None:
+        self.commit = commit
+        self.physical = physical
+
+
+def _governor(env: dict[str, str], box: Clockwork, mkl: bool = True):  # type: ignore[no-untyped-def]
+    from suiyi_engine.cpu_isa import PackGovernor
+
+    return PackGovernor(
+        env, commit_mib=lambda: box.commit, physical_mib=lambda: box.physical, mkl=lambda: mkl
+    )
+
+
+def test_decision_waits_for_first_load_then_locks(caplog: pytest.LogCaptureFixture) -> None:
     env: dict[str, str] = {}
-    state = configure_packed_gemm(env, commit_mib=2400.0)  # 负责人实机：已提交 56.1 / 58.5 GB
-    assert state == PackState("0", "auto", 2400.0, 4096)
+    box = Clockwork(6028.0, 32 * GIB)
+    governor = _governor(env, box)
+    assert governor.source == "pending" and env == {}
+    assert governor.health()["ct2_packed_gemm"] is None
+
+    with governor.planned({"tc-big": 236.0, "zh-en": 76.0}):
+        assert governor.before_load("tc-big", 236.0) is True  # 按两个模型估算：4438 ≥ 4096
+        assert governor.before_load("zh-en", 76.0) is True
+    assert env == {"CT2_PACKED_GEMM": "1"}
+    health = governor.health()
+    assert health["ct2_packed_gemm"] == "1" and health["ct2_packed_gemm_source"] == "auto"
+    assert health["ct2_models_packed"] == {"tc-big": True, "zh-en": True}
+    assert health["commit_available_mib"] == 6028
+
+    # 空闲卸载后重新加载：可用量已降到 2100，重新判断、/health 更新，但进程内已锁定，只提示
+    box.commit = 2100.0
+    with caplog.at_level(logging.WARNING, logger="suiyi_engine.cpu_isa"):
+        assert governor.before_load("zh-en", 76.0) is True
+    health = governor.health()
+    assert health["commit_available_mib"] == 2100
+    assert health["ct2_packed_gemm_recommended"] is False
+    assert health["ct2_packed_gemm"] == "1" and env == {"CT2_PACKED_GEMM": "1"}
+    assert "重启服务后生效" in caplog.text
+
+
+def test_first_load_with_low_commit_turns_packing_off() -> None:
+    env: dict[str, str] = {}
+    governor = _governor(env, Clockwork(6028.0, 15.7 * GIB))
+    assert governor.before_load("tc-big", 236.0) is False
     assert env == {"CT2_PACKED_GEMM": "0"}
-    for plenty in (8192.0, None):  # 足够，或拿不到（Linux 默认超额分配）
-        env = {}
-        assert configure_packed_gemm(env, commit_mib=plenty).source == "unset"
-        assert env == {}
+    health = governor.health()
+    assert health["ct2_packed_gemm_reason"] == "small_ram"
+    assert health["physical_memory_mib"] == round(15.7 * GIB)
+    assert "CT2_PACKED_GEMM=0" in governor.describe()
 
 
-def test_packed_gemm_threshold_env_and_user_value() -> None:
-    from suiyi_engine.cpu_isa import configure_packed_gemm
+def test_planned_batch_counts_every_model() -> None:
+    env: dict[str, str] = {}
+    box = Clockwork(5000.0, 32 * GIB)
+    governor = _governor(env, box)
+    with governor.planned({"tc-big": 236.0, "zh-en": 76.0}):
+        governor.before_load("tc-big", 236.0)
+    assert env == {"CT2_PACKED_GEMM": "0"}  # 5000 − 1590 < 4096；只算一个模型时 5000 − 823 ≥ 4096
+    assert governor.health()["packed_gemm_extra_mib"] == 1589  # 740×2 + 0.35×312
 
-    env = {"SUIYI_PACKED_GEMM_MIN_COMMIT_MIB": "999999"}
-    assert configure_packed_gemm(env, commit_mib=8192.0).source == "auto"
-    assert env["CT2_PACKED_GEMM"] == "0"
-    env = {"SUIYI_PACKED_GEMM_MIN_COMMIT_MIB": "oops"}
-    assert configure_packed_gemm(env, commit_mib=8192.0).min_commit_mib == 4096
-    for value in ("1", " 0 "):
+
+def test_user_value_is_never_overridden() -> None:
+    for value in ("0", "1"):
         env = {"CT2_PACKED_GEMM": value}
-        state = configure_packed_gemm(env, commit_mib=100.0)
-        assert (state.value, state.source) == (value.strip(), "user")
+        governor = _governor(env, Clockwork(100.0, 8 * GIB))
+        assert governor.source == "user"
+        assert governor.before_load("m", 76.0) is (value == "1")
         assert env == {"CT2_PACKED_GEMM": value}
+        assert governor.health()["ct2_packed_gemm_reason"] == "user"
+
+
+def test_threshold_envs_and_non_mkl_backend() -> None:
+    env = {"SUIYI_PACKED_GEMM_SMALL_RAM_MIB": "1", "SUIYI_PACKED_GEMM_MIN_COMMIT_MIB": "oops"}
+    governor = _governor(env, Clockwork(6028.0, 15.7 * GIB), mkl=False)
+    assert governor.before_load("m", 236.0) is False  # 非 MKL（AMD 走 oneDNN）从不打包
+    assert env["CT2_PACKED_GEMM"] == "1"  # 小内存阈值调低后不算小内存；默认 4096 仍够
+    assert governor.health()["ct2_models_packed"] == {"m": False}
+
+
+def test_health_lists_only_loaded_models() -> None:
+    governor = _governor({}, Clockwork(None, 64 * GIB))
+    governor.before_load("a", 76.0)
+    governor.before_load("b", 76.0)
+    assert governor.health(["b"])["ct2_models_packed"] == {"b": True}
+
+
+def test_linux_physical_memory(tmp_path: Path) -> None:
+    from suiyi_engine.cpu_isa import physical_memory_mib
+
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal:       16397312 kB\n", encoding="ascii")
+    assert physical_memory_mib("Linux", meminfo) == 16013.0
+    assert physical_memory_mib("Darwin") is None
+    value = physical_memory_mib()
+    assert value is None or value > 0
 
 
 def test_linux_commit_only_counts_under_strict_overcommit(tmp_path: Path) -> None:
@@ -169,38 +276,36 @@ def test_commit_available_on_this_system_is_number_or_none() -> None:
     assert commit_available_mib("Darwin") is None
 
 
-def test_pack_state_health_and_describe() -> None:
-    from suiyi_engine.cpu_isa import PackState
+def test_mkl_in_use_follows_ct2_use_mkl() -> None:
+    from suiyi_engine.cpu_isa import mkl_in_use
 
-    auto = PackState("0", "auto", 2400.4, 4096)
-    assert auto.health() == {
-        "ct2_packed_gemm": "0",
-        "ct2_packed_gemm_source": "auto",
-        "commit_available_mib": 2400,
-    }
-    assert "CT2_PACKED_GEMM=0" in auto.describe() and "#113" in auto.describe()
-    assert "用户" in PackState("1", "user", None).describe()
-    assert "默认" in PackState(None, "unset", None).describe()
-    assert PackState(None, "unset", None).health()["commit_available_mib"] is None
+    assert mkl_in_use({"CT2_USE_MKL": "1"}) is True
+    assert mkl_in_use({"CT2_USE_MKL": "0"}) is False
+    assert isinstance(mkl_in_use({}), bool)
 
 
-def test_package_import_configures_packed_gemm_before_ctranslate2() -> None:
+def test_package_import_does_not_decide_packing_yet() -> None:
     code = (
         "import json, os, sys\n"
         "import suiyi_engine\n"
         "from suiyi_engine import cpu_isa\n"
         "print(json.dumps({'env': os.environ.get('CT2_PACKED_GEMM'),"
-        " 'state': cpu_isa.current_pack().health(),"
+        " 'state': cpu_isa.pack_governor().health(),"
         " 'ct2_loaded': 'ctranslate2' in sys.modules}))\n"
     )
     env = {k: v for k, v in os.environ.items() if k != "CT2_PACKED_GEMM"}
-    env["SUIYI_PACKED_GEMM_MIN_COMMIT_MIB"] = "999999999"
     out = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
     ).stdout
     report = json.loads(out.strip().splitlines()[-1])
-    state = report["state"]
-    if state["commit_available_mib"] is None:  # Linux 默认超额分配：保持默认
-        assert state["ct2_packed_gemm_source"] == "unset" and report["env"] is None
-    else:  # Windows / 严格记账：阈值设得极大，必定自动关掉
-        assert state["ct2_packed_gemm_source"] == "auto" and report["env"] == "0"
+    assert report["env"] is None and report["ct2_loaded"] is False
+    assert report["state"]["ct2_packed_gemm_source"] == "pending"
+
+
+def test_describe_keeps_first_load_basis_while_health_shows_latest() -> None:
+    governor = _governor({}, Clockwork(None, 32 * GIB))
+    with governor.planned({"tc-big": 236.0, "zh-en": 76.0}):
+        governor.before_load("zh-en", 76.0)
+        governor.before_load("tc-big", 236.0)
+    assert "预计额外 1589 MiB" in governor.describe()  # 锁定时按整批估算
+    assert governor.health()["packed_gemm_extra_mib"] == 823  # 最近一次加载只算 tc-big
