@@ -39,7 +39,7 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
 | `--model-idle-unload` | 环境变量 `SUIYI_MODEL_IDLE_UNLOAD`，否则 `600` | 翻译模型连续这么多秒没被用到就卸载（#92），下次用到时自动重新加载。`0` 表示不卸载。命令行优先于环境变量；不是 ≥ 0 的整数时在开始监听前非零退出。不卸载语种检测；OCR 见下一行 |
-| `--ocr-idle-unload` | 环境变量 `SUIYI_OCR_IDLE_UNLOAD`，否则与 `--model-idle-unload` 相同 | OCR 连续这么多秒没被用到就卸载（#96），下次 OCR 请求时自动重新加载。`0` 表示不卸载。#104 起 OCR 在独立子进程里运行（见下文「OCR 子进程」），卸载就是让子进程退出，onnxruntime / OpenCV / numpy 占的内存全部还给系统；下次 OCR 冷启动（拉起子进程 + 加载模型）约 1 s（Linux 实测，见 [性能基线](性能基线.md)） |
+| `--ocr-idle-unload` | 环境变量 `SUIYI_OCR_IDLE_UNLOAD`，否则与 `--model-idle-unload` 相同 | OCR 连续这么多秒没被用到就卸载（#96），下次 OCR 请求时自动重新加载。`0` 表示不卸载。#104 起 OCR 在独立子进程里运行（见下文「OCR 子进程」），卸载就是让子进程退出，onnxruntime / OpenCV / numpy 占的内存全部还给系统；下次 OCR 冷启动（拉起子进程 + 加载模型）约 1 s（Linux），Windows runner 上约 1.4–2 s（见 [性能基线](性能基线.md#104-ocr-独立子进程)） |
 | `--max-loaded-models` | 环境变量 `SUIYI_MAX_LOADED_MODELS`，否则 `2` | 同时常驻的翻译模型上限（#96）。要加载新模型而已满时，先卸载最久没用过的（LRU），再加载。`0` 表示不限；`1` 不允许（ja→zh 这类英文中转要同时用两个模型）。中英双向正好 2 个，切到第三个方向（如 en→ja）时会卸掉较久没用的那个，再切回来要重新加载（约 0.2–0.5 s） |
 
 OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
