@@ -27,6 +27,7 @@ public enum RegionTranslateTrigger
 /// <item>服务未就绪、连接被拒、重试时重启服务、30 秒等待上限：与复制翻译共用同一套规则。</item>
 /// <item>截图只在内存中，最多一张：跟着浮窗内容保留到下一次框选拿到新截图，或浮窗改为显示复制翻译的内容；供「重试」复用同一张 PNG
 /// （包括忙碌时关闭浮窗后，托盘重新显示的「已取消」，#71）。</item>
+/// <item>OCR 预热（#109）：遮罩出现前（服务已就绪时）触发 <see cref="IOcrPrewarmer"/>，后台拉起冷掉的 OCR 子进程，不等结果。</item>
 /// <item>端到端延迟 <c>ocr_e2e_ms</c>：从框选完成（鼠标松开、拿到 PNG）到浮窗结果渲染完成，单独统计 <see cref="OcrLatency"/>。</item>
 /// </list>
 /// </remarks>
@@ -34,6 +35,7 @@ public sealed partial class TranslateFlowCoordinator
 {
     private readonly IOcrTranslationService? _ocr;
     private readonly RegionCaptureTrigger? _region;
+    private readonly IOcrPrewarmer? _ocrPrewarmer;
     private OcrRequest? _lastOcrRequest;
 
     /// <summary>一次框选翻译完成并显示结果（端到端计时之后）。</summary>
@@ -91,6 +93,8 @@ public sealed partial class TranslateFlowCoordinator
             return;
         }
 
+        PrewarmOcr(trigger);
+
         // 隐藏当前浮窗、取消进行中的请求：新的框选优先。旧截图留到新截图到手才替换：
         // 这次若取消框选，托盘左键重新显示的旧浮窗仍可重试。
         _popup.Close(PopupCloseReason.Program);
@@ -111,6 +115,29 @@ public sealed partial class TranslateFlowCoordinator
             bounds.Width,
             bounds.Height,
             released));
+    }
+
+    /// <summary>
+    /// #109：遮罩出现前触发 OCR 预热（后台进行、不等结果），趁用户拖选区时消化 OCR 子进程冷启动。
+    /// 服务未就绪时不预热（等待就绪后的正式请求照常走冷路径）；预热器异常只写日志，不影响框选。
+    /// </summary>
+    private void PrewarmOcr(RegionTranslateTrigger trigger)
+    {
+        if (_ocrPrewarmer is null || _engine.State != EngineState.Ready)
+        {
+            return;
+        }
+
+        try
+        {
+            _ocrPrewarmer.Prewarm();
+        }
+#pragma warning disable CA1031 // 预热是尽力而为，任何异常都不能挡住框选。
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _logger.Warn($"框选预热：触发失败（已忽略，{trigger}）", ex);
+        }
     }
 
     private async Task RunOcrAsync(OcrRequest request, bool waitedForEngine)

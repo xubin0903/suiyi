@@ -64,6 +64,7 @@ public partial class App : Application
     private HotkeyManager? _regionHotkeyManager;
     private RegionCaptureTrigger? _regionCapture;
     private OcrTranslationService? _ocrTranslation;
+    private OcrPrewarmer? _ocrPrewarmer;
     private CancellationTokenSource? _regionCaptureCts;
     private bool _regionDemo;
     private string? _notifiedGlossaryError;
@@ -186,6 +187,7 @@ public partial class App : Application
         _flow?.Dispose();
         _translation?.Dispose();
         _ocrTranslation?.Dispose();
+        _ocrPrewarmer?.Dispose();
         _popupWindow?.CloseForExit();
         _popup?.Dispose();
 
@@ -310,6 +312,9 @@ public partial class App : Application
         // 主流程（#34）：目标语言每次翻译时从设置读取，托盘切换后下一次请求即生效。
         _translation = new TranslationService(client, () => (_settings!.Current.PrimaryTarget, _settings.Current.SecondaryTarget));
         _ocrTranslation = new OcrTranslationService(client, () => (_settings!.Current.PrimaryTarget, _settings.Current.SecondaryTarget), _logger);
+
+        // #109：按下框选快捷键时预热 OCR 子进程（后台、不等结果）。
+        _ocrPrewarmer = new OcrPrewarmer(client, _logger);
         _flow = new TranslateFlowCoordinator(
             _translation,
             engine,
@@ -321,7 +326,8 @@ public partial class App : Application
             // Loaded 优先级低于 Render：回调执行时浮窗这一帧已经渲染。
             afterRender: action => Dispatcher.BeginInvoke(action, DispatcherPriority.Loaded),
             ocr: _ocrTranslation,
-            region: _regionCapture);
+            region: _regionCapture,
+            ocrPrewarmer: _ocrPrewarmer);
 
         _clipboardMonitor!.TextCaptured += (_, args) => _flow.OnTextCaptured(args.Text, args.Trigger, args.Timestamp);
         _clipboardMonitor.TextRejected += (_, args) => _flow.OnTextRejected(args.Reason, args.Length, args.Trigger);
