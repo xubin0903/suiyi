@@ -114,7 +114,7 @@ jobs:
           # 内存列：Windows 为 WS 与 Private Bytes（提交），Linux 为 RSS 与 VmData。Linux 未开严格 overcommit，自动关不触发。
           PG=(--config "MKL 打包=CT2_USE_MKL=1"
               --config "MKL 自动关打包=CT2_USE_MKL=1,SUIYI_PACKED_GEMM_MIN_COMMIT_MIB=1000000"
-              --config "MKL CT2_PACKED_GEMM=0=CT2_USE_MKL=1,CT2_PACKED_GEMM=0"
+              --config "MKL 手动关打包=CT2_USE_MKL=1,CT2_PACKED_GEMM=0"
               --config "默认后端=")
           if [ "${{ inputs.mode || 'full' }}" = "packed-gemm" ]; then
             "$PY" scripts/compare_packed_gemm.py --models-dir "$M" --rounds 1 --alternate 2 --summary "$GITHUB_STEP_SUMMARY" --out "$OUT/packed-gemm.json" "${PG[@]}"
