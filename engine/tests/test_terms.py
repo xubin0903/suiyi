@@ -332,20 +332,52 @@ def test_type_suffix_is_kept_when_the_source_says_type() -> None:
     assert translate_with_terms([source], "en", "zh", [engine], model) == ["选择一种容器编排型。"]
 
 
-def test_new_repetition_in_placeholder_version_falls_back(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+def test_repeated_extra_clause_is_trimmed_for_single_clause_source() -> None:
     flaky = _term("builtin:flaky", "flaky test", "不稳定测试")
     source = "The flaky test was quarantined."
     model = FakeModel(
         {source: "片状测试被隔离。", "The ZXQ was quarantined.": "ZXQ被隔离了,他们被隔离了。"}
     )
     stats = TermStats()
+    out = translate_with_terms([source], "en", "zh", [flaky], model, stats)
+    assert out == ["不稳定测试被隔离了"]  # 句末标点由翻译器按原文补（#83）
+    assert stats.repeat_trims == 1 and stats.fallbacks == 0
+
+
+def test_new_repetition_in_placeholder_version_falls_back(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    flaky = _term("builtin:flaky", "flaky test", "不稳定测试")
+    source = "Sadly, the flaky test was quarantined."  # 原文本来就有两个分句：不截，回退
+    model = FakeModel(
+        {
+            source: "可悲的是，片状测试被隔离。",
+            "Sadly, the ZXQ was quarantined.": "可悲的是,ZXQ被隔离了,他们被隔离了。",
+        }
+    )
+    stats = TermStats()
     with caplog.at_level(logging.INFO, logger="suiyi_engine.terms"):
         out = translate_with_terms([source], "en", "zh", [flaky], model, stats)
-    assert out == ["片状测试被隔离。"]
-    assert stats.fallbacks == 1
+    assert out == ["可悲的是，片状测试被隔离。"]
+    assert stats.fallbacks == 1 and stats.repeat_trims == 0
     assert "builtin:flaky repeat" in caplog.text
+
+
+def test_trim_needs_every_term_in_the_first_clause() -> None:
+    flaky = _term("builtin:flaky", "flaky test", "不稳定测试")
+    pr = _term("builtin:pr", "pull request", "拉取请求")
+    source = "The flaky test blocked the pull request."
+    model = FakeModel(
+        {
+            source: "片状测试阻止了拉请求。",
+            "The ZXQ blocked the ZXW.": "ZXQ阻止了阻止了,ZXW阻止了阻止了。",
+        }
+    )
+    stats = TermStats()
+    assert translate_with_terms([source], "en", "zh", [flaky, pr], model, stats) == [
+        "片状测试阻止了拉请求。"
+    ]
+    assert stats.repeat_trims == 0
 
 
 def test_repeated_term_itself_is_not_a_repetition() -> None:
@@ -586,7 +618,7 @@ def test_serve_reads_glossary_env_vars(
     assert status["glossary_enabled"] is False
     assert status["glossary_user_path"] == str(env_file)
     assert status["glossary_user_entries"] == 2
-    assert f"术语保护关闭：内置 608 条，用户 2 条（{env_file}）" in capsys.readouterr().out
+    assert f"术语保护关闭：内置 610 条，用户 2 条（{env_file}）" in capsys.readouterr().out
     monkeypatch.setenv("SUIYI_GLOSSARY", "1")
     assert serve()["glossary_enabled"] is True
     assert serve("--no-glossary")["glossary_enabled"] is False
@@ -678,3 +710,88 @@ def test_issue_97_regressions_with_real_models() -> None:
     for glossary in (True, False):
         text = translator.translate(_ISSUE_97_K8S, "en", "zh", glossary=glossary).text
         assert not any(mark in text for mark in ",;()"), text
+
+
+# ---------------------------------------------------------------- 回退前的缩减重试（#89）
+
+
+def test_failed_placeholder_retries_with_only_missing_terms(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """zh-en-legal-010：首遍已有 breach of contract，只差违约金；两个占位符都保护时模型丢了一个。"""
+
+    breach = _term("builtin:breach", "breach of contract", "违约")
+    damages = _term("builtin:damages", "liquidated damages", "违约金")
+    source = "任何一方违约，应向守约方支付违约金。"
+    first = "Any breach of contract shall result in the default sum."
+    model = FakeModel(
+        {
+            source: first,
+            "任何一方ZXQ，应向守约方支付ZXW。": "Either party shall pay ZXQ.",
+            "任何一方违约，应向守约方支付ZXW。": "If either party defaults, ZXW shall be paid.",
+        }
+    )
+    stats = TermStats()
+    with caplog.at_level(logging.INFO, logger="suiyi_engine.terms"):
+        out = translate_with_terms([source], "zh", "en", [breach, damages], model, stats)
+    assert out == ["If either party defaults, liquidated damages shall be paid."]
+    assert stats.retry_fixes == 1 and stats.fallbacks == 0
+    assert "回退" not in caplog.text
+    assert len(model.calls) == 2
+
+
+def test_adjacent_placeholders_are_spaced_on_retry() -> None:
+    """zh-en-fin-001：「ZXQZXW」连在一起时模型会写成 ZXX；重试时中间加空格。"""
+
+    revenue = _term("builtin:revenue", "operating revenue", "营业收入")
+    yoy = _term("builtin:yoy", "year over year", "同比")
+    source = "营业收入同比增长。"
+    model = FakeModel(
+        {
+            source: "Operating income rose.",
+            "ZXQZXW增长。": "ZXX rose.",
+            "ZXQ ZXW增长。": "ZXQ grew ZXW.",
+        }
+    )
+    stats = TermStats()
+    out = translate_with_terms([source], "zh", "en", [revenue, yoy], model, stats)
+    assert out == ["Operating revenue grew year over year."]
+    assert stats.retry_fixes == 1
+
+
+def test_retry_that_still_fails_falls_back_to_first_pass(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    revenue = _term("builtin:revenue", "operating revenue", "营业收入")
+    yoy = _term("builtin:yoy", "year over year", "同比")
+    source = "营业收入同比增长。"
+    model = FakeModel({source: "Income rose.", "ZXQZXW增长。": "ZXX rose.", "ZXQ ZXW增长。": "Up."})
+    stats = TermStats()
+    with caplog.at_level(logging.INFO, logger="suiyi_engine.terms"):
+        out = translate_with_terms([source], "zh", "en", [revenue, yoy], model, stats)
+    assert out == ["Income rose."]
+    assert stats.fallbacks == 1 and stats.retry_fixes == 0
+    assert "builtin:revenue:missing builtin:yoy:missing" in caplog.text
+
+
+def test_mixed_term_gets_spaces_next_to_han() -> None:
+    ci = _term("builtin:ci", "CI pipeline", "CI 流水线")
+    pr = _term("builtin:pr", "pull request", "拉取请求")
+    source = "The pull request was merged after the CI pipeline passed."
+    model = FakeModel(
+        {
+            source: "拉请求在CI管道通过后被合并。",
+            "The ZXQ was merged after the ZXW passed.": "ZXQ在ZXW通过后被合并。",
+        }
+    )
+    assert translate_with_terms([source], "en", "zh", [pr, ci], model) == [
+        "拉取请求在 CI 流水线通过后被合并。"
+    ]
+
+
+def test_plain_latin_term_is_not_padded() -> None:
+    api = _term("builtin:api", "application programming interface", "API")
+    item = protect("Call the application programming interface now.", "en", "zh", [api])
+    assert (
+        restore(f"现在调用{item.slots[0].placeholder}接口。", item, "zh")[0] == "现在调用API接口。"
+    )

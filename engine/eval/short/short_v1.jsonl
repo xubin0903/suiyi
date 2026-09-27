@@ -1,0 +1,336 @@
+{"id": "short-greet-001", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Hello.", "reference": "你好。"}
+{"id": "short-greet-002", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Hi.", "reference": "嗨。"}
+{"id": "short-greet-003", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Hi there!", "reference": "你好！"}
+{"id": "short-greet-004", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Hey!", "reference": "嘿！"}
+{"id": "short-greet-005", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Good morning.", "reference": "早上好。"}
+{"id": "short-greet-006", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Good afternoon.", "reference": "下午好。"}
+{"id": "short-greet-007", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Good evening.", "reference": "晚上好。"}
+{"id": "short-greet-008", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Good night.", "reference": "晚安。"}
+{"id": "short-greet-009", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "How are you?", "reference": "你好吗？"}
+{"id": "short-greet-010", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "How are you doing?", "reference": "你最近怎么样？"}
+{"id": "short-greet-011", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "What's up?", "reference": "怎么了？"}
+{"id": "short-greet-012", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Nice to meet you.", "reference": "很高兴认识你。"}
+{"id": "short-greet-013", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Long time no see.", "reference": "好久不见。"}
+{"id": "short-greet-014", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Welcome!", "reference": "欢迎！"}
+{"id": "short-greet-015", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Welcome back.", "reference": "欢迎回来。"}
+{"id": "short-greet-016", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "How's it going?", "reference": "最近怎么样？"}
+{"id": "short-greet-017", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "I'm fine.", "reference": "我很好。"}
+{"id": "short-greet-018", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "I'm good, thanks.", "reference": "我很好，谢谢。"}
+{"id": "short-greet-019", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Not bad.", "reference": "还不错。"}
+{"id": "short-greet-020", "src_lang": "en", "tgt_lang": "zh", "category": "greet", "source": "Pretty good.", "reference": "挺好的。"}
+{"id": "short-bye-001", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Goodbye.", "reference": "再见。"}
+{"id": "short-bye-002", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Bye.", "reference": "拜拜。"}
+{"id": "short-bye-003", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Bye for now.", "reference": "先再见了。"}
+{"id": "short-bye-004", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "See you.", "reference": "回见。"}
+{"id": "short-bye-005", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "See you later.", "reference": "待会儿见。"}
+{"id": "short-bye-006", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "See you tomorrow.", "reference": "明天见。"}
+{"id": "short-bye-007", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "See you soon.", "reference": "很快再见。"}
+{"id": "short-bye-008", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Take care.", "reference": "保重。"}
+{"id": "short-bye-009", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Have a nice day.", "reference": "祝你今天愉快。"}
+{"id": "short-bye-010", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Have fun!", "reference": "玩得开心！"}
+{"id": "short-bye-011", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Good luck!", "reference": "祝你好运！"}
+{"id": "short-bye-012", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Safe travels.", "reference": "一路平安。"}
+{"id": "short-bye-013", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Talk to you later.", "reference": "回头再聊。"}
+{"id": "short-bye-014", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "Catch you later.", "reference": "回头见。"}
+{"id": "short-bye-015", "src_lang": "en", "tgt_lang": "zh", "category": "bye", "source": "I have to go.", "reference": "我得走了。"}
+{"id": "short-thanks-001", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Thank you.", "reference": "谢谢你。"}
+{"id": "short-thanks-002", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Thanks.", "reference": "谢谢。"}
+{"id": "short-thanks-003", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Thanks a lot.", "reference": "多谢。"}
+{"id": "short-thanks-004", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Thank you very much.", "reference": "非常感谢。"}
+{"id": "short-thanks-005", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Many thanks.", "reference": "非常感谢。"}
+{"id": "short-thanks-006", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Thanks for your help.", "reference": "谢谢你的帮助。"}
+{"id": "short-thanks-007", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Thanks anyway.", "reference": "还是谢谢你。"}
+{"id": "short-thanks-008", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "I appreciate it.", "reference": "我很感激。"}
+{"id": "short-thanks-009", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "You're welcome.", "reference": "不客气。"}
+{"id": "short-thanks-010", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "No problem.", "reference": "没问题。"}
+{"id": "short-thanks-011", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "My pleasure.", "reference": "我的荣幸。"}
+{"id": "short-thanks-012", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Don't mention it.", "reference": "不用谢。"}
+{"id": "short-thanks-013", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Anytime.", "reference": "随时效劳。"}
+{"id": "short-thanks-014", "src_lang": "en", "tgt_lang": "zh", "category": "thanks", "source": "Not at all.", "reference": "不客气。"}
+{"id": "short-sorry-001", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "Sorry.", "reference": "对不起。"}
+{"id": "short-sorry-002", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "I'm sorry.", "reference": "对不起。"}
+{"id": "short-sorry-003", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "I'm so sorry.", "reference": "我非常抱歉。"}
+{"id": "short-sorry-004", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "Excuse me.", "reference": "打扰一下。"}
+{"id": "short-sorry-005", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "Pardon?", "reference": "什么？"}
+{"id": "short-sorry-006", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "My bad.", "reference": "我的错。"}
+{"id": "short-sorry-007", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "My apologies.", "reference": "我很抱歉。"}
+{"id": "short-sorry-008", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "Sorry I'm late.", "reference": "抱歉我来晚了。"}
+{"id": "short-sorry-009", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "It's my fault.", "reference": "是我的错。"}
+{"id": "short-sorry-010", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "Never mind.", "reference": "没关系。"}
+{"id": "short-sorry-011", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "It's okay.", "reference": "没关系。"}
+{"id": "short-sorry-012", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "That's alright.", "reference": "没关系。"}
+{"id": "short-sorry-013", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "Don't worry.", "reference": "别担心。"}
+{"id": "short-sorry-014", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "No worries.", "reference": "别担心。"}
+{"id": "short-sorry-015", "src_lang": "en", "tgt_lang": "zh", "category": "sorry", "source": "Forgive me.", "reference": "原谅我。"}
+{"id": "short-yes-001", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Yes.", "reference": "是的。"}
+{"id": "short-yes-002", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "No.", "reference": "不。"}
+{"id": "short-yes-003", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Yeah.", "reference": "是啊。"}
+{"id": "short-yes-004", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Okay.", "reference": "好的。"}
+{"id": "short-yes-005", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "OK.", "reference": "好的。"}
+{"id": "short-yes-006", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Sure.", "reference": "当然。"}
+{"id": "short-yes-007", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Of course.", "reference": "当然。"}
+{"id": "short-yes-008", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Certainly.", "reference": "当然。"}
+{"id": "short-yes-009", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Absolutely.", "reference": "绝对的。"}
+{"id": "short-yes-010", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Exactly.", "reference": "没错。"}
+{"id": "short-yes-011", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Right.", "reference": "对。"}
+{"id": "short-yes-012", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "That's right.", "reference": "没错。"}
+{"id": "short-yes-013", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "I agree.", "reference": "我同意。"}
+{"id": "short-yes-014", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "I think so.", "reference": "我想是的。"}
+{"id": "short-yes-015", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "I don't think so.", "reference": "我不这么认为。"}
+{"id": "short-yes-016", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Maybe.", "reference": "也许吧。"}
+{"id": "short-yes-017", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Probably.", "reference": "可能吧。"}
+{"id": "short-yes-018", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Definitely.", "reference": "肯定的。"}
+{"id": "short-yes-019", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Of course not.", "reference": "当然不。"}
+{"id": "short-yes-020", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "No way.", "reference": "不可能。"}
+{"id": "short-yes-021", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Not really.", "reference": "不太是。"}
+{"id": "short-yes-022", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "I guess so.", "reference": "我想是吧。"}
+{"id": "short-yes-023", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Sounds good.", "reference": "听起来不错。"}
+{"id": "short-yes-024", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Deal.", "reference": "成交。"}
+{"id": "short-yes-025", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Fine.", "reference": "行。"}
+{"id": "short-yes-026", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "All right.", "reference": "好吧。"}
+{"id": "short-yes-027", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Got it.", "reference": "明白了。"}
+{"id": "short-yes-028", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "I see.", "reference": "我明白了。"}
+{"id": "short-yes-029", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Understood.", "reference": "明白。"}
+{"id": "short-yes-030", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Me too.", "reference": "我也是。"}
+{"id": "short-yes-031", "src_lang": "en", "tgt_lang": "zh", "category": "yes", "source": "Me neither.", "reference": "我也不。"}
+{"id": "short-q-001", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "What?", "reference": "什么？"}
+{"id": "short-q-002", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Why?", "reference": "为什么？"}
+{"id": "short-q-003", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Where?", "reference": "在哪里？"}
+{"id": "short-q-004", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "When?", "reference": "什么时候？"}
+{"id": "short-q-005", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Who?", "reference": "谁？"}
+{"id": "short-q-006", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "How?", "reference": "怎么做？"}
+{"id": "short-q-007", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Really?", "reference": "真的吗？"}
+{"id": "short-q-008", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Are you sure?", "reference": "你确定吗？"}
+{"id": "short-q-009", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "What happened?", "reference": "发生了什么？"}
+{"id": "short-q-010", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "What's wrong?", "reference": "怎么了？"}
+{"id": "short-q-011", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "What time is it?", "reference": "现在几点了？"}
+{"id": "short-q-012", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Where are you?", "reference": "你在哪里？"}
+{"id": "short-q-013", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Where is it?", "reference": "它在哪里？"}
+{"id": "short-q-014", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Who is it?", "reference": "是谁？"}
+{"id": "short-q-015", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "How much?", "reference": "多少钱？"}
+{"id": "short-q-016", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "How much is it?", "reference": "这个多少钱？"}
+{"id": "short-q-017", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "How old are you?", "reference": "你多大了？"}
+{"id": "short-q-018", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "What's your name?", "reference": "你叫什么名字？"}
+{"id": "short-q-019", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Can you help me?", "reference": "你能帮我吗？"}
+{"id": "short-q-020", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Do you understand?", "reference": "你明白吗？"}
+{"id": "short-q-021", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Any questions?", "reference": "有问题吗？"}
+{"id": "short-q-022", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Is it ready?", "reference": "准备好了吗？"}
+{"id": "short-q-023", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Are you okay?", "reference": "你还好吗？"}
+{"id": "short-q-024", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Are you ready?", "reference": "你准备好了吗？"}
+{"id": "short-q-025", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "What do you think?", "reference": "你怎么看？"}
+{"id": "short-q-026", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Can I help you?", "reference": "需要帮忙吗？"}
+{"id": "short-q-027", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Anything else?", "reference": "还有别的吗？"}
+{"id": "short-q-028", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "Why not?", "reference": "为什么不呢？"}
+{"id": "short-q-029", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "What about you?", "reference": "你呢？"}
+{"id": "short-q-030", "src_lang": "en", "tgt_lang": "zh", "category": "q", "source": "How come?", "reference": "怎么会？"}
+{"id": "short-req-001", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Please.", "reference": "请。"}
+{"id": "short-req-002", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Help!", "reference": "救命！"}
+{"id": "short-req-003", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Wait.", "reference": "等等。"}
+{"id": "short-req-004", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Wait a minute.", "reference": "等一下。"}
+{"id": "short-req-005", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Hold on.", "reference": "稍等。"}
+{"id": "short-req-006", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Just a moment.", "reference": "稍等一下。"}
+{"id": "short-req-007", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Come in.", "reference": "请进。"}
+{"id": "short-req-008", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Sit down, please.", "reference": "请坐。"}
+{"id": "short-req-009", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Come here.", "reference": "过来。"}
+{"id": "short-req-010", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Follow me.", "reference": "跟我来。"}
+{"id": "short-req-011", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Stop!", "reference": "停下！"}
+{"id": "short-req-012", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Be careful.", "reference": "小心。"}
+{"id": "short-req-013", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Watch out!", "reference": "当心！"}
+{"id": "short-req-014", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Hurry up.", "reference": "快点。"}
+{"id": "short-req-015", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Slow down.", "reference": "慢点。"}
+{"id": "short-req-016", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Calm down.", "reference": "冷静点。"}
+{"id": "short-req-017", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Listen.", "reference": "听着。"}
+{"id": "short-req-018", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Look!", "reference": "看！"}
+{"id": "short-req-019", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Let's go.", "reference": "我们走吧。"}
+{"id": "short-req-020", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Go ahead.", "reference": "请便。"}
+{"id": "short-req-021", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "After you.", "reference": "您先请。"}
+{"id": "short-req-022", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Try again.", "reference": "再试一次。"}
+{"id": "short-req-023", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Please try again.", "reference": "请再试一次。"}
+{"id": "short-req-024", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Keep going.", "reference": "继续。"}
+{"id": "short-req-025", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Don't move.", "reference": "别动。"}
+{"id": "short-req-026", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Leave me alone.", "reference": "别管我。"}
+{"id": "short-req-027", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Call me.", "reference": "给我打电话。"}
+{"id": "short-req-028", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Tell me.", "reference": "告诉我。"}
+{"id": "short-req-029", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Say it again.", "reference": "再说一遍。"}
+{"id": "short-req-030", "src_lang": "en", "tgt_lang": "zh", "category": "req", "source": "Speak slowly, please.", "reference": "请说慢一点。"}
+{"id": "short-feel-001", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Great!", "reference": "太好了！"}
+{"id": "short-feel-002", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Awesome!", "reference": "太棒了！"}
+{"id": "short-feel-003", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Wow!", "reference": "哇！"}
+{"id": "short-feel-004", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Cool.", "reference": "酷。"}
+{"id": "short-feel-005", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Nice.", "reference": "不错。"}
+{"id": "short-feel-006", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Perfect.", "reference": "完美。"}
+{"id": "short-feel-007", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Congratulations!", "reference": "恭喜！"}
+{"id": "short-feel-008", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Well done.", "reference": "干得好。"}
+{"id": "short-feel-009", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Good job.", "reference": "干得好。"}
+{"id": "short-feel-010", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Cheers!", "reference": "干杯！"}
+{"id": "short-feel-011", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Happy birthday!", "reference": "生日快乐！"}
+{"id": "short-feel-012", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Happy New Year!", "reference": "新年快乐！"}
+{"id": "short-feel-013", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Merry Christmas!", "reference": "圣诞快乐！"}
+{"id": "short-feel-014", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I love you.", "reference": "我爱你。"}
+{"id": "short-feel-015", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I miss you.", "reference": "我想你。"}
+{"id": "short-feel-016", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm hungry.", "reference": "我饿了。"}
+{"id": "short-feel-017", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm tired.", "reference": "我累了。"}
+{"id": "short-feel-018", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm happy.", "reference": "我很开心。"}
+{"id": "short-feel-019", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm bored.", "reference": "我很无聊。"}
+{"id": "short-feel-020", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm busy.", "reference": "我很忙。"}
+{"id": "short-feel-021", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm lost.", "reference": "我迷路了。"}
+{"id": "short-feel-022", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm cold.", "reference": "我很冷。"}
+{"id": "short-feel-023", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm ready.", "reference": "我准备好了。"}
+{"id": "short-feel-024", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm sick.", "reference": "我病了。"}
+{"id": "short-feel-025", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm scared.", "reference": "我害怕。"}
+{"id": "short-feel-026", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "I'm confused.", "reference": "我糊涂了。"}
+{"id": "short-feel-027", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "That's great.", "reference": "太好了。"}
+{"id": "short-feel-028", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "That's too bad.", "reference": "太遗憾了。"}
+{"id": "short-feel-029", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "What a pity.", "reference": "真可惜。"}
+{"id": "short-feel-030", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "How nice!", "reference": "真好！"}
+{"id": "short-feel-031", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Oh no!", "reference": "哦不！"}
+{"id": "short-feel-032", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Oops.", "reference": "哎呀。"}
+{"id": "short-feel-033", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Thank God.", "reference": "谢天谢地。"}
+{"id": "short-feel-034", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Amazing!", "reference": "太神奇了！"}
+{"id": "short-feel-035", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Interesting.", "reference": "有意思。"}
+{"id": "short-feel-036", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Unbelievable.", "reference": "难以置信。"}
+{"id": "short-feel-037", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Bless you.", "reference": "保佑你。"}
+{"id": "short-feel-038", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Enjoy your meal.", "reference": "请慢用。"}
+{"id": "short-feel-039", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Cheer up!", "reference": "振作起来！"}
+{"id": "short-feel-040", "src_lang": "en", "tgt_lang": "zh", "category": "feel", "source": "Don't give up.", "reference": "别放弃。"}
+{"id": "short-misc-001", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I don't know.", "reference": "我不知道。"}
+{"id": "short-misc-002", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I don't understand.", "reference": "我不明白。"}
+{"id": "short-misc-003", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I forgot.", "reference": "我忘了。"}
+{"id": "short-misc-004", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm here.", "reference": "我在这儿。"}
+{"id": "short-misc-005", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm coming.", "reference": "我来了。"}
+{"id": "short-misc-006", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm on my way.", "reference": "我在路上了。"}
+{"id": "short-misc-007", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm home.", "reference": "我回来了。"}
+{"id": "short-misc-008", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It's late.", "reference": "很晚了。"}
+{"id": "short-misc-009", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It's cold.", "reference": "天很冷。"}
+{"id": "short-misc-010", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It's raining.", "reference": "下雨了。"}
+{"id": "short-misc-011", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It depends.", "reference": "看情况。"}
+{"id": "short-misc-012", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It doesn't matter.", "reference": "没关系。"}
+{"id": "short-misc-013", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It's up to you.", "reference": "由你决定。"}
+{"id": "short-misc-014", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It's done.", "reference": "完成了。"}
+{"id": "short-misc-015", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It works.", "reference": "可以用了。"}
+{"id": "short-misc-016", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "It's broken.", "reference": "它坏了。"}
+{"id": "short-misc-017", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Nothing.", "reference": "没什么。"}
+{"id": "short-misc-018", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Nothing much.", "reference": "没什么。"}
+{"id": "short-misc-019", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "That's it.", "reference": "就这样。"}
+{"id": "short-misc-020", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Same here.", "reference": "我也一样。"}
+{"id": "short-misc-021", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Help yourself.", "reference": "请随意。"}
+{"id": "short-misc-022", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Just kidding.", "reference": "开玩笑的。"}
+{"id": "short-misc-023", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Good idea.", "reference": "好主意。"}
+{"id": "short-misc-024", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Not yet.", "reference": "还没有。"}
+{"id": "short-misc-025", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Almost.", "reference": "差不多了。"}
+{"id": "short-misc-026", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Too late.", "reference": "太晚了。"}
+{"id": "short-misc-027", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Too expensive.", "reference": "太贵了。"}
+{"id": "short-misc-028", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "No idea.", "reference": "不知道。"}
+{"id": "short-misc-029", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Let me see.", "reference": "让我看看。"}
+{"id": "short-misc-030", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Let me think.", "reference": "让我想想。"}
+{"id": "short-misc-031", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'll be back.", "reference": "我会回来的。"}
+{"id": "short-misc-032", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Lunch is ready.", "reference": "午饭好了。"}
+{"id": "short-misc-033", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Time's up.", "reference": "时间到了。"}
+{"id": "short-misc-034", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Here you are.", "reference": "给你。"}
+{"id": "short-misc-035", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Here it is.", "reference": "在这儿。"}
+{"id": "short-misc-036", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "This way, please.", "reference": "请这边走。"}
+{"id": "short-misc-037", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Check, please.", "reference": "请结账。"}
+{"id": "short-misc-038", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Happy holidays!", "reference": "节日快乐！"}
+{"id": "short-misc-039", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "See you next week.", "reference": "下周见。"}
+{"id": "short-misc-040", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Welcome home.", "reference": "欢迎回家。"}
+{"id": "short-misc-041", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Good question.", "reference": "好问题。"}
+{"id": "short-misc-042", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Thanks, you too.", "reference": "谢谢，你也是。"}
+{"id": "short-misc-043", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm not sure.", "reference": "我不确定。"}
+{"id": "short-misc-044", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Please sit down.", "reference": "请坐。"}
+{"id": "short-misc-045", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Excuse me, sorry.", "reference": "不好意思，抱歉。"}
+{"id": "short-misc-046", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Good to know.", "reference": "知道了，很有用。"}
+{"id": "short-misc-047", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Keep it up.", "reference": "继续保持。"}
+{"id": "short-misc-048", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Enough.", "reference": "够了。"}
+{"id": "short-misc-049", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm in.", "reference": "算我一个。"}
+{"id": "short-misc-050", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Count me in.", "reference": "算我一个。"}
+{"id": "short-misc-051", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Shut up!", "reference": "闭嘴！"}
+{"id": "short-misc-052", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Sleep well.", "reference": "睡个好觉。"}
+{"id": "short-misc-053", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Sweet dreams.", "reference": "做个好梦。"}
+{"id": "short-misc-054", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Get well soon.", "reference": "早日康复。"}
+{"id": "short-misc-055", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Drive safely.", "reference": "开车小心。"}
+{"id": "short-misc-056", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Hang on.", "reference": "等一下。"}
+{"id": "short-misc-057", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm sorry, what?", "reference": "抱歉，你说什么？"}
+{"id": "short-misc-058", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Thank you so much!", "reference": "太感谢了！"}
+{"id": "short-misc-059", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "I'm really sorry.", "reference": "我真的很抱歉。"}
+{"id": "short-misc-060", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Hello, everyone.", "reference": "大家好。"}
+{"id": "short-misc-061", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Good morning, everyone.", "reference": "大家早上好。"}
+{"id": "short-misc-062", "src_lang": "en", "tgt_lang": "zh", "category": "misc", "source": "Thanks, everyone.", "reference": "谢谢大家。"}
+{"id": "short-holdout-001", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Hey, what's up?", "reference": "嘿，怎么了？"}
+{"id": "short-holdout-002", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Good to hear.", "reference": "很高兴听到这个。"}
+{"id": "short-holdout-003", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "See you on Monday.", "reference": "周一见。"}
+{"id": "short-holdout-004", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Thanks for the tip.", "reference": "谢谢你的建议。"}
+{"id": "short-holdout-005", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Thanks for asking.", "reference": "谢谢关心。"}
+{"id": "short-holdout-006", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Sorry to hear that.", "reference": "听到这个很遗憾。"}
+{"id": "short-holdout-007", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "No need.", "reference": "不用了。"}
+{"id": "short-holdout-008", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Not now.", "reference": "现在不行。"}
+{"id": "short-holdout-009", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Of course I do.", "reference": "我当然愿意。"}
+{"id": "short-holdout-010", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I can't.", "reference": "我不能。"}
+{"id": "short-holdout-011", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I can do it.", "reference": "我能行。"}
+{"id": "short-holdout-012", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm afraid not.", "reference": "恐怕不行。"}
+{"id": "short-holdout-013", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Is it true?", "reference": "是真的吗？"}
+{"id": "short-holdout-014", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "What's this?", "reference": "这是什么？"}
+{"id": "short-holdout-015", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "What's that?", "reference": "那是什么？"}
+{"id": "short-holdout-016", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Where to?", "reference": "去哪儿？"}
+{"id": "short-holdout-017", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "What for?", "reference": "为什么？"}
+{"id": "short-holdout-018", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Who cares?", "reference": "谁在乎？"}
+{"id": "short-holdout-019", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Can I come in?", "reference": "我能进来吗？"}
+{"id": "short-holdout-020", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Can you hear me?", "reference": "你能听到我吗？"}
+{"id": "short-holdout-021", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Are you there?", "reference": "你在吗？"}
+{"id": "short-holdout-022", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Any news?", "reference": "有消息吗？"}
+{"id": "short-holdout-023", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "How was it?", "reference": "怎么样？"}
+{"id": "short-holdout-024", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "How was your day?", "reference": "你今天过得怎么样？"}
+{"id": "short-holdout-025", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Did you eat?", "reference": "你吃饭了吗？"}
+{"id": "short-holdout-026", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Is everything okay?", "reference": "一切都好吗？"}
+{"id": "short-holdout-027", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Do you like it?", "reference": "你喜欢吗？"}
+{"id": "short-holdout-028", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Open the door.", "reference": "开门。"}
+{"id": "short-holdout-029", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Close the window.", "reference": "关上窗户。"}
+{"id": "short-holdout-030", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Turn it off.", "reference": "把它关掉。"}
+{"id": "short-holdout-031", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Sit tight.", "reference": "别动，等着。"}
+{"id": "short-holdout-032", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Take a seat.", "reference": "请坐。"}
+{"id": "short-holdout-033", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Be patient.", "reference": "耐心点。"}
+{"id": "short-holdout-034", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Don't be late.", "reference": "别迟到。"}
+{"id": "short-holdout-035", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Don't forget.", "reference": "别忘了。"}
+{"id": "short-holdout-036", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Don't cry.", "reference": "别哭。"}
+{"id": "short-holdout-037", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Don't touch it.", "reference": "别碰它。"}
+{"id": "short-holdout-038", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Give me a hand.", "reference": "帮我一把。"}
+{"id": "short-holdout-039", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Wake up!", "reference": "醒醒！"}
+{"id": "short-holdout-040", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Good night, everyone.", "reference": "大家晚安。"}
+{"id": "short-holdout-041", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Well said.", "reference": "说得好。"}
+{"id": "short-holdout-042", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Not bad at all.", "reference": "一点也不差。"}
+{"id": "short-holdout-043", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "How lovely!", "reference": "真可爱！"}
+{"id": "short-holdout-044", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "What a surprise!", "reference": "真是个惊喜！"}
+{"id": "short-holdout-045", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Happy Easter!", "reference": "复活节快乐！"}
+{"id": "short-holdout-046", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Happy Valentine's Day!", "reference": "情人节快乐！"}
+{"id": "short-holdout-047", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm starving.", "reference": "我饿死了。"}
+{"id": "short-holdout-048", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm freezing.", "reference": "我快冻死了。"}
+{"id": "short-holdout-049", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm exhausted.", "reference": "我累坏了。"}
+{"id": "short-holdout-050", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm nervous.", "reference": "我很紧张。"}
+{"id": "short-holdout-051", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I feel sick.", "reference": "我感觉不舒服。"}
+{"id": "short-holdout-052", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm so happy.", "reference": "我太开心了。"}
+{"id": "short-holdout-053", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm fine now.", "reference": "我现在没事了。"}
+{"id": "short-holdout-054", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm almost done.", "reference": "我快好了。"}
+{"id": "short-holdout-055", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I need help.", "reference": "我需要帮助。"}
+{"id": "short-holdout-056", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm not ready.", "reference": "我还没准备好。"}
+{"id": "short-holdout-057", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I have a question.", "reference": "我有个问题。"}
+{"id": "short-holdout-058", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I'm listening.", "reference": "我在听。"}
+{"id": "short-holdout-059", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "I changed my mind.", "reference": "我改变主意了。"}
+{"id": "short-holdout-060", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "It's my turn.", "reference": "轮到我了。"}
+{"id": "short-holdout-061", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "It's too hot.", "reference": "太热了。"}
+{"id": "short-holdout-062", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "It's getting late.", "reference": "天色不早了。"}
+{"id": "short-holdout-063", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "It's free.", "reference": "免费的。"}
+{"id": "short-holdout-064", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "It's over.", "reference": "结束了。"}
+{"id": "short-holdout-065", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "It's nothing.", "reference": "没什么。"}
+{"id": "short-holdout-066", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "That's weird.", "reference": "真奇怪。"}
+{"id": "short-holdout-067", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "That's funny.", "reference": "真好笑。"}
+{"id": "short-holdout-068", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "That makes sense.", "reference": "有道理。"}
+{"id": "short-holdout-069", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Nice try.", "reference": "想得美。"}
+{"id": "short-holdout-070", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Good point.", "reference": "说得对。"}
+{"id": "short-holdout-071", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Big deal.", "reference": "有什么大不了的。"}
+{"id": "short-holdout-072", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "No kidding.", "reference": "真的假的。"}
+{"id": "short-holdout-073", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "You're kidding.", "reference": "你开玩笑吧。"}
+{"id": "short-holdout-074", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Well, okay.", "reference": "嗯，好吧。"}
+{"id": "short-holdout-075", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Oh, really?", "reference": "哦，真的吗？"}
+{"id": "short-holdout-076", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Thanks again.", "reference": "再次感谢。"}
+{"id": "short-holdout-077", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "You're so kind.", "reference": "你真好。"}
+{"id": "short-holdout-078", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Take your time.", "reference": "慢慢来。"}
+{"id": "short-holdout-079", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "See you then.", "reference": "到时候见。"}

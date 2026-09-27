@@ -265,7 +265,7 @@ def test_paragraphs_are_joined_and_cjk_target_has_no_gap(tmp_path: Path) -> None
         return ScriptBackend(["你好。", "世界。"])
 
     en_zh = Translator(tmp_path, backend_factory=en_zh_factory)
-    compact = en_zh.translate("Hello. World.", "en", "zh")
+    compact = en_zh.translate("Red apples. Blue sky.", "en", "zh")  # 不在极短句表里（#89）
     assert compact.text == "你好。世界。"
     assert " " not in compact.text
 

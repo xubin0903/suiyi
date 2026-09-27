@@ -41,6 +41,8 @@ class ZhGuardStats:
     """发现乱码或繁体、重译过的句数。"""
     fixed_by: dict[str, int] = field(default_factory=dict)
     unresolved: int = 0
+    empty: int = 0
+    """原文有字、译文为空（模型整句输出 ``<unk>``）的句数（#89）。"""
 
 
 class ZhOutputGuard:
@@ -67,11 +69,42 @@ class ZhOutputGuard:
         bad = [
             index
             for index, (source, output) in enumerate(zip(sentences, outputs, strict=True))
-            if not find_issues(output, source).ok
+            if _blank_output(source, output) or not find_issues(output, source).ok
         ]
+        empty = [index for index in bad if _blank_output(sentences[index], outputs[index])]
+        if empty:
+            self._fill_empty(sentences, outputs, empty)
+            bad = [index for index in bad if index not in empty]
         if bad:
             self._repair(sentences, outputs, bad)
         return outputs
+
+    # ---- 空译文（#89）
+
+    def _fill_empty(self, sentences: list[str], outputs: list[str], empty: list[int]) -> None:
+        """整句都是 ``<unk>``、解码后为空（「Where to?」）：换同方向的另一个模型翻一次；
+        还是空就原样返回原文——空白比没翻更糟，同一模型换 beam 实测只会出无关的字（「柑?」）。"""
+
+        self.stats.empty += len(empty)
+        results: list[str] | None = None
+        if self._fallback is not None:
+            try:
+                results = self._translate_with_fallback([sentences[index] for index in empty])
+            except Exception:
+                logger.warning("中文译文检查：空译文换模型重译失败", exc_info=True)
+        if results is None or len(results) != len(empty):
+            results = [""] * len(empty)
+        for index, result in zip(empty, results, strict=True):
+            if (
+                not _blank_output(sentences[index], result)
+                and find_issues(result, sentences[index]).ok
+            ):
+                outputs[index] = result
+                self._count("empty_fallback_model")
+            else:
+                outputs[index] = sentences[index]
+                self._count("empty_source")
+        logger.info("中文译文检查：%d 句译文为空", len(empty))
 
     # ---- 乱码 / 繁体
 
@@ -157,3 +190,9 @@ class ZhOutputGuard:
             from suiyi_engine import memory
 
             memory.trim()
+
+
+def _blank_output(source: str, output: str) -> bool:
+    """原文里有字母 / 数字 / 汉字，译文里一个都没有。"""
+
+    return any(char.isalnum() for char in source) and not any(char.isalnum() for char in output)

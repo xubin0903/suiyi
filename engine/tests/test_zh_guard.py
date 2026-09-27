@@ -322,3 +322,20 @@ def test_single_rare_character_is_not_big5_repaired() -> None:
     guard = ZhOutputGuard(TcBigLike(table))
     assert guard.translate_batch(["x"]) == ["别蹚浑水"]
     assert guard.stats.unresolved == 1
+
+
+def test_empty_output_uses_other_model_then_source() -> None:
+    inner = TcBigLike({(2, False): {"Where to?": "", "Hi.": "你好。", "Go?": "？"}})
+    other = Fixed({"Where to?": "去哪儿？", "Go?": ""})
+    guard = ZhOutputGuard(inner, fallback=lambda: other)
+    out = guard.translate_batch(["Hi.", "Where to?", "Go?"])
+    assert out == ["你好。", "去哪儿？", "Go?"]  # 换模型也空：原样返回原文，不给空白
+    assert len(inner.calls) == 1  # 同一模型换 beam 只会出无关的字，不试
+    assert guard.stats.empty == 2
+    assert guard.stats.fixed_by == {"empty_fallback_model": 1, "empty_source": 1}
+
+
+def test_empty_output_without_fallback_returns_source_and_punct_only_source_is_fine() -> None:
+    inner = TcBigLike({(2, False): {"Where to?": "", "?!": ""}})
+    guard = ZhOutputGuard(inner)
+    assert guard.translate_batch(["Where to?", "?!"]) == ["Where to?", ""]

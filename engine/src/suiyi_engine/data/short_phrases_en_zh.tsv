@@ -1,0 +1,519 @@
+# 常用英文极短句 → 中文（#89）。整句（去掉句末 . ! ? 和两端空白、忽略大小写、弯引号当直引号）
+# 与左列完全相同时直接用右列，不经过模型；句末标点按原文补（. → 。 ! → ！ ? → ？）。
+# 只收 1–5 个词的日常口语，取最常见的意思。改动后跑 engine/tests/test_short_phrases.py。
+hello	你好
+hi	嗨
+hi there	你好
+hey	嘿
+hey there	嘿，你好
+hello there	你好
+hello everyone	大家好
+hello, everyone	大家好
+hi everyone	大家好
+hi, everyone	大家好
+hi all	大家好
+good morning	早上好
+good morning, everyone	大家早上好
+good morning everyone	大家早上好
+morning	早
+good afternoon	下午好
+good afternoon, everyone	大家下午好
+good evening	晚上好
+good evening, everyone	大家晚上好
+good night	晚安
+goodnight	晚安
+night	晚安
+how are you	你好吗
+how are you doing	你最近怎么样
+how are you today	你今天好吗
+how's it going	最近怎么样
+how is it going	最近怎么样
+how have you been	你最近怎么样
+how's everything	一切都好吗
+what's up	怎么了
+what's new	有什么新鲜事吗
+nice to meet you	很高兴认识你
+nice to meet you too	我也很高兴认识你
+pleased to meet you	很高兴认识你
+glad to meet you	很高兴认识你
+nice to see you	很高兴见到你
+good to see you	很高兴见到你
+long time no see	好久不见
+welcome	欢迎
+welcome back	欢迎回来
+welcome home	欢迎回家
+i'm fine	我很好
+i'm fine, thanks	我很好，谢谢
+i'm fine, thank you	我很好，谢谢
+i'm good	我很好
+i'm good, thanks	我很好，谢谢
+i'm ok	我还好
+i'm okay	我还好
+not bad	还不错
+pretty good	挺好的
+very well	很好
+and you	你呢
+goodbye	再见
+good bye	再见
+bye	拜拜
+bye bye	拜拜
+bye-bye	拜拜
+bye for now	先再见了
+see you	回见
+see ya	回见
+see you later	待会儿见
+see you soon	回头见
+see you tomorrow	明天见
+see you next week	下周见
+see you next time	下次见
+see you around	回头见
+take care	保重
+take care of yourself	照顾好自己
+have a nice day	祝你今天愉快
+have a good day	祝你今天愉快
+have a great day	祝你今天愉快
+have a nice weekend	周末愉快
+have a good weekend	周末愉快
+have a good time	玩得开心
+have fun	玩得开心
+good luck	祝你好运
+best of luck	祝你好运
+safe travels	一路平安
+have a safe trip	一路平安
+bon voyage	一路顺风
+talk to you later	回头再聊
+talk soon	回头聊
+catch you later	回头见
+i have to go	我得走了
+i've got to go	我得走了
+i gotta go	我得走了
+i must go	我得走了
+i'm leaving	我走了
+thank you	谢谢你
+thanks	谢谢
+thanks a lot	多谢
+thanks so much	太感谢了
+thank you so much	太感谢了
+thank you very much	非常感谢
+thanks very much	非常感谢
+many thanks	非常感谢
+thanks a million	万分感谢
+thanks for everything	谢谢你做的一切
+thanks for your help	谢谢你的帮助
+thank you for your help	谢谢你的帮助
+thanks for coming	谢谢你来
+thanks for waiting	谢谢你的耐心等待
+thank you for waiting	谢谢你的耐心等待
+thanks anyway	还是谢谢你
+thanks, you too	谢谢，你也是
+thank you, you too	谢谢，你也是
+thanks, everyone	谢谢大家
+thanks everyone	谢谢大家
+thank you, everyone	谢谢大家
+thank you everyone	谢谢大家
+thank you all	谢谢大家
+thanks, i'm fine	谢谢，我很好
+i appreciate it	我很感激
+much appreciated	非常感谢
+you're welcome	不客气
+you are welcome	不客气
+no problem	没问题
+no problem at all	完全没问题
+my pleasure	我的荣幸
+it's my pleasure	这是我的荣幸
+don't mention it	不用谢
+anytime	随时效劳
+any time	随时效劳
+not at all	不客气
+sure thing	没问题
+sorry	对不起
+i'm sorry	对不起
+i am sorry	对不起
+i'm so sorry	我非常抱歉
+i'm really sorry	我真的很抱歉
+i'm very sorry	我非常抱歉
+so sorry	非常抱歉
+sorry about that	抱歉
+sorry for that	抱歉
+sorry i'm late	抱歉我来晚了
+sorry for being late	抱歉我来晚了
+sorry to bother you	抱歉打扰你
+sorry, what	抱歉，你说什么
+i'm sorry, what	抱歉，你说什么
+sorry, i didn't catch that	抱歉，我没听清
+excuse me	打扰一下
+excuse me, sorry	不好意思，抱歉
+pardon	什么
+pardon me	请再说一遍
+i beg your pardon	请再说一遍
+come again	你再说一遍
+my bad	我的错
+my fault	我的错
+my apologies	我很抱歉
+it's my fault	是我的错
+never mind	没关系
+nevermind	没关系
+it's okay	没关系
+it's ok	没关系
+it's all right	没关系
+it's alright	没关系
+that's okay	没关系
+that's ok	没关系
+that's all right	没关系
+that's alright	没关系
+it's fine	没事
+that's fine	没问题
+don't worry	别担心
+don't worry about it	别担心
+no worries	别担心
+forgive me	原谅我
+please forgive me	请原谅我
+yes	是的
+yes, please	好的，谢谢
+yes please	好的，谢谢
+no	不
+no, thanks	不用了，谢谢
+no thanks	不用了，谢谢
+no, thank you	不用了，谢谢
+no thank you	不用了，谢谢
+yeah	是啊
+yep	嗯
+yup	嗯
+nope	不
+okay	好的
+ok	好的
+okey	好的
+okay, thanks	好的，谢谢
+ok, thanks	好的，谢谢
+sure	当然
+sure, why not	当然，为什么不呢
+of course	当然
+of course not	当然不
+certainly	当然
+absolutely	当然
+absolutely not	绝对不行
+exactly	没错
+right	对
+that's right	没错
+that's true	确实如此
+true	没错
+correct	正确
+you're right	你说得对
+you are right	你说得对
+i agree	我同意
+i disagree	我不同意
+i think so	我想是的
+i don't think so	我不这么认为
+i hope so	但愿如此
+i hope not	但愿不会
+i guess so	我想是吧
+maybe	也许吧
+perhaps	也许
+probably	可能吧
+definitely	肯定的
+definitely not	肯定不是
+no way	不可能
+not really	不太是
+not exactly	不完全是
+not sure	不确定
+i'm not sure	我不确定
+i'm sure	我确定
+sounds good	听起来不错
+sounds great	听起来很棒
+sounds like a plan	就这么定了
+deal	成交
+it's a deal	一言为定
+fine	好吧
+fine by me	我没意见
+all right	好吧
+alright	好吧
+got it	明白了
+i got it	我明白了
+i see	我明白了
+understood	明白
+i understand	我明白
+i don't understand	我不明白
+i don't know	我不知道
+i have no idea	我不知道
+no idea	不知道
+who knows	谁知道呢
+me too	我也是
+me neither	我也不
+same here	我也一样
+same to you	你也一样
+you too	你也是
+what	什么
+why	为什么
+why not	为什么不呢
+where	在哪里
+when	什么时候
+who	谁
+how	怎么做
+how come	怎么会
+really	真的吗
+seriously	说真的
+are you sure	你确定吗
+are you serious	你是认真的吗
+is that so	是吗
+is that right	是这样吗
+what happened	发生了什么
+what's wrong	怎么了
+what's the matter	怎么了
+what's going on	怎么回事
+what time is it	现在几点了
+where are you	你在哪里
+where are you from	你是哪里人
+where is it	它在哪里
+where is the toilet	厕所在哪里
+where's the bathroom	洗手间在哪里
+where is the bathroom	洗手间在哪里
+who is it	是谁
+who's there	谁啊
+who are you	你是谁
+how much	多少钱
+how much is it	这个多少钱
+how much is this	这个多少钱
+how many	多少个
+how old are you	你多大了
+what's your name	你叫什么名字
+what is your name	你叫什么名字
+can you help me	你能帮我吗
+could you help me	你能帮我一下吗
+can i help you	需要帮忙吗
+how can i help you	有什么可以帮你的吗
+may i help you	需要帮忙吗
+do you need help	需要帮忙吗
+do you understand	你明白吗
+do you speak english	你会说英语吗
+any questions	有问题吗
+is it ready	准备好了吗
+are you okay	你还好吗
+are you ok	你还好吗
+are you all right	你还好吗
+are you ready	你准备好了吗
+what do you think	你怎么看
+what do you mean	你是什么意思
+anything else	还有别的吗
+what about you	你呢
+how about you	你呢
+please	请
+help	救命
+help me	帮帮我
+wait	等等
+wait a minute	等一下
+wait a moment	等一下
+wait a second	等一下
+just a moment	稍等一下
+just a minute	稍等一下
+just a second	稍等一下
+one moment, please	请稍等
+one moment please	请稍等
+hold on	稍等
+hang on	等一下
+come in	请进
+come on	快点
+come on in	快请进
+sit down	坐下
+sit down, please	请坐
+please sit down	请坐
+please have a seat	请坐
+have a seat	请坐
+come here	过来
+come with me	跟我来
+follow me	跟我来
+stop	停下
+stop it	住手
+be careful	小心
+careful	小心
+watch out	当心
+look out	当心
+hurry up	快点
+hurry	快点
+slow down	慢点
+calm down	冷静点
+relax	放松
+take it easy	别着急
+listen	听着
+listen to me	听我说
+look	看
+look at this	看看这个
+let's go	我们走吧
+let's start	我们开始吧
+let's eat	我们吃饭吧
+go ahead	请便
+after you	您先请
+try again	再试一次
+please try again	请再试一次
+try again later	请稍后再试
+keep going	继续
+go on	继续
+don't move	别动
+leave me alone	别管我
+call me	给我打电话
+call me later	待会儿给我打电话
+text me	给我发消息
+tell me	告诉我
+say it again	再说一遍
+please say that again	请再说一遍
+speak slowly, please	请说慢一点
+please speak slowly	请说慢一点
+speak up	大声点
+shut up	闭嘴
+be quiet	安静
+quiet	安静
+get out	出去
+go away	走开
+enough	够了
+that's enough	够了
+great	太好了
+awesome	太棒了
+wow	哇
+cool	酷
+nice	不错
+very nice	很好
+perfect	完美
+excellent	太棒了
+wonderful	太好了
+fantastic	太棒了
+brilliant	太棒了
+amazing	太神奇了
+incredible	难以置信
+unbelievable	难以置信
+interesting	有意思
+congratulations	恭喜
+congrats	恭喜
+well done	干得好
+good job	干得好
+nice job	干得好
+great job	干得好
+nice work	干得好
+good work	干得好
+cheers	干杯
+happy birthday	生日快乐
+happy new year	新年快乐
+merry christmas	圣诞快乐
+happy holidays	节日快乐
+happy anniversary	周年快乐
+i love you	我爱你
+i love you too	我也爱你
+i miss you	我想你
+i miss you too	我也想你
+i like it	我喜欢
+i love it	我很喜欢
+i hate it	我讨厌它
+i'm hungry	我饿了
+i'm thirsty	我渴了
+i'm tired	我累了
+i'm sleepy	我困了
+i'm happy	我很开心
+i'm sad	我很难过
+i'm bored	我很无聊
+i'm busy	我很忙
+i'm lost	我迷路了
+i'm cold	我很冷
+i'm hot	我很热
+i'm full	我吃饱了
+i'm ready	我准备好了
+i'm sick	我病了
+i'm scared	我害怕
+i'm confused	我糊涂了
+i'm excited	我很兴奋
+i'm worried	我很担心
+i'm late	我迟到了
+i'm here	我在这儿
+i'm coming	我来了
+i'm on my way	我在路上了
+i'm home	我回来了
+i'm back	我回来了
+i'm done	我好了
+i'm in	算我一个
+count me in	算我一个
+i'm out	我不干了
+that's great	太好了
+that's good	很好
+that's nice	真好
+that's cool	真酷
+that's amazing	太神奇了
+that's too bad	太遗憾了
+that's a shame	真可惜
+what a pity	真可惜
+what a shame	真可惜
+too bad	太遗憾了
+how nice	真好
+how sweet	你真好
+oh no	哦不
+oh my god	天哪
+oh my gosh	天哪
+my god	天哪
+oops	哎呀
+ouch	哎哟
+thank god	谢天谢地
+bless you	保佑你
+enjoy your meal	请慢用
+enjoy	尽情享受吧
+cheer up	振作起来
+don't give up	别放弃
+keep it up	继续保持
+you can do it	你能行的
+good for you	真替你高兴
+i forgot	我忘了
+i remember	我记得
+i know	我知道
+i knew it	我就知道
+it's late	很晚了
+it's cold	天很冷
+it's hot	天很热
+it's raining	下雨了
+it's snowing	下雪了
+it depends	看情况
+it doesn't matter	没关系
+it's up to you	由你决定
+up to you	随你
+it's done	完成了
+it works	可以用了
+it's broken	它坏了
+it's time	时间到了
+time's up	时间到了
+nothing	没什么
+nothing much	没什么
+that's it	就这样
+that's all	就这些
+help yourself	请随意
+just kidding	开玩笑的
+i'm kidding	我开玩笑的
+are you kidding	你在开玩笑吧
+good idea	好主意
+great idea	好主意
+not yet	还没有
+almost	差不多了
+almost there	快到了
+too late	太晚了
+too expensive	太贵了
+let me see	让我看看
+let me think	让我想想
+let me try	让我试试
+let me know	告诉我一声
+i'll be back	我会回来的
+i'll be right back	我马上回来
+lunch is ready	午饭好了
+dinner is ready	晚饭好了
+here you are	给你
+here you go	给你
+here it is	在这儿
+this way, please	请这边走
+this way	这边
+check, please	请结账
+the check, please	请结账
+the bill, please	请结账
+good question	好问题
+good to know	知道了，很有用
+sleep well	睡个好觉
+sweet dreams	做个好梦
+get well soon	早日康复
+drive safely	开车小心
+drive safe	开车小心
+be safe	注意安全
+stay safe	注意安全
+all the best	祝一切顺利
+same again	再来一份
+of course, go ahead	当然，请便

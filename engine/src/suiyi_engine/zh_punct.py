@@ -11,6 +11,9 @@ tc-big 的 en→zh 输出常带半角标点（「开源系统,用于」「CNCF(C
 - URL、邮箱、反引号里的代码、Windows 路径整段跳过；调用方传入的 ``keep``（不翻译片段，#101）
   也整段跳过。
 - 只处理半角 ``, ; : ? ! ( )``。引号、句点（句末已由 ``restore_final_punct`` 处理）不动。
+
+另有 :func:`unk_marks`（#89）：tc-big 的 CT2 词表里没有「。」「、」等全角标点，模型在这些位置输出
+``<unk>``。解码时按位置把 ``<unk>`` 换回标点，见该函数说明。
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-__all__ = ["normalize_zh_punct"]
+__all__ = ["normalize_zh_punct", "unk_marks"]
 
 _HAN = "\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
 _FULL_PUNCT = "，。、；：？！“”‘’（）《》【】「」『』…—"
@@ -137,3 +140,51 @@ def _convert_parens(chars: list[str], start: int, end: int) -> bool:
         chars[start - 1].isascii() and (chars[start - 1].isalnum() or chars[start - 1] == "_")
     )
     return not (glued and not any(char.isspace() for char in inner))  # foo(Bar)、f(X)
+
+
+UNK = "<unk>"
+_SP_SPACE = "\u2581"
+
+
+def _is_word_token(token: str) -> bool:
+    """去掉词首标记后以字母、数字或汉字开头的 token（不是标点、不是特殊 token）。"""
+
+    body = token.replace(_SP_SPACE, "")
+    return bool(body) and token != UNK and (body[0].isalnum() or bool(_HAN_ONLY.match(body[0])))
+
+
+def unk_marks(tokens: list[str], source: str) -> list[str | None]:
+    """中文目标里每个 ``<unk>`` 该换成的标点，``None`` 表示丢掉（#89）。
+
+    tc-big en→zh 的共享词表没有「。」「、」「，」等（「，」模型用半角 ``,`` 代替，
+    由 :func:`normalize_zh_punct` 改全角）。实测模型在这些位置输出 ``<unk>``：
+
+    - 句末：「这是一本书<unk>」。丢掉，由 ``restore_final_punct``（#83）按原文句末标点补全，
+      原文没有句末标点时不补；
+    - 句中、前后都是文字：一句话里是列举的顿号（「部署<unk>扩展和管理」「PNG<unk>JPEG」）；
+      原文本身有几句、且 ``<unk>`` 个数正好等于句间分界数时是句号；个数对不上时丢掉；
+    - 句首，或前面只有词首标记（「▁<unk>簆」）：不是标点，丢掉。
+    """
+
+    positions = [index for index, token in enumerate(tokens) if token == UNK]
+    marks: list[str | None] = [None] * len(positions)
+    middle: list[int] = []
+    for number, index in enumerate(positions):
+        before = index > 0 and _is_word_token(tokens[index - 1])
+        after = index + 1 < len(tokens) and _is_word_token(tokens[index + 1])
+        if before and after:
+            middle.append(number)
+    if not middle:
+        return marks
+    from suiyi_engine.segment import split_sentences
+
+    boundaries = max(0, len(split_sentences(source)) - 1) if source.strip() else 0
+    if boundaries == 0:
+        mark: str | None = "、"
+    elif len(middle) == boundaries:
+        mark = "。"
+    else:
+        mark = None
+    for number in middle:
+        marks[number] = mark
+    return marks

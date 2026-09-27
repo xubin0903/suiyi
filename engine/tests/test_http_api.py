@@ -295,7 +295,7 @@ def test_auto_detects_zh_en_ja_with_fake_backend(tmp_path: Path) -> None:
     _install(tmp_path, "opus-mt-ja-en", "ja", "en")
     samples = [
         ("今天天气很好。", "en", "zh", ["opus-mt-zh-en"]),
-        ("Hello.", "zh", "en", ["opus-mt-en-zh"]),
+        ("The weather is nice today.", "zh", "en", ["opus-mt-en-zh"]),
         ("こんにちは。", "en", "ja", ["opus-mt-ja-en"]),
     ]
     with _client(_translator(tmp_path), detect) as client:

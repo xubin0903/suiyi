@@ -117,3 +117,43 @@ def test_protect_skips_text_that_already_looks_like_a_placeholder() -> None:
     protected = protect("Set ZXQ1 in the cache.", "en", "zh", TERMS)
     assert protected.slots == ()
     assert protected.text == "Set ZXQ1 in the cache."
+
+
+# ---------------------------------------------------------------- 复数与动词第三人称（#89）
+
+VERB_TERMS = parse_terms(
+    [
+        {"id": "triage", "kind": "fixed", "en": ["triage"], "zh": ["分诊"]},
+        {"id": "cache", "kind": "fixed", "en": ["cache"], "zh": ["缓存"]},
+        {"id": "vaccine", "kind": "fixed", "en": ["vaccine"], "zh": ["疫苗"]},
+        {"id": "policy", "kind": "fixed", "en": ["policy"], "zh": ["策略"]},
+    ]
+)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The emergency department triages patients by severity.",
+        "It caches the results.",
+        "The proxy caches responses for an hour.",
+        "A service which caches everything.",
+    ],
+)
+def test_third_person_verb_is_not_a_plural_term(text: str) -> None:
+    assert [match.surface for match in find_terms(text, "en", VERB_TERMS, every=True)] == []
+
+
+@pytest.mark.parametrize(
+    ("text", "surface"),
+    [
+        ("Nurses perform triage on arrival.", "triage"),
+        ("Redis caches expire after an hour.", "caches"),
+        ("All vaccines are tested.", "vaccines"),
+        ("The vaccines always work.", "vaccines"),
+        ("We reviewed the policies across teams.", "policies"),
+        ("Two caches.", "caches"),
+    ],
+)
+def test_plural_nouns_and_base_forms_still_match(text: str, surface: str) -> None:
+    assert [match.surface for match in find_terms(text, "en", VERB_TERMS, every=True)] == [surface]

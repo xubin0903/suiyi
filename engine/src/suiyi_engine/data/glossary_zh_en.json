@@ -911,6 +911,17 @@
    ]
   },
   {
+   "id": "lint",
+   "kind": "fixed",
+   "domain": "code",
+   "en": [
+    "lint"
+   ],
+   "zh": [
+    "代码检查"
+   ]
+  },
+  {
    "id": "integration-test",
    "kind": "fixed",
    "domain": "code",

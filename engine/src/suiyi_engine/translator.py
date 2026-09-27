@@ -26,6 +26,7 @@ from suiyi_engine.registry import (
     normalize_lang,
 )
 from suiyi_engine.segment import join_segments, split_sentences
+from suiyi_engine.short_phrases import lookup_short_phrase
 from suiyi_engine.terms import GlossaryStore, TermStats, translate_with_terms
 from suiyi_engine.verbatim import Block, find_spans, space_spans, split_blocks
 from suiyi_engine.zh_guard import ZhGuardStats, ZhOutputGuard
@@ -68,6 +69,9 @@ class Translator:
     ``verbatim`` 为真（默认）时保护不翻译片段（#101）：代码块、代码行、命令行照抄，包名、路径、
     URL、标识符等逐字保留；整段几乎全是代码或标识符时原样返回、不经过模型（``route`` 为空）。
     每次调用可用 ``verbatim=True/False`` 覆盖。
+
+    ``short_phrases`` 为真（默认）时，en→zh 里整句命中常用极短句表的句子直接用表里的译法（#89，
+    见 :mod:`suiyi_engine.short_phrases`）。
     """
 
     def __init__(
@@ -86,6 +90,7 @@ class Translator:
         glossary: GlossaryStore | None = None,
         max_loaded_models: int = 0,
         verbatim: bool = True,
+        short_phrases: bool = True,
     ) -> None:
         intra = default_intra_threads() if intra_threads is None else intra_threads
         options: dict[str, object] = {
@@ -107,6 +112,9 @@ class Translator:
         )
         self.glossary = glossary
         self.verbatim = bool(verbatim)
+        self.short_phrases = bool(short_phrases)
+        self.short_phrase_hits = 0
+        """整句命中极短句表的句子数（#89）。"""
         self.term_stats = TermStats()
         self.zh_guard_stats = ZhGuardStats()
         """中文译文检查（#106）的累计计数。"""
@@ -184,9 +192,18 @@ class Translator:
                 stats=self.zh_guard_stats,
             )
         terms = self._terms(src_code, tgt_code, glossary) if len(backends) == 1 else ()
+        phrases: dict[str, str] = {}
         output = _translate_blocks(
-            blocks, src_code, tgt_code, backends, terms, self.term_stats, protect
+            blocks,
+            src_code,
+            tgt_code,
+            backends,
+            terms,
+            self.term_stats,
+            protect,
+            phrases if self.short_phrases else None,
         )
+        self.short_phrase_hits += len(phrases)
         return _result(output, src_code, tgt_code, [record.id for record in records], started)
 
     def translate_many(
@@ -269,8 +286,12 @@ def _translate_blocks(
     terms: Sequence[Term] = (),
     stats: TermStats | None = None,
     verbatim: bool = False,
+    phrases: dict[str, str] | None = None,
 ) -> str:
-    """翻译 ``blocks`` 里要翻译的块，照抄块原样拼回。所有块的句子一次批量送给后端。"""
+    """翻译 ``blocks`` 里要翻译的块，照抄块原样拼回。所有块的句子一次批量送给后端。
+
+    ``phrases`` 不为 ``None`` 时查极短句表（#89）：命中的句子不送后端，命中的原文 → 译文记进去。
+    """
 
     units = [
         split_sentences(block.text, lang=src, keep_spans=verbatim) if block.translate else []
@@ -280,16 +301,37 @@ def _translate_blocks(
     if not sources:
         return "".join(block.text for block in blocks if not block.translate)
     spans = [find_spans(source) for source in sources] if verbatim else None
-    expected = len(sources)
+    fixed: dict[int, str] = {}
+    if phrases is not None:
+        for index, source in enumerate(sources):
+            if spans is None or not spans[index]:
+                value = lookup_short_phrase(source, src, tgt)
+                if value is not None:
+                    fixed[index] = value
+                    phrases[source] = value
+    todo = [index for index in range(len(sources)) if index not in fixed]
+    todo_sources = [sources[index] for index in todo]
+    todo_spans = [spans[index] for index in todo] if spans is not None else None
     translate_batch = _chain(backends)
-    if (terms and len(backends) == 1) or (spans is not None and any(spans)):
-        current = translate_with_terms(
-            sources, src, tgt, terms if len(backends) == 1 else (), translate_batch, stats, spans
+    if not todo_sources:
+        translated: list[str] = []
+    elif (terms and len(backends) == 1) or (todo_spans is not None and any(todo_spans)):
+        translated = translate_with_terms(
+            todo_sources,
+            src,
+            tgt,
+            terms if len(backends) == 1 else (),
+            translate_batch,
+            stats,
+            todo_spans,
         )
     else:
-        current = translate_batch(sources)
-    if len(current) != expected:
-        raise RuntimeError(f"后端返回了 {len(current)} 句，期望 {expected} 句")
+        translated = translate_batch(todo_sources)
+    if len(translated) != len(todo_sources):
+        raise RuntimeError(f"后端返回了 {len(translated)} 句，期望 {len(todo_sources)} 句")
+    merged = dict(fixed)
+    merged.update(zip(todo, translated, strict=True))
+    current = [merged[index] for index in range(len(sources))]
     keeps = [
         [source[span.start : span.end] for span in spans[index]] if spans else []
         for index, source in enumerate(sources)
