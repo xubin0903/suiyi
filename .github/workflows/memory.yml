@@ -6,9 +6,6 @@
 name: 内存测量
 
 on:
-  # 临时：#96 开发期间推送到 feat/96-* 时也跑（workflow_dispatch 要等工作流进了 main 才能用）。合并前删掉。
-  push:
-    branches: ["feat/96-**"]
   workflow_dispatch:
     inputs:
       baseline:
