@@ -37,6 +37,7 @@ WINDOWS = sys.platform == "win32"
 
 FAKE_WORKER = r"""
 import os, sys, time
+from pathlib import Path
 from suiyi_engine.ocr import InvalidImageError, OcrLine, OcrParagraph, OcrResult
 from suiyi_engine.ocr_provider import OcrProvider
 from suiyi_engine.ocr_worker import run_worker
@@ -64,6 +65,13 @@ class Engine:
             time.sleep(float(tail.split("SLEEP")[1]))
         if tail.endswith("BAD"):
             raise InvalidImageError("坏图")
+        if tail.endswith("OOM"):  # 每次都内部报错（#114）
+            raise RuntimeError("bad allocation")
+        if tail.endswith("OOM1"):  # 只有第一次（第一个子进程）内部报错
+            marker = Path(__file__).with_name("oom-once")
+            if not marker.exists():
+                marker.write_text("1")
+                raise RuntimeError("bad allocation")
         text = f"{tail}|{lang}|{os.getpid()}"
         line = OcrLine(text=text, box=((0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)), score=0.9)
         para = OcrParagraph(text=text, box=(0.0, 0.0, 10.0, 5.0), line_indices=(0,))
@@ -376,6 +384,52 @@ def test_http_ocr_health_and_crash_503(provider) -> None:
         assert health["ocr_loaded"] is False and health["ocr_worker_state"] == "stopped"
         again = client.post("/ocr", content=_png(b"again"), headers={"Content-Type": "image/png"})
         assert again.status_code == 200
+        assert client.get("/health").json()["ocr_error"] is None
+
+
+# ---- 子进程内部报错（#114） --------------------------------------------------------
+
+
+def test_internal_error_restarts_worker_and_retries_once(provider) -> None:
+    p = provider()
+    p.recognize(b"warm")
+    old = p.pid
+    result = p.recognize(b"x OOM1")  # 第一个子进程报 bad allocation，重启后的子进程成功
+    assert _text(result).startswith("x OOM1|")
+    assert p.pid not in (None, old)
+    assert p.health() is None
+
+
+def test_repeated_internal_error_is_unavailable_then_recovers(provider) -> None:
+    p = provider()
+    p.recognize(b"warm")
+    starts = p.starts
+    with pytest.raises(OcrUnavailable) as info:
+        p.recognize(b"x OOM")
+    assert info.value.reason == "worker_error"
+    assert "bad allocation" in str(info.value)
+    assert p.starts == starts + 1  # 只重试一次
+    assert p.pid is None  # 失败后子进程已结束，下一次请求重新启动
+    assert p.health()["reason"] == "worker_error"  # type: ignore[index]
+    assert _text(p.recognize(b"after")).startswith("after|")
+    assert p.health() is None
+
+
+def test_http_internal_error_is_503_for_ocr_and_ocr_translate(provider) -> None:
+    p = provider()
+    app = create_app(_translator(), None, ApiSettings(), p)
+    headers = {"Content-Type": "image/png"}
+    with TestClient(app) as client:
+        for path in ("/ocr", "/ocr_translate?target=en&source=zh"):
+            resp = client.post(path, content=_png(b"x OOM"), headers=headers)
+            assert resp.status_code == 503, resp.text
+            error = resp.json()["error"]
+            assert error["code"] == "ocr_unavailable"
+            assert error["details"]["reason"] == "worker_error"
+            assert "bad allocation" in error["message"]
+        assert client.get("/health").json()["ocr_error"]["reason"] == "worker_error"
+        ok = client.post("/ocr", content=_png(b"fine"), headers=headers)
+        assert ok.status_code == 200
         assert client.get("/health").json()["ocr_error"] is None
 
 

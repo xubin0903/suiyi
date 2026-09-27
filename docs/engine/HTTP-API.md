@@ -52,6 +52,7 @@ OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无
 - **串行**：同时只处理一个 OCR 请求（与之前进程内的 OCR 锁一样），其余排队。处理中（包括排队）不会被空闲回收。
 - **空闲退出**：空闲超过 `--ocr-idle-unload` 秒，子进程退出；下一次 OCR 请求重新启动（冷启动）。`--ocr-idle-unload 0` 时子进程一直留着。
 - **故障**：子进程崩溃、被杀，或单次识别超过 120 秒（模型未加载时再加 300 秒启动时间）没有响应，本次请求返回 503 `ocr_unavailable`，`reason` 为 `worker_crashed` / `worker_timeout`（超时会结束子进程），下一次请求自动重新启动子进程。已经退出的子进程在下一次请求时直接重启，不报错。
+- **子进程内部报错**（#114）：子进程里识别或加载模型时抛出意外异常（例如提交内存紧张时 onnxruntime 报 `bad allocation`），主进程先结束并重启子进程、把同一请求重试一次；重试成功就正常返回，仍失败则返回 503 `ocr_unavailable`，`reason` 为 `worker_error`，`message` 带原始错误摘要，子进程已结束，下一次请求重新启动。#114 之前这类错误返回 500 `internal_error`。坏图（422 `invalid_image`）、图片过大（413）不重试，语义不变。
 - **不留孤儿**：主进程退出时通知子进程退出；主进程被强杀时，子进程读到 stdin EOF 或看门狗发现父进程不在了就立即退出（POSIX 看 `getppid()`，Windows 等父进程句柄）。Windows 上主进程还把子进程放进 `KILL_ON_JOB_CLOSE` 的 Job Object，由系统兜底结束子进程。
 - **退回进程内**：环境变量 `SUIYI_OCR_WORKER=0` 时回到 #104 之前的进程内 OCR（只用于排查问题）。
 
@@ -174,7 +175,7 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `cpu_amx` | 启动时是否检测到 CPU 和操作系统都支持 AMX（Linux 看 `/proc/cpuinfo` 的 `amx_tile` / `amx_int8`，Windows 看 `GetEnabledXStateFeatures` 的 XTILECFG / XTILEDATA 位；其他系统为 `false`）。#103 新增 |
 | `mkl_enable_instructions` | 引擎进程里 `MKL_ENABLE_INSTRUCTIONS` 的实际取值，即 MKL 的指令集上限；没设时为 `null`（MKL 用 CPU 支持的最高指令集）。#103 新增 |
 | `mkl_enable_instructions_source` | 取值来源：`auto`（检测到 AMX，引擎自动设为 `AVX512_E1`，避开 AMX int8 结果不稳定）、`user`（启动前用户已设，引擎不覆盖）、`unset`（没检测到 AMX，不设）。#103 新增 |
-| `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增；#104 起 OCR 子进程崩溃或超时（`reason` 为 `worker_crashed` / `worker_timeout`）也记在这里，下一次 OCR 成功后清空 |
+| `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增；#104 起 OCR 子进程崩溃或超时（`reason` 为 `worker_crashed` / `worker_timeout`）、#114 起子进程内部报错重试后仍失败（`worker_error`）也记在这里，下一次 OCR 成功后清空 |
 
 翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 在独立子进程里执行（#104），主进程这边有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。
 
@@ -313,7 +314,7 @@ curl -sS -X POST http://127.0.0.1:18780/glossary/reload
 2. 字节上限：先看 `Content-Length`，超过 `--max-image-bytes` 直接 413，**不读请求体**；没有 `Content-Length`（分块上传）时边读边计数，超限立即停止读取 → 413 `image_too_large`。
 3. 按文件头魔数判断是不是 PNG，**不看 `Content-Type`**（`application/octet-stream` 也行）。不是 PNG 或请求体为空 → 415 `unsupported_media_type`。
 4. 从 IHDR 读宽高（不解码像素）。头部不完整或尺寸为 0 → 422 `invalid_image`；宽 × 高超过 16,777,216（4096 × 4096）→ 413 `image_too_large`。只限总像素，不限单边，细长截图可以超过 4096。
-5. OCR 不可用（依赖未装、模型缺失或损坏；#104 起还有 OCR 子进程崩溃或超时）→ 503 `ocr_unavailable`。
+5. OCR 不可用（依赖未装、模型缺失或损坏；#104 起还有 OCR 子进程崩溃或超时；#114 起还有子进程内部报错、重启重试一次后仍失败）→ 503 `ocr_unavailable`。
 6. 解码失败（数据损坏、截断）→ 422 `invalid_image`。
 7. 识别，合并成段落，再逐段翻译。翻译侧错误与 `/translate` 相同：`unsupported_pair`、`text_too_long`、`detect_failed`，`details.index` 是段落序号。任一段失败则整次请求失败。
 
@@ -423,7 +424,7 @@ Invoke-RestMethod 'http://127.0.0.1:18780/ocr?lang=auto' -Method Post -InFile .\
 | `image_too_large` | 413 | OCR 请求体超过字节上限，或 PNG 宽 × 高超过像素上限 | `kind`（`bytes` / `pixels`）、`limit`、`actual`；像素超限时另有 `width`、`height` |
 | `unsupported_media_type` | 415 | OCR 请求体不是 PNG（按魔数判断）或为空 | `{}` |
 | `invalid_image` | 422 | PNG 头部不完整、尺寸为 0、或无法解码 | `{}` |
-| `ocr_unavailable` | 503 | OCR 依赖未安装、模型清单或模型文件缺失/损坏；OCR 子进程崩溃或超时（#104） | `reason`（`dependency_missing` / `models_missing` / `models_invalid` / `manifest_unavailable`；#104 新增 `worker_crashed` / `worker_timeout`，重试即可，下一次请求会重新启动子进程）、`missing_models`（缺失的 OCR 模型 id，可能为空）。`message` 里有安装或下载提示 |
+| `ocr_unavailable` | 503 | OCR 依赖未安装、模型清单或模型文件缺失/损坏；OCR 子进程崩溃或超时（#104）；子进程内部报错、重启重试一次后仍失败（#114） | `reason`（`dependency_missing` / `models_missing` / `models_invalid` / `manifest_unavailable`；#104 新增 `worker_crashed` / `worker_timeout`，#114 新增 `worker_error`，重试即可，下一次请求会重新启动子进程）、`missing_models`（缺失的 OCR 模型 id，可能为空）。`message` 里有安装或下载提示 |
 | `internal_error` | 500 | 未预期的异常 | `{}`。响应里没有异常类型和栈 |
 
 客户端可以用 `missing_models` 提示「未下载语向」，不要只显示语种代码。
