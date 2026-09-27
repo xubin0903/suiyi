@@ -91,6 +91,19 @@ def test_serve_command_is_an_argument_list() -> None:
     assert "zh-en,en-zh" in command
     assert "--intra-threads" not in command
     assert command[command.index("--beam-size") + 1] == "1"
+    assert "--max-loaded-models" not in command  # 默认沿用 serve 的常驻上限
+    unlimited = build_serve_command(
+        python=python,
+        models_dir=models,
+        host="127.0.0.1",
+        port=18780,
+        preload="",
+        intra_threads=None,
+        beam_size=None,
+        max_batch_size=None,
+        max_loaded_models=0,
+    )
+    assert unlimited[unlimited.index("--max-loaded-models") + 1] == "0"
     assert str(models) in command
     assert all(not part.startswith('"') for part in command)
 
