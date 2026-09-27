@@ -126,10 +126,11 @@ jobs:
           "$PY" -c "import sys; from PIL import Image, ImageDraw, ImageFont; im = Image.new('RGB', (720, 120), 'white'); ImageDraw.Draw(im).text((20, 30), 'Suiyi offline OCR 2026', font=ImageFont.load_default(size=44), fill='black'); im.save(sys.argv[1])" "$RUNNER_TEMP/ocr.png"
           "$PY" scripts/download_ocr_models.py "${OCR_ARGS[@]}" smoke "$RUNNER_TEMP/ocr.png"
           # #52 OCR 核心 + #53 OCR 接口：真实模型上的中英日识别、段落合并、竖排顺序、并发，
-          # 以及需要 PIL 解码的接口用例（OCR 模型测试不允许跳过）
+          # 以及需要 PIL 解码的接口用例（OCR 模型测试不允许跳过）；#104 OCR 子进程：
+          # 真实子进程识别结果与进程内逐字节相同、主进程不导入 onnxruntime / cv2 / numpy
           SUIYI_MODELS_DIR="$MODELS" SUIYI_OCR_TESTS_REQUIRED=1 "$PY" -m pytest -rs \
             engine/tests/test_ocr_layout.py engine/tests/test_ocr_engine.py engine/tests/test_ocr_model.py \
-            engine/tests/test_ocr_http.py
+            engine/tests/test_ocr_http.py engine/tests/test_ocr_worker.py
           # 供下一步复用同一个 venv 与模型目录
           echo "OCR_PY=$PY" >> "$GITHUB_ENV"
           echo "OCR_MODELS=$MODELS" >> "$GITHUB_ENV"

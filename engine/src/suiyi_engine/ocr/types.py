@@ -84,3 +84,38 @@ class OcrResult:
             "image": {"width": self.width, "height": self.height},
             "elapsed_ms": round(self.elapsed_ms, 1),
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object], stats: dict[str, float] | None = None) -> OcrResult:
+        """由 :meth:`to_dict` 的输出还原（OCR 子进程把结果传回主进程用，#104）。
+
+        ``to_dict`` 已经取整，还原后再 ``to_dict`` 得到逐字节相同的结果。
+        """
+
+        lines = tuple(
+            OcrLine(
+                text=str(line["text"]),
+                box=tuple((float(x), float(y)) for x, y in line["box"]),  # type: ignore[arg-type,misc]
+                score=float(line["score"]),
+                low_confidence=bool(line["low_confidence"]),
+            )
+            for line in data["lines"]  # type: ignore[attr-defined]
+        )
+        paragraphs = tuple(
+            OcrParagraph(
+                text=str(p["text"]),
+                box=tuple(float(v) for v in p["box"]),  # type: ignore[arg-type]
+                line_indices=tuple(int(i) for i in p["line_indices"]),
+                vertical=bool(p["vertical"]),
+            )
+            for p in data["paragraphs"]  # type: ignore[attr-defined]
+        )
+        image = data["image"]
+        return cls(
+            lines=lines,
+            paragraphs=paragraphs,
+            width=int(image["width"]),  # type: ignore[index]
+            height=int(image["height"]),  # type: ignore[index]
+            elapsed_ms=float(data["elapsed_ms"]),  # type: ignore[arg-type]
+            stats=dict(stats or {}),
+        )

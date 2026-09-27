@@ -671,26 +671,30 @@ def test_preload_ocr_success_is_logged(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from suiyi_engine.api_ocr import OcrProvider
+    from suiyi_engine.ocr_worker import OcrProcessProvider
 
     seen: dict[str, object] = {}
 
-    def warmup(self: OcrProvider) -> float:
+    def warmup(self: OcrProcessProvider) -> float:
         seen["warmed"] = True
         return 12.0
+
+    def close(self: OcrProcessProvider) -> None:
+        seen["closed"] = True
 
     def fake(app: object, listen_socket: socket.socket) -> None:
         seen["same_provider"] = app.state.ocr is provider_holder[0]  # type: ignore[attr-defined]
 
     provider_holder: list[object] = []
-    original_init = OcrProvider.__init__
+    original_init = OcrProcessProvider.__init__
 
-    def init(self: OcrProvider, *args: object, **kwargs: object) -> None:
+    def init(self: OcrProcessProvider, *args: object, **kwargs: object) -> None:
         original_init(self, *args, **kwargs)  # type: ignore[arg-type]
         provider_holder.append(self)
 
-    monkeypatch.setattr(OcrProvider, "warmup", warmup)
-    monkeypatch.setattr(OcrProvider, "__init__", init)
+    monkeypatch.setattr(OcrProcessProvider, "warmup", warmup)
+    monkeypatch.setattr(OcrProcessProvider, "__init__", init)
+    monkeypatch.setattr(OcrProcessProvider, "close", close)
     monkeypatch.setattr("suiyi_engine.serve._serve_uvicorn", fake)
     code = run_server(
         host="127.0.0.1",
@@ -703,4 +707,5 @@ def test_preload_ocr_success_is_logged(
     )
     assert code == 0
     assert "OCR 已预热 12 ms" in capsys.readouterr().out
-    assert seen == {"warmed": True, "same_provider": True}  # 预热的就是服务用的那个实例
+    # 预热的就是服务用的那个实例；服务退出时关闭 OCR 子进程（#104）
+    assert seen == {"warmed": True, "same_provider": True, "closed": True}

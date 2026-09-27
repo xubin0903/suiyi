@@ -136,6 +136,11 @@ def main(argv: list[str] | None = None) -> int:
         help="单次解码的句批上限，默认 32",
     )
 
+    # 内部子命令：OCR 子进程（#104），由 serve 按需启动，不要手动运行。stdin/stdout 是二进制协议。
+    worker = subparsers.add_parser("ocr-worker")
+    worker.add_argument("--models-dir", default=None)
+    worker.add_argument("--parent-pid", type=int, default=None)
+
     args = parser.parse_args(argv)
     if args.version:
         print(__version__)
@@ -146,6 +151,10 @@ def main(argv: list[str] | None = None) -> int:
         from suiyi_engine.serve import serve_from_args
 
         return serve_from_args(args)
+    if args.command == "ocr-worker":
+        from suiyi_engine.ocr_worker import worker_main
+
+        return worker_main(args.models_dir, args.parent_pid)
     parser.print_help()
     return 0
 

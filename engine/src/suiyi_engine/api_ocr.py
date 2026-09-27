@@ -12,11 +12,8 @@ from __future__ import annotations
 
 import logging
 import struct
-import threading
 import time
 from collections import Counter
-from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Query, Request
@@ -38,131 +35,21 @@ from suiyi_engine.api import (
 )
 from suiyi_engine.errors import UnsupportedPairError
 from suiyi_engine.ocr import OCR_LANGS  # 导入 suiyi_engine.ocr 不加载 rapidocr / numpy
+from suiyi_engine.ocr_provider import (  # noqa: F401 （兼容旧的导入路径）
+    DOWNLOAD_HINT,
+    INSTALL_HINT,
+    OcrProvider,
+    OcrUnavailable,
+)
 from suiyi_engine.registry import normalize_lang
 
 if TYPE_CHECKING:
-    from suiyi_engine.ocr import OcrEngine, OcrResult
+    from suiyi_engine.ocr import OcrResult
+    from suiyi_engine.ocr_worker import OcrProcessProvider
 
 logger = logging.getLogger(__name__)
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-INSTALL_HINT = '请安装 OCR 依赖（pip install -e "engine[ocr]"）'
-DOWNLOAD_HINT = "请执行 python scripts/download_ocr_models.py download 下载 OCR 模型"
-
-
-class OcrUnavailable(Exception):
-    """OCR 依赖未安装、清单缺失或模型缺失/损坏。对应 503 ``ocr_unavailable``。"""
-
-    def __init__(self, message: str, *, reason: str, missing_models: tuple[str, ...] = ()) -> None:
-        super().__init__(message)
-        self.reason = reason
-        self.missing_models = missing_models
-
-    def details(self) -> dict[str, object]:
-        return {"reason": self.reason, "missing_models": list(self.missing_models)}
-
-
-class OcrProvider:
-    """懒加载 :class:`OcrEngine`。失败不缓存：补齐模型后下一次请求就能用，不用重启服务。"""
-
-    def __init__(
-        self,
-        models_dir: Path | str,
-        *,
-        engine_factory: Callable[[], OcrEngine] | None = None,
-    ) -> None:
-        self.models_dir = Path(models_dir)
-        self._factory = engine_factory
-        self._engine: OcrEngine | None = None
-        self._lock = threading.Lock()
-        self._last_used: float | None = None
-        self.last_error: OcrUnavailable | None = None
-        """最近一次加载失败的原因（``/health.ocr_error``）；加载成功后清空。"""
-
-    @property
-    def loaded(self) -> bool:
-        engine = self._engine
-        return engine is not None and engine.loaded
-
-    def engine(self) -> OcrEngine:
-        """返回已加载模型的引擎；不可用时抛 :class:`OcrUnavailable` 并记到 :attr:`last_error`。"""
-
-        try:
-            engine = self._engine_or_raise()
-        except OcrUnavailable as exc:
-            self.last_error = exc
-            raise
-        self.last_error = None
-        self.touch()
-        return engine
-
-    def touch(self) -> None:
-        """记一次使用（空闲卸载按最后一次使用计时，#96）。"""
-
-        self._last_used = time.monotonic()
-
-    def last_activity(self) -> float | None:
-        """最近一次使用 OCR 的 ``time.monotonic()`` 时刻；从没用过时为 ``None``。"""
-
-        return self._last_used
-
-    def unload_idle(self, idle_s: float, *, now: float | None = None) -> bool:
-        """OCR 超过 ``idle_s`` 秒没用过就卸载模型（#96）。正在识别时不卸载。返回是否卸载了。"""
-
-        engine = self._engine
-        last = self._last_used
-        if engine is None or not engine.loaded or last is None:
-            return False
-        current = time.monotonic() if now is None else now
-        if current - last < idle_s:
-            return False
-        return bool(engine.unload())
-
-    def health(self) -> dict[str, object] | None:
-        """``/health.ocr_error``：最近一次加载失败的原因，没有失败（或尚未尝试）时为 ``None``。"""
-
-        error = self.last_error
-        if error is None:
-            return None
-        return {"message": str(error), **error.details()}
-
-    def _engine_or_raise(self) -> OcrEngine:
-        from suiyi_engine.ocr import OcrEngine, OcrError, OcrModelError, OcrModelsMissingError
-
-        with self._lock:
-            if self._engine is None:
-                try:
-                    if self._factory is not None:
-                        self._engine = self._factory()
-                    else:
-                        self._engine = OcrEngine(self.models_dir)
-                except OcrModelError as exc:
-                    raise OcrUnavailable(
-                        f"OCR 模型清单不可用：{exc}", reason="manifest_unavailable"
-                    ) from exc
-            engine = self._engine
-        try:
-            engine.load()
-        except OcrModelsMissingError as exc:
-            raise OcrUnavailable(
-                f"缺少 OCR 模型：{'、'.join(exc.missing)}（目录 {exc.ocr_dir}）。{DOWNLOAD_HINT}",
-                reason="models_missing",
-                missing_models=exc.missing,
-            ) from exc
-        except OcrModelError as exc:
-            raise OcrUnavailable(f"OCR 模型不可用：{exc}", reason="models_invalid") from exc
-        except OcrError as exc:
-            raise OcrUnavailable(
-                f"OCR 依赖未安装：{exc}。{INSTALL_HINT}", reason="dependency_missing"
-            ) from exc
-        return engine
-
-    def warmup(self) -> float:
-        """加载模型并预热，返回耗时毫秒；不可用时抛 :class:`OcrUnavailable`。"""
-
-        started = time.perf_counter()
-        self.engine().warmup()
-        return 1000 * (time.perf_counter() - started)
 
 
 def register_ocr_routes(app: FastAPI) -> None:
@@ -288,20 +175,18 @@ def _too_large(
 
 
 async def _recognize(app: FastAPI, data: bytes, lang: str) -> OcrResult:
-    provider: OcrProvider = app.state.ocr
-    try:
-        engine = await run_in_threadpool(provider.engine)
-    except OcrUnavailable as exc:
-        raise ApiError(503, "ocr_unavailable", str(exc), exc.details()) from exc
+    """在线程池里识别。``app.state.ocr`` 是进程内的 :class:`OcrProvider` 或子进程版
+    :class:`~suiyi_engine.ocr_worker.OcrProcessProvider`（#104），两者接口相同。"""
+
+    provider: OcrProvider | OcrProcessProvider = app.state.ocr
 
     from suiyi_engine.ocr import InvalidImageError
     from suiyi_engine.ocr.engine import ImageTooLargeError
 
     try:  # 像素上限已按 IHDR 检查过；这里的 ImageTooLargeError 只是兜底
-        try:
-            return await run_in_threadpool(engine.recognize, data, lang=lang)
-        finally:
-            provider.touch()
+        return await run_in_threadpool(provider.recognize, data, lang)
+    except OcrUnavailable as exc:
+        raise ApiError(503, "ocr_unavailable", str(exc), exc.details()) from exc
     except ImageTooLargeError as exc:
         raise ApiError(413, "image_too_large", str(exc), {"kind": "pixels"}) from exc
     except InvalidImageError as exc:

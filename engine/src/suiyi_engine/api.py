@@ -26,6 +26,7 @@ from suiyi_engine.translator import TranslationResult
 
 if TYPE_CHECKING:
     from suiyi_engine.api_ocr import OcrProvider
+    from suiyi_engine.ocr_worker import OcrProcessProvider
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ def create_app(
     translator: SupportsTranslation,
     detector: Detector | None = None,
     settings: ApiSettings | None = None,
-    ocr: OcrProvider | None = None,
+    ocr: OcrProvider | OcrProcessProvider | None = None,
 ) -> FastAPI:
     """组装应用。``detector`` 为空时使用 :func:`suiyi_engine.langdetect.detect`。
 
@@ -206,6 +207,7 @@ def create_app(
                 "uptime_s": round(float(uptime), 1),
                 "ocr_loaded": bool(app.state.ocr.loaded),
                 "ocr_error": app.state.ocr.health(),
+                **_ocr_worker_health(app.state.ocr),
                 **glossary_status(current),
                 "verbatim_enabled": verbatim_status(current),
                 **cpu_isa.current().health(),
@@ -460,3 +462,12 @@ def _internal_error() -> JSONResponse:
         status_code=500,
         content=error_payload("internal_error", "翻译服务内部错误"),
     )
+
+
+def _ocr_worker_health(ocr: object) -> dict[str, object]:
+    """``/health`` 的 ``ocr_worker_pid`` / ``ocr_worker_state``（#104）。"""
+
+    report = getattr(ocr, "worker_health", None)
+    if report is None:
+        return {"ocr_worker_pid": None, "ocr_worker_state": "in_process"}
+    return dict(report())

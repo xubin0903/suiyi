@@ -154,7 +154,11 @@ def test_health_reports_version_models_dir_and_uptime(tmp_path: Path) -> None:
         "model_idle_unload_s",
         "max_loaded_models",
         "ocr_idle_unload_s",
+        "ocr_worker_pid",
+        "ocr_worker_state",
     }
+    # 直接 create_app 时 OCR 在进程内（serve 才用子进程，#104）
+    assert body["ocr_worker_pid"] is None and body["ocr_worker_state"] == "in_process"
     assert body["model_idle_unload_s"] == 0  # 直接 create_app 时不卸载（#92）
     assert body["max_loaded_models"] == 0  # 直接构造 Translator 时不限（#96）
     assert body["ocr_idle_unload_s"] == 0
