@@ -12,6 +12,8 @@ Linux 报 RSS、USS、峰值 RSS（VmHWM）和 VmData。
     python scripts/measure_serve_memory.py serve --models-dir models --out serve-mem.json
     # 对比另一份源码（例如 main 的 worktree）：--src <engine/src 目录>
     # 额外 serve 参数放在 -- 之后：... serve --models-dir models -- --model-idle-unload 30
+    # 桌面端默认状态（预热 zh↔en 与 OCR，不用 en→ja）：
+    #   ... serve --scenario desktop --models-dir models -- --preload zh-en,en-zh --preload-ocr
 
     # 进程内逐项加载，看每个模型、OCR、Python 基线各占多少
     python scripts/measure_serve_memory.py breakdown --models-dir models
@@ -276,13 +278,15 @@ def run_serve(args: argparse.Namespace) -> dict:
             p95_ms=round(_percentile(latencies, 0.95)),
             n=len(latencies),
         )
-        status, cold = _translate(port, "en", "ja", FIRST[("en", "ja")])
-        record("用过 en→ja", status=status, cold_ms=round(cold))
+        if args.scenario == "issue":
+            status, cold = _translate(port, "en", "ja", FIRST[("en", "ja")])
+            record("用过 en→ja", status=status, cold_ms=round(cold))
         image = Path(args.ocr_image).read_bytes()
         begun = time.perf_counter()
         status, _ = _post(port, "/ocr", image, "image/png")
         cold = (time.perf_counter() - begun) * 1000
-        record("用过 OCR（全部加载）", status=status, cold_ms=round(cold))
+        name = "用过 OCR（全部加载）" if args.scenario == "issue" else "用过 OCR（zh↔en + OCR）"
+        record(name, status=status, cold_ms=round(cold))
         if args.idle_wait > 0:
             time.sleep(args.idle_wait)
             record(f"空闲 {args.idle_wait:.0f} 秒后")
@@ -396,6 +400,12 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--port", type=int, default=18796)
             p.add_argument("--rounds", type=int, default=3, help="段落轮数（默认 3）")
             p.add_argument("--idle-wait", type=float, default=0.0, help="最后空闲多少秒再读一次")
+            p.add_argument(
+                "--scenario",
+                choices=("issue", "desktop"),
+                default="issue",
+                help="issue：Issue #96 的顺序（含 en→ja）；desktop：桌面端默认，只用 zh↔en 与 OCR",
+            )
             p.add_argument("--start-timeout", type=float, default=300.0)
             p.add_argument("serve_args", nargs="*", help="额外 serve 参数，写在 -- 之后")
     args = parser.parse_args(argv)

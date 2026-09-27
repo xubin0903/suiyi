@@ -102,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
         help="翻译模型空闲这么多秒后卸载，0 不卸载；默认环境变量 SUIYI_MODEL_IDLE_UNLOAD 或 600",
     )
     serve.add_argument(
+        "--ocr-idle-unload",
+        type=int,
+        default=None,
+        metavar="SECONDS",
+        help="OCR 模型空闲这么多秒后卸载，0 不卸载；默认环境变量 SUIYI_OCR_IDLE_UNLOAD，"
+        "都没给时与 --model-idle-unload 相同",
+    )
+    serve.add_argument(
         "--max-loaded-models",
         type=int,
         default=None,

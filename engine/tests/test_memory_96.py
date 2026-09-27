@@ -12,7 +12,7 @@ from suiyi_engine import memory
 from suiyi_engine.api_ocr import OcrProvider
 from suiyi_engine.ocr import OcrEngine
 from suiyi_engine.registry import ModelRecord, ModelRegistry
-from suiyi_engine.serve import ServeError, resolve_max_loaded_models
+from suiyi_engine.serve import ServeError, resolve_max_loaded_models, resolve_ocr_idle_unload
 
 
 class Backend:
@@ -161,3 +161,34 @@ def test_janitor_unloads_ocr_and_trims_after_ocr_activity() -> None:
     assert ocr.calls == [30] and trims == [1]
     off = memory.ModelJanitor(FakeRegistry(), threading.Lock(), 0, ocr=ocr)
     assert off.tick() == [] and ocr.calls == [30]  # 0 表示不卸载
+
+
+def test_janitor_ocr_idle_can_differ_from_model_idle() -> None:
+    ocr = FakeOcr()
+    janitor = memory.ModelJanitor(
+        FakeRegistry(), threading.Lock(), 600, trimmer=lambda: True, ocr=ocr, ocr_idle_unload_s=120
+    )
+    janitor.tick()
+    assert ocr.calls == [120]
+    only_models = memory.ModelJanitor(
+        FakeRegistry(), threading.Lock(), 600, trimmer=lambda: True, ocr=ocr, ocr_idle_unload_s=0
+    )
+    assert only_models.tick() == [] and ocr.calls == [120]  # OCR 设为 0：只卸载翻译模型
+    only_ocr = memory.ModelJanitor(
+        FakeRegistry(), threading.Lock(), 0, trimmer=lambda: True, ocr=ocr, ocr_idle_unload_s=60
+    )
+    assert only_ocr.tick() == ["ocr"] and ocr.calls == [120, 60]
+
+
+def test_resolve_ocr_idle_unload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SUIYI_OCR_IDLE_UNLOAD", raising=False)
+    assert resolve_ocr_idle_unload(None) is None  # 跟随模型空闲卸载
+    monkeypatch.setenv("SUIYI_OCR_IDLE_UNLOAD", "120")
+    assert resolve_ocr_idle_unload(None) == 120
+    assert resolve_ocr_idle_unload(0) == 0  # 命令行优先
+    for bad in ("-1", "x"):
+        monkeypatch.setenv("SUIYI_OCR_IDLE_UNLOAD", bad)
+        with pytest.raises(ServeError):
+            resolve_ocr_idle_unload(None)
+    with pytest.raises(ServeError):
+        resolve_ocr_idle_unload(-5)

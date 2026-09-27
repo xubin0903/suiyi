@@ -169,7 +169,9 @@ class ModelJanitor:
 
     每秒检查一次，只在拿得到翻译锁（此刻没有翻译在跑）时动手：
 
-    - ``idle_unload_s > 0`` 时卸载超过这么久没用过的翻译模型，以及 OCR 模型（#96）；
+    - ``idle_unload_s > 0`` 时卸载超过这么久没用过的翻译模型；
+    - ``ocr_idle_unload_s > 0`` 时卸载超过这么久没用过的 OCR 模型（#96；``None`` 表示与
+      ``idle_unload_s`` 相同）；
     - 有过翻译、且已经安静 ``trim_after_s`` 秒时调用一次 :func:`trim`，把解码时的临时内存还给系统。
 
     翻译锁被占用时这一轮直接跳过，从不让请求排队等整理。
@@ -186,9 +188,11 @@ class ModelJanitor:
         clock: Callable[[], float] = time.monotonic,
         trimmer: Callable[[], bool] = trim,
         ocr: _Ocr | None = None,
+        ocr_idle_unload_s: float | None = None,
     ) -> None:
         self.registry = registry
         self.ocr = ocr
+        self.ocr_idle_unload_s = idle_unload_s if ocr_idle_unload_s is None else ocr_idle_unload_s
         self.lock = lock
         self.idle_unload_s = idle_unload_s
         self.trim_after_s = trim_after_s
@@ -211,9 +215,10 @@ class ModelJanitor:
                 unloaded = self.registry.unload_idle(self.idle_unload_s, now=now)
                 for model_id in unloaded:
                     logger.info("模型 %s 空闲超过 %g 秒，已卸载", model_id, self.idle_unload_s)
-                if self.ocr is not None and self.ocr.unload_idle(self.idle_unload_s, now=now):
-                    logger.info("OCR 空闲超过 %g 秒，已卸载", self.idle_unload_s)
-                    unloaded.append("ocr")
+            ocr_idle = self.ocr_idle_unload_s
+            if self.ocr is not None and ocr_idle > 0 and self.ocr.unload_idle(ocr_idle, now=now):
+                logger.info("OCR 空闲超过 %g 秒，已卸载", ocr_idle)
+                unloaded.append("ocr")
             times = [self.registry.last_activity()]
             if self.ocr is not None:
                 times.append(self.ocr.last_activity())

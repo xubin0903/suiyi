@@ -102,6 +102,71 @@ jobs:
           echo "## ${RUNNER_OS}：基线 $BASE，当前 $HEAD（GitHub 托管 runner，$(nproc 2>/dev/null || echo "$NUMBER_OF_PROCESSORS") 逻辑 CPU）" >> "$GITHUB_STEP_SUMMARY"
           run() { mode=$1; shift; "$PY" scripts/measure_serve_memory.py "$mode" --summary "$GITHUB_STEP_SUMMARY" "$@"; }
           run breakdown --models-dir "$M" --label "进程内分解（当前 $HEAD）" --out "$OUT/breakdown.json"
+          # Issue #96 的顺序：en→zh → zh→en → 段落 P95 → en→ja → OCR
+          run serve --models-dir "$M" --src "$B" --label "基线 $BASE" --out "$OUT/baseline.json" --port 18801
+          run serve --models-dir "$M" --src "$S" --label "当前 $HEAD（空闲卸载 15 秒）" --out "$OUT/head.json" --port 18802 --idle-wait 25 -- --model-idle-unload 15
+          # 桌面端默认：启动预热 zh↔en 与 OCR（EngineOptions 的默认值），只用 zh↔en 与 OCR
+          D="--preload zh-en,en-zh --preload-ocr"
+          run serve --scenario desktop --models-dir "$M" --src "$B" --label "基线 $BASE（桌面默认）" --out "$OUT/baseline-desktop.json" --port 18803 -- $D
+          run serve --scenario desktop --models-dir "$M" --src "$S" --label "当前 $HEAD（桌面默认，OCR 空闲 15 秒）" --out "$OUT/head-desktop.json" --port 18804 --idle-wait 25 -- $D --ocr-idle-unload 15
+          # GitHub runner 是 AMD EPYC，CT2 默认走 oneDNN；Intel 机器默认走 MKL（int8 权重预打包）。
+          # 强制 CT2_USE_MKL=1 复现 Intel 机器上 Private Bytes 远大于 WS 的现象（MKL 在 AMD 上很慢，延迟不代表 Intel）。
+          CT2_USE_MKL=1 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1" --out "$OUT/baseline-mkl.json" --port 18805 --rounds 1
+          CT2_USE_MKL=1 CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1 + CT2_PACKED_GEMM=0" --out "$OUT/baseline-mkl-nopack.json" --port 18806 --rounds 1
+          CT2_USE_MKL=1 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1" --out "$OUT/head-mkl.json" --port 18807 --rounds 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mem-models
+          path: ~/suiyi-mem-models
+          retention-days: 3
+
+  measure:
+    name: 测量（${{ matrix.os }}）
+    needs: models
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    env:
+      PYTHONUTF8: "1"
+      # 与评测机一致；GitHub 托管 runner 一般没有 AMX，设了也无副作用
+      MKL_ENABLE_INSTRUCTIONS: AVX512_E1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: mem-models
+          path: ${{ runner.temp }}/models
+      - name: 安装运行环境（engine[ocr,eval]）并放好 OCR 模型
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          if [ "$RUNNER_OS" = "Windows" ]; then PY="$RUNNER_TEMP/venv/Scripts/python.exe"; else PY="$RUNNER_TEMP/venv/bin/python"; fi
+          "$PY" -m pip install --quiet --upgrade pip
+          "$PY" -m pip install --quiet -e "./engine[ocr,eval]"
+          "$PY" -m pip list | grep -iE 'ctranslate2|onnxruntime|rapidocr|psutil|numpy'
+          mkdir -p "$RUNNER_TEMP/models/ocr"
+          "$PY" -c "import pathlib, rapidocr, shutil, sys; [shutil.copy2(p, sys.argv[1]) for p in (pathlib.Path(rapidocr.__file__).parent / 'models').glob('*.onnx')]" "$RUNNER_TEMP/models/ocr"
+          "$PY" scripts/download_ocr_models.py --manifest engine/ocr_model_manifest.json --models-dir "$RUNNER_TEMP/models" check
+          ls -R "$RUNNER_TEMP/models" | head -40
+          git worktree add "$RUNNER_TEMP/baseline" "${{ inputs.baseline || 'origin/main' }}"
+          git -C "$RUNNER_TEMP/baseline" log --oneline -1
+          echo "PY=$PY" >> "$GITHUB_ENV"
+      - name: 测量
+        run: |
+          OUT="$RUNNER_TEMP/mem"; mkdir -p "$OUT"
+          M="$RUNNER_TEMP/models"; B="$RUNNER_TEMP/baseline/engine/src"; S="$PWD/engine/src"
+          HEAD=$(git rev-parse --short HEAD); BASE=$(git -C "$RUNNER_TEMP/baseline" rev-parse --short HEAD)
+          "$PY" -c "import platform, ctranslate2 as c; print('CPU', platform.processor(), c.__version__, c.get_supported_compute_types('cpu'))" | tee -a "$GITHUB_STEP_SUMMARY"
+          grep -m1 'model name' /proc/cpuinfo 2>/dev/null | tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo "## ${RUNNER_OS}：基线 $BASE，当前 $HEAD（GitHub 托管 runner，$(nproc 2>/dev/null || echo "$NUMBER_OF_PROCESSORS") 逻辑 CPU）" >> "$GITHUB_STEP_SUMMARY"
+          run() { mode=$1; shift; "$PY" scripts/measure_serve_memory.py "$mode" --summary "$GITHUB_STEP_SUMMARY" "$@"; }
+          run breakdown --models-dir "$M" --label "进程内分解（当前 $HEAD）" --out "$OUT/breakdown.json"
           run serve --models-dir "$M" --src "$B" --label "基线 $BASE" --out "$OUT/baseline.json" --port 18801
           CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_PACKED_GEMM=0" --out "$OUT/baseline-nopack.json" --port 18802
           run serve --models-dir "$M" --src "$S" --label "当前 $HEAD（默认参数）" --out "$OUT/head.json" --port 18803 --idle-wait 20 -- --model-idle-unload 15
