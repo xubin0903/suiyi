@@ -37,7 +37,9 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--intra-threads` | 环境变量 `SUIYI_INTRA_THREADS`，否则 `min(4, CPU 数)`（拿不到 CPU 数时 2） | 单个模型内部的计算线程。命令行优先于环境变量；环境变量不是 ≥ 1 的整数时，在开始监听前非零退出。#87 起默认上限从 2 改为 4 |
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
-| `--model-idle-unload` | 环境变量 `SUIYI_MODEL_IDLE_UNLOAD`，否则 `600` | 翻译模型连续这么多秒没被用到就卸载（#92），下次用到时自动重新加载。`0` 表示不卸载。命令行优先于环境变量；不是 ≥ 0 的整数时在开始监听前非零退出。只卸载翻译模型，不卸载 OCR 和语种检测 |
+| `--model-idle-unload` | 环境变量 `SUIYI_MODEL_IDLE_UNLOAD`，否则 `600` | 翻译模型连续这么多秒没被用到就卸载（#92），下次用到时自动重新加载。`0` 表示不卸载。命令行优先于环境变量；不是 ≥ 0 的整数时在开始监听前非零退出。不卸载语种检测；OCR 见下一行 |
+| `--ocr-idle-unload` | 环境变量 `SUIYI_OCR_IDLE_UNLOAD`，否则与 `--model-idle-unload` 相同 | OCR 模型连续这么多秒没被用到就卸载（#96），下次 OCR 请求时自动重新加载（冷加载约 1–1.5 s）。`0` 表示不卸载。卸载只释放 onnxruntime 会话；已导入的 onnxruntime / OpenCV / numpy 库代码留在进程里（约 60–90 MiB，大多是可换出的映像页），要完全回收只能重启服务 |
+| `--max-loaded-models` | 环境变量 `SUIYI_MAX_LOADED_MODELS`，否则 `2` | 同时常驻的翻译模型上限（#96）。要加载新模型而已满时，先卸载最久没用过的（LRU），再加载。`0` 表示不限；`1` 不允许（ja→zh 这类英文中转要同时用两个模型）。中英双向正好 2 个，切到第三个方向（如 en→ja）时会卸掉较久没用的那个，再切回来要重新加载（约 0.2–0.5 s） |
 
 OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
 
@@ -113,6 +115,8 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "uptime_s": 12.3,
   "ocr_loaded": false,
   "model_idle_unload_s": 600,
+  "ocr_idle_unload_s": 600,
+  "max_loaded_models": 2,
   "glossary_enabled": true,
   "glossary_builtin_entries": 608,
   "glossary_user_path": "C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv",
@@ -134,8 +138,10 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `models_dir` | 本次进程使用的模型目录 |
 | `loaded_models` | 已经加载进内存的模型 id，字典序。`--preload` 成功后这里能看到它们。#92 起模型空闲超过 `model_idle_unload_s` 秒会被卸载，这个列表会变短（可能变成 `[]`）；下次翻译会重新加载 |
 | `model_idle_unload_s` | 翻译模型空闲卸载的秒数，`0` 表示不卸载。#92 新增 |
+| `ocr_idle_unload_s` | OCR 模型空闲卸载的秒数，`0` 表示不卸载。#96 新增 |
+| `max_loaded_models` | 同时常驻的翻译模型上限，`0` 表示不限（#96 新增）。`loaded_models` 不会超过这个数 |
 | `uptime_s` | 自开始监听起的秒数，保留 1 位小数 |
-| `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增 |
+| `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增；#96 起 OCR 空闲超过 `ocr_idle_unload_s` 秒会被卸载，这里变回 `false`，下次 OCR 请求重新加载 |
 | `glossary_enabled` | 服务端默认是否开启术语保护（`--glossary` / `SUIYI_GLOSSARY` 的结果；内置术语表加载失败时为 `false`）。不反映单次请求的 `glossary` 覆盖。#83 新增 |
 | `glossary_builtin_entries` | 内置术语表条数，按方向展开（一条 zh↔en 术语算 2 条）。#83 新增 |
 | `glossary_user_path` | 实际使用的用户术语表路径，文件可以不存在；没有配置时为 `null`。#83 新增 |
