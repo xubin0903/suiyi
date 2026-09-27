@@ -792,4 +792,6 @@ def test_mixed_term_gets_spaces_next_to_han() -> None:
 def test_plain_latin_term_is_not_padded() -> None:
     api = _term("builtin:api", "application programming interface", "API")
     item = protect("Call the application programming interface now.", "en", "zh", [api])
-    assert restore(f"现在调用{item.slots[0].placeholder}接口。", item, "zh")[0] == "现在调用API接口。"
+    assert (
+        restore(f"现在调用{item.slots[0].placeholder}接口。", item, "zh")[0] == "现在调用API接口。"
+    )
