@@ -24,6 +24,7 @@ def test_configure_allocator_sets_mkl_default_without_overriding_user() -> None:
     applied = memory.configure_allocator(env)
     assert env["MKL_DISABLE_FAST_MM"] == "1"
     assert applied["mkl_disable_fast_mm"] == "1"
+    assert env["OPENBLAS_NUM_THREADS"] == "1"  # #96
     user = {"MKL_DISABLE_FAST_MM": "0", "MALLOC_ARENA_MAX": "4"}
     applied = memory.configure_allocator(user)
     assert user["MKL_DISABLE_FAST_MM"] == "0"
@@ -31,7 +32,8 @@ def test_configure_allocator_sets_mkl_default_without_overriding_user() -> None:
 
 
 def test_trim_matches_platform() -> None:
-    assert memory.trim() is sys.platform.startswith("linux")
+    # glibc 上 malloc_trim；Windows 上 HeapCompact + _heapmin（#96）；其他平台空操作
+    assert memory.trim() is (sys.platform.startswith("linux") or sys.platform == "win32")
 
 
 # ---------------------------------------------------------------- 模型空闲卸载

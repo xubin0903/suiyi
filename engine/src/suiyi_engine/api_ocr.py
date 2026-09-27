@@ -75,6 +75,7 @@ class OcrProvider:
         self._factory = engine_factory
         self._engine: OcrEngine | None = None
         self._lock = threading.Lock()
+        self._last_used: float | None = None
         self.last_error: OcrUnavailable | None = None
         """最近一次加载失败的原因（``/health.ocr_error``）；加载成功后清空。"""
 
@@ -92,7 +93,30 @@ class OcrProvider:
             self.last_error = exc
             raise
         self.last_error = None
+        self.touch()
         return engine
+
+    def touch(self) -> None:
+        """记一次使用（空闲卸载按最后一次使用计时，#96）。"""
+
+        self._last_used = time.monotonic()
+
+    def last_activity(self) -> float | None:
+        """最近一次使用 OCR 的 ``time.monotonic()`` 时刻；从没用过时为 ``None``。"""
+
+        return self._last_used
+
+    def unload_idle(self, idle_s: float, *, now: float | None = None) -> bool:
+        """OCR 超过 ``idle_s`` 秒没用过就卸载模型（#96）。正在识别时不卸载。返回是否卸载了。"""
+
+        engine = self._engine
+        last = self._last_used
+        if engine is None or not engine.loaded or last is None:
+            return False
+        current = time.monotonic() if now is None else now
+        if current - last < idle_s:
+            return False
+        return bool(engine.unload())
 
     def health(self) -> dict[str, object] | None:
         """``/health.ocr_error``：最近一次加载失败的原因，没有失败（或尚未尝试）时为 ``None``。"""
@@ -266,7 +290,10 @@ async def _recognize(app: FastAPI, data: bytes, lang: str) -> OcrResult:
     from suiyi_engine.ocr.engine import ImageTooLargeError
 
     try:  # 像素上限已按 IHDR 检查过；这里的 ImageTooLargeError 只是兜底
-        return await run_in_threadpool(engine.recognize, data, lang=lang)
+        try:
+            return await run_in_threadpool(engine.recognize, data, lang=lang)
+        finally:
+            provider.touch()
     except ImageTooLargeError as exc:
         raise ApiError(413, "image_too_large", str(exc), {"kind": "pixels"}) from exc
     except InvalidImageError as exc:

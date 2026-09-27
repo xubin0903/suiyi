@@ -364,7 +364,12 @@ def test_cli_passes_decode_flags(
     assert code == 0
     kwargs = dict(seen["kwargs"])  # type: ignore[call-overload]
     assert kwargs.pop("glossary").enabled is True
-    assert kwargs == {"intra_threads": 2, "beam_size": 4, "max_batch_size": 8}
+    assert kwargs == {
+        "intra_threads": 2,
+        "beam_size": 4,
+        "max_batch_size": 8,
+        "max_loaded_models": 2,  # #96 默认
+    }
     assert seen["preload"] == [("zh", "en")]
     assert "intra_threads=2 beam_size=4 max_batch_size=8" in capsys.readouterr().out
 
