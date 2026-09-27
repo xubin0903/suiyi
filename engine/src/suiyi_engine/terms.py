@@ -350,6 +350,8 @@ class TermStats:
     slots: int = 0
     variant_fixes: int = 0
     fallbacks: int = 0
+    retry_fixes: int = 0
+    """占位符还原失败后，只保护首遍丢了的术语再翻一遍、救回来的句数（#89）。"""
     # 不翻译片段（#101）
     verbatim_sentences: int = 0
     verbatim_copied: int = 0
@@ -635,6 +637,7 @@ def _speculative(
     if len(raw) != len(sentences) + len(order):
         return raw[: len(sentences)]
     outputs = list(raw[: len(sentences)])
+    retry: dict[int, tuple[Protected, str]] = {}
     for index, candidate in zip(order, raw[len(sentences) :], strict=True):
         item = protected[index]
         fixed = _fix_first_pass(outputs[index], item, tgt)
@@ -644,8 +647,16 @@ def _speculative(
             outputs[index] = fixed
             continue
         candidate = _strip_placeholder_suffix(candidate, item, tgt)
-        restored = _restore_or_log(candidate, item, src, tgt, record)
-        if restored is None:
+        record.protected += 1
+        record.slots += len(item.slots)
+        restored, failed = restore(candidate, item, tgt)
+        if failed:
+            reasons = _failure_reasons(candidate, failed)
+            reduced = _reduce(item, outputs[index], tgt)
+            if reduced is None:
+                _log_fallback(src, tgt, reasons, record)
+            else:
+                retry[index] = (reduced, reasons)
             continue
         repeated = _new_repeat(restored, outputs[index], item, tgt)
         if repeated:
@@ -654,7 +665,80 @@ def _speculative(
             logger.info("术语保护回退 %s→%s %s repeat", src, tgt, ids)
             continue
         outputs[index] = restored
+    if retry:
+        _retry_reduced(outputs, retry, src, tgt, translate_batch, record)
     return outputs
+
+
+def _retry_reduced(
+    outputs: list[str],
+    retry: Mapping[int, tuple[Protected, str]],
+    src: str,
+    tgt: str,
+    translate_batch: Callable[[list[str]], list[str]],
+    record: TermStats,
+) -> None:
+    """占位符还原失败的句子只保护首遍丢了的术语、相邻占位符之间加空格，再翻一遍（#89）。
+
+    还是失败或出现新的重复时用首遍译文，并记一条回退日志（原因取第一次失败的）。
+    """
+
+    order = sorted(retry)
+    raw = translate_batch([retry[index][0].text for index in order])
+    if len(raw) != len(order):
+        raw = [""] * len(order)
+    for index, candidate in zip(order, raw, strict=True):
+        item, reasons = retry[index]
+        candidate = _strip_placeholder_suffix(candidate, item, tgt)
+        restored, failed = restore(candidate, item, tgt) if candidate else ("", item.slots)
+        if failed or _new_repeat(restored, outputs[index], item, tgt):
+            _log_fallback(src, tgt, reasons, record)
+            continue
+        record.retry_fixes += 1
+        outputs[index] = restored
+
+
+def _reduce(item: Protected, first: str, tgt: str) -> Protected | None:
+    """只保留首遍译文里没有的术语（和不翻译片段）的占位符；其余换回原文写法。
+
+    相邻的占位符（中文原文里常见，「ZXQZXW」）之间加一个空格。结果与原占位符版相同时返回 ``None``
+    （同样的输入再翻一遍也是同样的结果）。
+    """
+
+    keep: list[Slot] = []
+    text = item.text
+    for slot in item.slots:
+        term = slot.term
+        if term.domain == VERBATIM:
+            keep.append(slot)
+            continue
+        if term.kind == KEEP and slot.target == slot.source:
+            present = slot.source.casefold() in first.casefold()
+        else:
+            present = term_present(first, term, tgt)
+        if present:
+            pattern = rf"(?<![A-Za-z0-9]){re.escape(slot.placeholder)}(?![0-9])"
+            text = re.sub(pattern, lambda _match, value=slot.source: value, text, count=1)
+        else:
+            keep.append(slot)
+    if not any(slot.term.domain != VERBATIM for slot in keep):
+        return None
+    text = re.sub(r"(ZX[QWJKV]\d*)(?=ZX[QWJKV])", r"\1 ", text)
+    if text == item.text:
+        return None
+    return Protected(text, tuple(keep))
+
+
+def _failure_reasons(raw: str, failed: Sequence[Slot]) -> str:
+    return " ".join(
+        f"{slot.term.id}:{'missing' if _count(raw, slot.placeholder) == 0 else 'duplicate'}"
+        for slot in failed
+    )
+
+
+def _log_fallback(src: str, tgt: str, reasons: str, record: TermStats) -> None:
+    record.fallbacks += 1
+    logger.info("术语保护回退 %s→%s %s", src, tgt, reasons)
 
 
 # tc-big 把占位符当成型号，常在后面加「型」（「ZXQ型在CI管道通过后被合并」）。原文里术语后面
@@ -702,21 +786,6 @@ def _new_repeat(restored: str, first: str, item: Protected, tgt: str) -> str | N
     for gram, count in grams(restored).items():
         if count >= 2 and before.get(gram, 0) < count:
             return gram
-    return None
-
-
-def _restore_or_log(raw: str, item: Protected, src: str, tgt: str, record: TermStats) -> str | None:
-    record.protected += 1
-    record.slots += len(item.slots)
-    restored, failed = restore(raw, item, tgt)
-    if not failed:
-        return restored
-    record.fallbacks += 1
-    reasons = " ".join(
-        f"{slot.term.id}:{'missing' if _count(raw, slot.placeholder) == 0 else 'duplicate'}"
-        for slot in failed
-    )
-    logger.info("术语保护回退 %s→%s %s", src, tgt, reasons)
     return None
 
 

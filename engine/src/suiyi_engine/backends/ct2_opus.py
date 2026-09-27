@@ -95,14 +95,44 @@ def has_spurious_cjk_spacing(text: str) -> bool:
     return _SP_SPACE in text or _CJK_GAP.search(text) is not None
 
 
-def decode_hypothesis(sp: _SentencePiece, tokens: Sequence[str], tgt_lang: str) -> str:
-    """丢掉特殊 token 后反分词，再做 :func:`cleanup_decoded`。"""
+def decode_hypothesis(
+    sp: _SentencePiece, tokens: Sequence[str], tgt_lang: str, source: str | None = None
+) -> str:
+    """丢掉特殊 token 后反分词，再做 :func:`cleanup_decoded`。
 
+    目标是中文且给了 ``source`` 时，``<unk>`` 按位置换成「、」「。」或丢掉
+    （:func:`suiyi_engine.zh_punct.unk_marks`，#89）。
+    """
+
+    tokens = [str(token) for token in tokens]
+    if source is not None and _is_zh(tgt_lang) and "<unk>" in tokens:
+        from suiyi_engine.zh_punct import unk_marks
+
+        marks = iter(unk_marks(tokens, source))
+        pieces: list[str] = []
+        chunk: list[str] = []
+        for token in tokens:
+            if token == "<unk>":
+                pieces.append(_decode(sp, chunk))
+                pieces.append(next(marks) or "")
+                chunk = []
+            elif token not in _SPECIAL_TOKENS:
+                chunk.append(token)
+        pieces.append(_decode(sp, chunk))
+        return cleanup_decoded("".join(pieces), tgt_lang)
     kept = [token for token in tokens if token not in _SPECIAL_TOKENS]
-    text = sp.decode(kept)
-    if not isinstance(text, str):
-        text = str(text)
-    return cleanup_decoded(text, tgt_lang)
+    return cleanup_decoded(_decode(sp, kept), tgt_lang)
+
+
+def _decode(sp: _SentencePiece, pieces: list[str]) -> str:
+    if not pieces:
+        return ""
+    text = sp.decode(pieces)
+    return text if isinstance(text, str) else str(text)
+
+
+def _is_zh(lang: str) -> bool:
+    return lang.strip().lower().replace("_", "-").split("-", 1)[0] in ("zh", "cn")
 
 
 class Ct2OpusBackend:
@@ -212,10 +242,10 @@ class Ct2OpusBackend:
                 f"{self._record.id} 返回了 {len(results)} 条假设，期望 {len(sentences)} 条"
             )
         decoded: list[str] = []
-        for result in results:
+        for source, result in zip(sentences, results, strict=True):
             hypotheses = getattr(result, "hypotheses", None)
             tokens = [str(token) for token in hypotheses[0]] if hypotheses else []
-            decoded.append(decode_hypothesis(self._target_sp, tokens, self._tgt_lang))
+            decoded.append(decode_hypothesis(self._target_sp, tokens, self._tgt_lang, source))
         return decoded
 
     def _encode(self, text: str) -> list[str]:

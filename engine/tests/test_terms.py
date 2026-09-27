@@ -678,3 +678,65 @@ def test_issue_97_regressions_with_real_models() -> None:
     for glossary in (True, False):
         text = translator.translate(_ISSUE_97_K8S, "en", "zh", glossary=glossary).text
         assert not any(mark in text for mark in ",;()"), text
+
+
+# ---------------------------------------------------------------- 回退前的缩减重试（#89）
+
+
+def test_failed_placeholder_retries_with_only_missing_terms(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """zh-en-legal-010：首遍已有 breach of contract，只差违约金；两个占位符都保护时模型丢了一个。"""
+
+    breach = _term("builtin:breach", "breach of contract", "违约")
+    damages = _term("builtin:damages", "liquidated damages", "违约金")
+    source = "任何一方违约，应向守约方支付违约金。"
+    first = "Any breach of contract shall result in the default sum."
+    model = FakeModel(
+        {
+            source: first,
+            "任何一方ZXQ，应向守约方支付ZXW。": "Either party shall pay ZXQ.",
+            "任何一方违约，应向守约方支付ZXW。": "If either party defaults, ZXW shall be paid.",
+        }
+    )
+    stats = TermStats()
+    with caplog.at_level(logging.INFO, logger="suiyi_engine.terms"):
+        out = translate_with_terms([source], "zh", "en", [breach, damages], model, stats)
+    assert out == ["If either party defaults, liquidated damages shall be paid."]
+    assert stats.retry_fixes == 1 and stats.fallbacks == 0
+    assert "回退" not in caplog.text
+    assert len(model.calls) == 2
+
+
+def test_adjacent_placeholders_are_spaced_on_retry() -> None:
+    """zh-en-fin-001：「ZXQZXW」连在一起时模型会写成 ZXX；重试时中间加空格。"""
+
+    revenue = _term("builtin:revenue", "operating revenue", "营业收入")
+    yoy = _term("builtin:yoy", "year over year", "同比")
+    source = "营业收入同比增长。"
+    model = FakeModel(
+        {
+            source: "Operating income rose.",
+            "ZXQZXW增长。": "ZXX rose.",
+            "ZXQ ZXW增长。": "ZXQ grew ZXW.",
+        }
+    )
+    stats = TermStats()
+    out = translate_with_terms([source], "zh", "en", [revenue, yoy], model, stats)
+    assert out == ["Operating revenue grew year over year."]
+    assert stats.retry_fixes == 1
+
+
+def test_retry_that_still_fails_falls_back_to_first_pass(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    revenue = _term("builtin:revenue", "operating revenue", "营业收入")
+    yoy = _term("builtin:yoy", "year over year", "同比")
+    source = "营业收入同比增长。"
+    model = FakeModel({source: "Income rose.", "ZXQZXW增长。": "ZXX rose.", "ZXQ ZXW增长。": "Up."})
+    stats = TermStats()
+    with caplog.at_level(logging.INFO, logger="suiyi_engine.terms"):
+        out = translate_with_terms([source], "zh", "en", [revenue, yoy], model, stats)
+    assert out == ["Income rose."]
+    assert stats.fallbacks == 1 and stats.retry_fixes == 0
+    assert "builtin:revenue:missing builtin:yoy:missing" in caplog.text
