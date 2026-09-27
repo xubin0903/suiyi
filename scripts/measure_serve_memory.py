@@ -51,16 +51,59 @@ FIRST = {
 # ---------------------------------------------------------------- 内存读数
 
 
-def target_pid(pid: int) -> int:
-    """真正跑 serve 的进程。Windows 的 venv ``python.exe`` 只是个启动器，会再起一个子进程。"""
+def serve_pids(pid: int) -> tuple[int, int | None]:
+    """``(serve 主进程, OCR 子进程或 None)``（#104）。
+
+    Windows 的 venv ``python.exe`` 只是个启动器，会再起一个子进程，所以按命令行分组后各取 RSS 最大的：
+    命令行带 ``ocr-worker`` 的是 OCR 子进程（及其启动器），其余是 serve（及其启动器）。
+    """
 
     import psutil
 
     try:
         family = [psutil.Process(pid), *psutil.Process(pid).children(recursive=True)]
     except psutil.NoSuchProcess:
-        return pid
-    return max(family, key=lambda proc: proc.memory_info().rss).pid
+        return pid, None
+    main: list[tuple[int, int]] = []
+    worker: list[tuple[int, int]] = []
+    for proc in family:
+        try:
+            rss = proc.memory_info().rss
+            is_worker = "ocr-worker" in proc.cmdline()
+        except psutil.Error:
+            continue
+        (worker if is_worker else main).append((rss, proc.pid))
+    serve = max(main)[1] if main else pid
+    return serve, (max(worker)[1] if worker else None)
+
+
+def target_pid(pid: int) -> int:
+    """真正跑 serve 的进程（不含 OCR 子进程）。"""
+
+    return serve_pids(pid)[0]
+
+
+SUM_KEYS = ("rss_mib", "uss_mib", "ws_mib", "private_mib")
+
+
+def family_memory(pid: int) -> dict[str, float]:
+    """serve 主进程的读数（键名同 :func:`memory`），加上 OCR 子进程（``ocr_`` 前缀）与两者之和
+    （``total_`` 前缀）。没有 OCR 子进程时子进程读数为 0，之和等于主进程。"""
+
+    serve, worker = serve_pids(pid)
+    out = memory(serve)
+    child: dict[str, float] = {}
+    if worker is not None:
+        try:
+            child = memory(worker)
+        except Exception:  # 子进程恰好退出
+            child = {}
+    out["ocr_worker_pid"] = float(worker or 0)
+    for key in SUM_KEYS:
+        if key in out:
+            out[f"ocr_{key}"] = child.get(key, 0.0)
+            out[f"total_{key}"] = out[key] + child.get(key, 0.0)
+    return out
 
 
 def memory(pid: int) -> dict[str, float]:
@@ -162,14 +205,22 @@ def _vm_summary(pid: int) -> dict[str, float]:
 
 def _headline(mem: dict[str, float]) -> str:
     if WINDOWS:
-        return (
+        text = (
             f"WS {mem.get('ws_mib', 0):.1f} / Private {mem.get('private_mib', 0):.1f} / "
             f"USS {mem.get('uss_mib', 0):.1f} / 峰值 WS {mem.get('peak_ws_mib', 0):.1f} MiB"
         )
-    return (
-        f"RSS {mem.get('rss_mib', 0):.1f} / USS {mem.get('uss_mib', 0):.1f} / "
-        f"峰值 {mem.get('vmhwm_mib', 0):.1f} MiB"
-    )
+        extra = ("ws_mib", "private_mib")
+    else:
+        text = (
+            f"RSS {mem.get('rss_mib', 0):.1f} / USS {mem.get('uss_mib', 0):.1f} / "
+            f"峰值 {mem.get('vmhwm_mib', 0):.1f} MiB"
+        )
+        extra = ("rss_mib",)
+    if mem.get("ocr_worker_pid"):
+        child = " / ".join(f"{mem.get('ocr_' + key, 0):.1f}" for key in extra)
+        total = " / ".join(f"{mem.get('total_' + key, 0):.1f}" for key in extra)
+        text += f"；OCR 子进程 {child}；合计 {total}"
+    return text
 
 
 # ---------------------------------------------------------------- serve 场景
@@ -191,6 +242,14 @@ def _translate(port: int, src: str, tgt: str, text: str) -> tuple[int, float]:
     started = time.perf_counter()
     status, _ = _post(port, "/translate", body, "application/json")
     return status, (time.perf_counter() - started) * 1000
+
+
+def _timed_post(port: int, path: str, image: bytes) -> float:
+    started = time.perf_counter()
+    status, _ = _post(port, path, image, "image/png")
+    if status != 200:
+        raise SystemExit(f"{path} 失败：HTTP {status}")
+    return (time.perf_counter() - started) * 1000
 
 
 def _paragraphs() -> list[tuple[str, str, str]]:
@@ -247,7 +306,7 @@ def run_serve(args: argparse.Namespace) -> dict:
 
         def record(name: str, **extra: object) -> None:
             time.sleep(args.settle)
-            mem = memory(target_pid(proc.pid))
+            mem = family_memory(proc.pid)
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as resp:
                 loaded = json.load(resp)
             entry = {
@@ -285,13 +344,33 @@ def run_serve(args: argparse.Namespace) -> dict:
         begun = time.perf_counter()
         status, _ = _post(port, "/ocr", image, "image/png")
         cold = (time.perf_counter() - begun) * 1000
+        # 热 OCR 与 /ocr_translate 的延迟（#104 验收：P95 不能明显变差）
+        ocr_warm = [_timed_post(port, "/ocr", image) for _ in range(args.ocr_rounds)]
+        pair_warm = [
+            _timed_post(port, "/ocr_translate?target=en&source=zh", image)
+            for _ in range(args.ocr_rounds)
+        ]
         name = "用过 OCR（全部加载）" if args.scenario == "issue" else "用过 OCR（zh↔en + OCR）"
-        record(name, status=status, cold_ms=round(cold))
+        record(
+            name,
+            status=status,
+            cold_ms=round(cold),
+            ocr_warm_p50_ms=round(statistics.median(ocr_warm)),
+            ocr_warm_p95_ms=round(_percentile(ocr_warm, 0.95)),
+            ocr_translate_p50_ms=round(statistics.median(pair_warm)),
+            ocr_translate_p95_ms=round(_percentile(pair_warm, 0.95)),
+        )
         if args.idle_wait > 0:
             time.sleep(args.idle_wait)
             record(f"空闲 {args.idle_wait:.0f} 秒后")
+            # 空闲卸载（#104 起是子进程退出）之后再用一次 OCR：冷启动耗时
+            begun = time.perf_counter()
+            status, _ = _post(port, "/ocr", image, "image/png")
+            record("空闲卸载后再用 OCR", status=status, cold_ms=round((time.perf_counter() - begun) * 1000))
         result["serve_pid"] = target_pid(proc.pid)
         result["peak"] = {key: round(value, 1) for key, value in memory(result["serve_pid"]).items()}
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as resp:
+            result["health_end"] = json.load(resp)
     finally:
         proc.terminate()
         try:
@@ -367,9 +446,20 @@ def _markdown(result: dict) -> str:
     if WINDOWS:
         cols = ["ws_mib", "private_mib", "uss_mib", "peak_ws_mib", "vm_commit_private_mib"]
         heads = ["WS", "Private Bytes", "私有 WS", "峰值 WS", "已提交私有（VirtualQuery）"]
+        sums = ["ws_mib", "private_mib"]
     else:
         cols = ["rss_mib", "uss_mib", "vmhwm_mib", "vmdata_mib"]
         heads = ["RSS", "USS", "峰值 RSS", "VmData"]
+        sums = ["rss_mib", "uss_mib"]
+    if result.get("mode", "serve") == "serve":  # #104：主进程列之后是 OCR 子进程与合计
+        names = {"ws_mib": "WS", "private_mib": "Private", "rss_mib": "RSS", "uss_mib": "USS"}
+        cols = cols[:2] + [f"ocr_{k}" for k in sums] + [f"total_{k}" for k in sums] + cols[2:]
+        heads = (
+            [f"主进程 {h}" for h in heads[:2]]
+            + [f"OCR 子进程 {names[k]}" for k in sums]
+            + [f"合计 {names[k]}" for k in sums]
+            + heads[2:]
+        )
     lines = [
         f"### {result.get('label') or '内存测量'}（{result['platform']}）",
         "",
@@ -399,6 +489,7 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--src", help="PYTHONPATH，指向要测的 engine/src（对比 main 时用）")
             p.add_argument("--port", type=int, default=18796)
             p.add_argument("--rounds", type=int, default=3, help="段落轮数（默认 3）")
+            p.add_argument("--ocr-rounds", type=int, default=10, help="热 OCR 次数（默认 10）")
             p.add_argument("--idle-wait", type=float, default=0.0, help="最后空闲多少秒再读一次")
             p.add_argument(
                 "--scenario",
@@ -410,6 +501,7 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("serve_args", nargs="*", help="额外 serve 参数，写在 -- 之后")
     args = parser.parse_args(argv)
     result = run_serve(args) if args.mode == "serve" else run_breakdown(args)
+    result["mode"] = args.mode
     table = _markdown(result)
     print(table)
     if args.out:

@@ -39,10 +39,21 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--beam-size` | `2` | 束搜索宽度。不传则用翻译核心的默认 |
 | `--max-batch-size` | `32` | 一次请求里按句批量解码的上限。不传则用翻译核心的默认 |
 | `--model-idle-unload` | 环境变量 `SUIYI_MODEL_IDLE_UNLOAD`，否则 `600` | 翻译模型连续这么多秒没被用到就卸载（#92），下次用到时自动重新加载。`0` 表示不卸载。命令行优先于环境变量；不是 ≥ 0 的整数时在开始监听前非零退出。不卸载语种检测；OCR 见下一行 |
-| `--ocr-idle-unload` | 环境变量 `SUIYI_OCR_IDLE_UNLOAD`，否则与 `--model-idle-unload` 相同 | OCR 模型连续这么多秒没被用到就卸载（#96），下次 OCR 请求时自动重新加载（冷加载约 1–1.5 s）。`0` 表示不卸载。卸载只释放 onnxruntime 会话；已导入的 onnxruntime / OpenCV / numpy 库代码留在进程里（约 60–90 MiB，大多是可换出的映像页），要完全回收只能重启服务 |
+| `--ocr-idle-unload` | 环境变量 `SUIYI_OCR_IDLE_UNLOAD`，否则与 `--model-idle-unload` 相同 | OCR 连续这么多秒没被用到就卸载（#96），下次 OCR 请求时自动重新加载。`0` 表示不卸载。#104 起 OCR 在独立子进程里运行（见下文「OCR 子进程」），卸载就是让子进程退出，onnxruntime / OpenCV / numpy 占的内存全部还给系统；下次 OCR 冷启动（拉起子进程 + 加载模型）约 1 s（Linux 实测，见 [性能基线](性能基线.md)） |
 | `--max-loaded-models` | 环境变量 `SUIYI_MAX_LOADED_MODELS`，否则 `2` | 同时常驻的翻译模型上限（#96）。要加载新模型而已满时，先卸载最久没用过的（LRU），再加载。`0` 表示不限；`1` 不允许（ja→zh 这类英文中转要同时用两个模型）。中英双向正好 2 个，切到第三个方向（如 en→ja）时会卸掉较久没用的那个，再切回来要重新加载（约 0.2–0.5 s） |
 
 OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
+
+### OCR 子进程（#104）
+
+`serve` 不在主进程里做 OCR：第一次 OCR 请求（或 `--preload-ocr`）时启动一个子进程 `python -m suiyi_engine ocr-worker`（打包成 exe 时是 `<exe> ocr-worker`），由它导入 onnxruntime / OpenCV / numpy 并加载模型。主进程从头到尾不导入这些库，内存里只有翻译模型。
+
+- **通信**：子进程的 stdin / stdout，定长帧（8 字节头 + JSON + PNG 原始字节），不用 pickle。选它而不是 `multiprocessing`：Windows 上就是普通的 `CreateProcess`，不依赖重新导入 `__main__`，打包成 exe 也不需要 `freeze_support()`；没有共享状态和资源跟踪进程；每次请求只多一次管道拷贝（1080p 截图约 1 MiB，开销在毫秒级）。子进程的 stderr 继承主进程，日志照常写进服务日志；第三方库往 stdout 的输出被转到 stderr，不会弄坏协议。
+- **串行**：同时只处理一个 OCR 请求（与之前进程内的 OCR 锁一样），其余排队。处理中（包括排队）不会被空闲回收。
+- **空闲退出**：空闲超过 `--ocr-idle-unload` 秒，子进程退出；下一次 OCR 请求重新启动（冷启动）。`--ocr-idle-unload 0` 时子进程一直留着。
+- **故障**：子进程崩溃、被杀，或单次识别超过 120 秒（模型未加载时再加 300 秒启动时间）没有响应，本次请求返回 503 `ocr_unavailable`，`reason` 为 `worker_crashed` / `worker_timeout`（超时会结束子进程），下一次请求自动重新启动子进程。已经退出的子进程在下一次请求时直接重启，不报错。
+- **不留孤儿**：主进程退出时通知子进程退出；主进程被强杀时，子进程读到 stdin EOF 或看门狗发现父进程不在了就立即退出（POSIX 看 `getppid()`，Windows 等父进程句柄）。Windows 上主进程还把子进程放进 `KILL_ON_JOB_CLOSE` 的 Job Object，由系统兜底结束子进程。
+- **退回进程内**：环境变量 `SUIYI_OCR_WORKER=0` 时回到 #104 之前的进程内 OCR（只用于排查问题）。
 
 **客户端请用环境变量 `SUIYI_GLOSSARY` / `SUIYI_USER_GLOSSARY` 传术语表设置**：老版引擎会忽略不认识的环境变量，但遇到不认识的命令行参数会启动失败。
 
@@ -115,6 +126,8 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "loaded_models": ["opus-mt-zh-en"],
   "uptime_s": 12.3,
   "ocr_loaded": false,
+  "ocr_worker_pid": null,
+  "ocr_worker_state": "stopped",
   "model_idle_unload_s": 600,
   "ocr_idle_unload_s": 600,
   "max_loaded_models": 2,
@@ -143,7 +156,9 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `ocr_idle_unload_s` | OCR 模型空闲卸载的秒数，`0` 表示不卸载。#96 新增 |
 | `max_loaded_models` | 同时常驻的翻译模型上限，`0` 表示不限（#96 新增）。`loaded_models` 不会超过这个数 |
 | `uptime_s` | 自开始监听起的秒数，保留 1 位小数 |
-| `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增；#96 起 OCR 空闲超过 `ocr_idle_unload_s` 秒会被卸载，这里变回 `false`，下次 OCR 请求重新加载 |
+| `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增；#96 起 OCR 空闲超过 `ocr_idle_unload_s` 秒会被卸载，这里变回 `false`，下次 OCR 请求重新加载。#104 起含义不变，只是模型在 OCR 子进程里：子进程在运行且模型已加载时为 `true`，子进程退出（空闲退出、崩溃）后为 `false` |
+| `ocr_worker_pid` | OCR 子进程的 pid，没有子进程时为 `null`。#104 新增；老版引擎没有这个字段 |
+| `ocr_worker_state` | OCR 子进程状态：`stopped`（没有子进程）、`starting`（已启动、模型加载中）、`ready`（模型已加载、空闲）、`busy`（正在识别）；`SUIYI_OCR_WORKER=0` 退回进程内 OCR 时固定为 `in_process`。#104 新增；老版引擎没有这个字段 |
 | `glossary_enabled` | 服务端默认是否开启术语保护（`--glossary` / `SUIYI_GLOSSARY` 的结果；内置术语表加载失败时为 `false`）。不反映单次请求的 `glossary` 覆盖。#83 新增 |
 | `glossary_builtin_entries` | 内置术语表条数，按方向展开（一条 zh↔en 术语算 2 条）。#83 新增 |
 | `glossary_user_path` | 实际使用的用户术语表路径，文件可以不存在；没有配置时为 `null`。#83 新增 |
@@ -151,9 +166,9 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `glossary_error` | 文件级错误原因（不是 UTF-8、读不了、超过 1 MiB 或 5000 条；内置表加载失败）。没有错误时为 `null`。出错时只用内置表，翻译照常。#83 新增 |
 | `glossary_warnings` | 用户术语表的行级问题，最多 20 条，形如 `"第 12 行：缺少目标词…"`；这些行被跳过，其余照常生效。#83 新增 |
 | `verbatim_enabled` | 服务端默认是否开启不翻译片段保护（`--verbatim` / `SUIYI_VERBATIM` 的结果）。不反映单次请求的 `verbatim` 覆盖。老版引擎没有这个字段，客户端应把缺失当作「不支持」。#101 新增 |
-| `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增 |
+| `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增；#104 起 OCR 子进程崩溃或超时（`reason` 为 `worker_crashed` / `worker_timeout`）也记在这里，下一次 OCR 成功后清空 |
 
-翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 也在线程池里执行，有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。
+翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 在独立子进程里执行（#104），主进程这边有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。
 
 ## `GET /languages`
 
@@ -290,7 +305,7 @@ curl -sS -X POST http://127.0.0.1:18780/glossary/reload
 2. 字节上限：先看 `Content-Length`，超过 `--max-image-bytes` 直接 413，**不读请求体**；没有 `Content-Length`（分块上传）时边读边计数，超限立即停止读取 → 413 `image_too_large`。
 3. 按文件头魔数判断是不是 PNG，**不看 `Content-Type`**（`application/octet-stream` 也行）。不是 PNG 或请求体为空 → 415 `unsupported_media_type`。
 4. 从 IHDR 读宽高（不解码像素）。头部不完整或尺寸为 0 → 422 `invalid_image`；宽 × 高超过 16,777,216（4096 × 4096）→ 413 `image_too_large`。只限总像素，不限单边，细长截图可以超过 4096。
-5. OCR 不可用（依赖未装、模型缺失或损坏）→ 503 `ocr_unavailable`。
+5. OCR 不可用（依赖未装、模型缺失或损坏；#104 起还有 OCR 子进程崩溃或超时）→ 503 `ocr_unavailable`。
 6. 解码失败（数据损坏、截断）→ 422 `invalid_image`。
 7. 识别，合并成段落，再逐段翻译。翻译侧错误与 `/translate` 相同：`unsupported_pair`、`text_too_long`、`detect_failed`，`details.index` 是段落序号。任一段失败则整次请求失败。
 
@@ -400,7 +415,7 @@ Invoke-RestMethod 'http://127.0.0.1:18780/ocr?lang=auto' -Method Post -InFile .\
 | `image_too_large` | 413 | OCR 请求体超过字节上限，或 PNG 宽 × 高超过像素上限 | `kind`（`bytes` / `pixels`）、`limit`、`actual`；像素超限时另有 `width`、`height` |
 | `unsupported_media_type` | 415 | OCR 请求体不是 PNG（按魔数判断）或为空 | `{}` |
 | `invalid_image` | 422 | PNG 头部不完整、尺寸为 0、或无法解码 | `{}` |
-| `ocr_unavailable` | 503 | OCR 依赖未安装、模型清单或模型文件缺失/损坏 | `reason`（`dependency_missing` / `models_missing` / `models_invalid` / `manifest_unavailable`）、`missing_models`（缺失的 OCR 模型 id，可能为空）。`message` 里有安装或下载提示 |
+| `ocr_unavailable` | 503 | OCR 依赖未安装、模型清单或模型文件缺失/损坏；OCR 子进程崩溃或超时（#104） | `reason`（`dependency_missing` / `models_missing` / `models_invalid` / `manifest_unavailable`；#104 新增 `worker_crashed` / `worker_timeout`，重试即可，下一次请求会重新启动子进程）、`missing_models`（缺失的 OCR 模型 id，可能为空）。`message` 里有安装或下载提示 |
 | `internal_error` | 500 | 未预期的异常 | `{}`。响应里没有异常类型和栈 |
 
 客户端可以用 `missing_models` 提示「未下载语向」，不要只显示语种代码。

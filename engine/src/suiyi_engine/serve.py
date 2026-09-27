@@ -16,6 +16,7 @@ from suiyi_engine import langdetect, memory
 from suiyi_engine.api import DEFAULT_MAX_IMAGE_BYTES, ApiSettings, create_app, glossary_status
 from suiyi_engine.api_ocr import OcrProvider, OcrUnavailable
 from suiyi_engine.errors import UnsupportedPairError
+from suiyi_engine.ocr_worker import OcrProcessProvider, make_ocr_provider
 from suiyi_engine.registry import (
     DEFAULT_BEAM_SIZE,
     DEFAULT_MAX_BATCH_SIZE,
@@ -385,7 +386,8 @@ def run_server(
         print(str(exc), file=sys.stderr)
         return 1
 
-    ocr = OcrProvider(translator.registry.models_dir)
+    # #104：默认在独立子进程里做 OCR，主进程不导入 onnxruntime / OpenCV / numpy
+    ocr = make_ocr_provider(translator.registry.models_dir)
     ocr_ms: float | None = None
     if preload_ocr:
         ocr_ms = warmup_ocr(ocr)
@@ -394,6 +396,7 @@ def run_server(
     try:
         listen_socket = bind_listen_socket(host, port)
     except ServeError as exc:
+        ocr.close()
         print(str(exc), file=sys.stderr)
         return exc.code
 
@@ -444,6 +447,7 @@ def run_server(
         return 0
     finally:
         listen_socket.close()
+        ocr.close()  # OCR 子进程随服务退出
 
 
 def warmup_detector() -> float | None:
@@ -460,7 +464,7 @@ def warmup_detector() -> float | None:
         return None
 
 
-def warmup_ocr(ocr: OcrProvider) -> float | None:
+def warmup_ocr(ocr: OcrProvider | OcrProcessProvider) -> float | None:
     """``--preload-ocr``：加载并预热 OCR，返回耗时毫秒。失败只告警、返回 ``None``，服务照常启动。"""
 
     try:
