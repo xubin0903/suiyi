@@ -144,6 +144,10 @@ class Ct2OpusBackend:
         import ctranslate2
         import sentencepiece as spm
 
+        from suiyi_engine.cpu_isa import model_bin_mib, pack_governor
+
+        # CTranslate2 只在进程里第一次加载模型时读 CT2_PACKED_GEMM（#119）
+        self.packed = pack_governor().before_load(record.id, model_bin_mib(record.model_dir))
         self._ct2 = ctranslate2.Translator(
             str(record.model_dir),
             device=self._device,

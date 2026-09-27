@@ -62,7 +62,7 @@ OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无
 
 进程起来后，标准输出有这几行：监听 URL、模型目录、可用语向数量，实际使用的 `intra_threads`、`beam_size`、`max_batch_size`，「语种检测已预热 N ms」，模型空闲卸载设置（「模型空闲卸载 600 秒」或「模型空闲卸载 关闭」，#92），以及术语表状态（「术语保护开启：内置 N 条，用户 M 条（路径）」）。清单推荐的模型没装、正在用同方向的旧模型时（例如只装了旧的 `opus-mt-en-zh`），stderr 多一行告警和补装命令，服务照常启动。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
 
-**MKL 权重预打包（#113）**：走 MKL 后端时（Intel CPU 的默认），CTranslate2 会把 int8 权重预打包，每个 serve 进程多占约 1.6–1.7 GiB 提交量（Windows 的 Private Bytes），WS 看不出来。引擎导入时查可用提交量，低于 `SUIYI_PACKED_GEMM_MIN_COMMIT_MIB`（默认 4096 MiB）且用户没设 `CT2_PACKED_GEMM` 时，自动设 `CT2_PACKED_GEMM=0`：译文逐字不变，翻译约慢 20–30%。想一直关可在启动前设 `CT2_PACKED_GEMM=0`，想一直开设 `CT2_PACKED_GEMM=1`。启动日志多一行 `CT2：…`，`/health` 的 `ct2_packed_gemm` / `ct2_packed_gemm_source` / `commit_available_mib` 显示结果。
+**MKL 权重预打包（#113 / #119）**：走 MKL 后端时（Intel CPU 的默认），CTranslate2 会把 int8 权重预打包，每个模型多占约 770–820 MiB 提交量（Windows 的 Private Bytes），WS 看不出来。用户没设 `CT2_PACKED_GEMM` 时，引擎在**第一次加载翻译模型之前**判断：物理内存 ≤ `SUIYI_PACKED_GEMM_SMALL_RAM_MIB`（默认 16896，覆盖标称 16 GB 的机器）或「可用提交量 − 这次要加载的模型预计额外提交量（约 `740 + 0.35 × model.bin MiB`/个）」< `SUIYI_PACKED_GEMM_MIN_COMMIT_MIB`（默认 4096）时设 `CT2_PACKED_GEMM=0`：译文逐字不变，翻译约慢 20–40%。CTranslate2 每个进程只读一次这个环境变量，所以第一次加载后就锁定；以后每次加载模型（包括空闲卸载后的重新加载）仍会重新判断并更新 `/health`，判断不同时日志提示「重启服务后生效」。想一直关可在启动前设 `CT2_PACKED_GEMM=0`，想一直开设 `CT2_PACKED_GEMM=1`。启动日志多一行 `CT2：…`，`/health` 的 `ct2_packed_gemm*` / `ct2_models_packed` / `commit_available_mib` 等显示结果。
 
 ### 端口占用判断
 
@@ -177,9 +177,14 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `cpu_amx` | 启动时是否检测到 CPU 和操作系统都支持 AMX（Linux 看 `/proc/cpuinfo` 的 `amx_tile` / `amx_int8`，Windows 看 `GetEnabledXStateFeatures` 的 XTILECFG / XTILEDATA 位；其他系统为 `false`）。#103 新增 |
 | `mkl_enable_instructions` | 引擎进程里 `MKL_ENABLE_INSTRUCTIONS` 的实际取值，即 MKL 的指令集上限；没设时为 `null`（MKL 用 CPU 支持的最高指令集）。#103 新增 |
 | `mkl_enable_instructions_source` | 取值来源：`auto`（检测到 AMX，引擎自动设为 `AVX512_E1`，避开 AMX int8 结果不稳定）、`user`（启动前用户已设，引擎不覆盖）、`unset`（没检测到 AMX，不设）。#103 新增 |
-| `ct2_packed_gemm` | 引擎进程里 `CT2_PACKED_GEMM` 的实际取值；`"0"` 表示关闭 CTranslate2 的 int8 权重预打包，`null` 表示没设（CT2 默认打包）。#113 新增 |
-| `ct2_packed_gemm_source` | 取值来源：`auto`（启动时可用提交量低于 `SUIYI_PACKED_GEMM_MIN_COMMIT_MIB`，默认 4096，引擎自动关打包）、`user`（启动前用户已设，引擎不覆盖）、`unset`（提交量充足或查不到，不设）。#113 新增 |
-| `commit_available_mib` | 启动时查到的可用提交量（MiB）。Windows 为 `GlobalMemoryStatusEx` 的 `ullAvailPageFile`；Linux 只在 `vm.overcommit_memory=2` 时为 `CommitLimit − Committed_AS`；查不到为 `null`。#113 新增 |
+| `ct2_packed_gemm` | 引擎进程里 `CT2_PACKED_GEMM` 的实际取值：`"1"` 开、`"0"` 关；`null` 表示还没加载过翻译模型、尚未判断。CTranslate2 每个进程只读一次，第一次加载模型后不再变。#113 新增，#119 改为第一次加载时判断 |
+| `ct2_packed_gemm_source` | 取值来源：`user`（启动前用户已设，引擎不覆盖）、`auto`（引擎在第一次加载模型时自动判断并已锁定）、`pending`（还没加载过模型）。#119 起不再有 `unset` |
+| `ct2_packed_gemm_reason` | 锁定时的理由：`user`、`small_ram`（物理内存 ≤ `SUIYI_PACKED_GEMM_SMALL_RAM_MIB`）、`low_commit`（可用提交量 − 预计额外量 < `SUIYI_PACKED_GEMM_MIN_COMMIT_MIB`）、`ok`（开）；未判断时为 `null`。#119 新增 |
+| `ct2_packed_gemm_recommended` | **最近一次加载模型时**按当时内存重新判断的结果（`true` 应开 / `false` 应关，`null` 未加载过）。和 `ct2_packed_gemm` 不同时，重启服务后才生效。#119 新增 |
+| `ct2_models_packed` | 当前已加载的每个翻译模型是否实际预打包，如 `{"opus-mt-zh-en": false}`；只在走 MKL 且 `ct2_packed_gemm` 为开时为 `true`。#119 新增 |
+| `commit_available_mib` | **最近一次加载模型时**查到的可用提交量（MiB），每次加载（含空闲卸载后的重新加载）都会更新；未加载过为 `null`。Windows 为 `GlobalMemoryStatusEx` 的 `ullAvailPageFile`；Linux 只在 `vm.overcommit_memory=2` 时为 `CommitLimit − Committed_AS`；查不到为 `null`。#113 新增，#119 改为每次加载更新 |
+| `physical_memory_mib` | 最近一次加载时查到的物理内存（MiB，Windows `ullTotalPhys`，Linux `MemTotal`）；查不到或未加载过为 `null`。#119 新增 |
+| `packed_gemm_extra_mib` | 最近一次加载时预计开打包会多提交的量（MiB）：预热时是这一批全部模型之和，平时是这一个模型。#119 新增 |
 | `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增；#104 起 OCR 子进程崩溃或超时（`reason` 为 `worker_crashed` / `worker_timeout`）、#114 起子进程内部报错重试后仍失败（`worker_error`）也记在这里，下一次 OCR 成功后清空 |
 
 翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 在独立子进程里执行（#104），主进程这边有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。

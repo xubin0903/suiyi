@@ -21,9 +21,11 @@ AMX int8 GEMM 时结果不确定：多线程或 CPU 被别的程序占用时同�
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import sys
+import threading
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -156,52 +158,58 @@ def current() -> IsaState:
     return _STATE if _STATE is not None else configure_mkl_isa()
 
 
-# ---------------------------------------------------------------- MKL 预打包（#113）
+# ---------------------------------------------------------------- MKL 预打包（#113 / #119）
 
 PACK_ENV = "CT2_PACKED_GEMM"
 """CTranslate2 是否在加载时把线性层权重按 MKL 格式预打包（CTranslate2 默认开）。"""
 MIN_COMMIT_ENV = "SUIYI_PACKED_GEMM_MIN_COMMIT_MIB"
-"""可用提交内存低于这么多 MiB 时自动关掉预打包；默认 :data:`DEFAULT_MIN_COMMIT_MIB`。"""
+"""「可用提交量 − 预计额外提交量」低于这么多 MiB 时关掉预打包（默认 4096）。"""
 DEFAULT_MIN_COMMIT_MIB = 4096
+SMALL_RAM_ENV = "SUIYI_PACKED_GEMM_SMALL_RAM_MIB"
+"""物理内存不超过这么多 MiB 时默认关掉预打包；默认 :data:`DEFAULT_SMALL_RAM_MIB`。"""
+DEFAULT_SMALL_RAM_MIB = 16896
+"""16.5 GiB：标称 16 GB 的机器系统通常报 15.x GiB，都算进来；24 GB 及以上不算。"""
+# 预打包多出的提交量，按 model.bin 大小估算（#119 实测标定，ctranslate2 4.8.2 + MKL）：
+# Marian base（model.bin 74–79 MiB）多 768 MiB，tc-big（209–236 MiB）多 822–824 MiB。
+# MKL 每个矩阵的打包缓冲至少约 12.3 MB，所以额外量主要由矩阵个数决定、与大小关系不大。
+PACK_EXTRA_BASE_MIB = 740.0
+PACK_EXTRA_PER_BIN_MIB = 0.35
+
+logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class PackState:
-    """``CT2_PACKED_GEMM`` 的决定。
+def estimate_pack_extra_mib(model_bin_mib: float) -> float:
+    """一个 int8 模型开预打包后比不开多提交的 MiB 数（估算）。"""
 
-    ``source``：``auto`` 因可用提交内存不足自动关掉，``user`` 用户设置，``unset`` 保持默认。
-    ``commit_available_mib`` 是启动时系统剩余可提交内存（Windows 的提交上限减已提交；Linux
-    只在 ``vm.overcommit_memory=2`` 时有意义），拿不到时为 ``None``。
-    """
-
-    value: str | None
-    source: str
-    commit_available_mib: float | None
-    min_commit_mib: int = DEFAULT_MIN_COMMIT_MIB
-
-    def health(self) -> dict[str, object]:
-        commit = self.commit_available_mib
-        return {
-            "ct2_packed_gemm": self.value,
-            "ct2_packed_gemm_source": self.source,
-            "commit_available_mib": None if commit is None else round(commit),
-        }
-
-    def describe(self) -> str:
-        commit = self.commit_available_mib
-        free = "未知" if commit is None else f"{commit:.0f} MiB"
-        if self.source == "auto":
-            return (
-                f"CT2：可用提交内存 {free}，低于 {self.min_commit_mib} MiB：已设 {PACK_ENV}=0"
-                "（关掉 MKL 权重预打包，提交内存约少 1.6 GiB，译文不变，解码约慢 20–30%，#113）"
-            )
-        if self.source == "user":
-            return f"CT2：使用用户设置的 {PACK_ENV}={self.value}（可用提交内存 {free}）"
-        return f"CT2：MKL 权重预打包保持默认（可用提交内存 {free}）"
+    return PACK_EXTRA_BASE_MIB + PACK_EXTRA_PER_BIN_MIB * max(0.0, model_bin_mib)
 
 
-def _windows_commit_available_mib() -> float | None:
-    """``GlobalMemoryStatusEx`` 的 ``ullAvailPageFile``：系统还能再提交多少内存。"""
+def model_bin_mib(model_dir: Path) -> float:
+    try:
+        return (model_dir / "model.bin").stat().st_size / (1024 * 1024)
+    except OSError:
+        return 0.0
+
+
+def decide_pack(
+    *,
+    commit_mib: float | None,
+    physical_mib: float | None,
+    extra_mib: float,
+    min_commit_mib: int = DEFAULT_MIN_COMMIT_MIB,
+    small_ram_mib: int = DEFAULT_SMALL_RAM_MIB,
+) -> tuple[bool, str]:
+    """返回（是否打包，原因）。原因：``small_ram`` / ``low_commit`` / ``ok``。"""
+
+    if physical_mib is not None and physical_mib <= small_ram_mib:
+        return False, "small_ram"
+    if commit_mib is not None and commit_mib - extra_mib < min_commit_mib:
+        return False, "low_commit"
+    return True, "ok"
+
+
+def _memory_status() -> tuple[float | None, float | None]:
+    """Windows ``GlobalMemoryStatusEx``：（``ullAvailPageFile``，``ullTotalPhys``），MiB。"""
 
     try:
         import ctypes
@@ -223,10 +231,17 @@ def _windows_commit_available_mib() -> float | None:
         status.dwLength = ctypes.sizeof(_Status)
         kernel32 = ctypes.WinDLL("kernel32")  # type: ignore[attr-defined]
         if not kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
-            return None
-        return status.ullAvailPageFile / (1024 * 1024)
+            return None, None
+        mib = 1024 * 1024
+        return status.ullAvailPageFile / mib, status.ullTotalPhys / mib
     except (AttributeError, OSError):
-        return None
+        return None, None
+
+
+def _windows_commit_available_mib() -> float | None:
+    """``GlobalMemoryStatusEx`` 的 ``ullAvailPageFile``：系统还能再提交多少内存。"""
+
+    return _memory_status()[0]
 
 
 def _linux_commit_available_mib(
@@ -241,14 +256,19 @@ def _linux_commit_available_mib(
     try:
         if overcommit.read_text(encoding="ascii").strip() != "2":
             return None
-        values: dict[str, int] = {}
-        for line in meminfo.read_text(encoding="ascii").splitlines():
-            key, _, rest = line.partition(":")
-            if key in ("CommitLimit", "Committed_AS"):
-                values[key] = int(rest.split()[0])
+        values = _meminfo(meminfo, ("CommitLimit", "Committed_AS"))
         return (values["CommitLimit"] - values["Committed_AS"]) / 1024
     except (OSError, ValueError, KeyError, IndexError):
         return None
+
+
+def _meminfo(path: Path, keys: tuple[str, ...]) -> dict[str, int]:
+    values: dict[str, int] = {}
+    for line in path.read_text(encoding="ascii").splitlines():
+        key, _, rest = line.partition(":")
+        if key in keys:
+            values[key] = int(rest.split()[0])
+    return values
 
 
 def commit_available_mib(system: str | None = None) -> float | None:
@@ -262,50 +282,220 @@ def commit_available_mib(system: str | None = None) -> float | None:
     return None
 
 
-_PACK: PackState | None = None
+def physical_memory_mib(
+    system: str | None = None, meminfo: Path = Path("/proc/meminfo")
+) -> float | None:
+    """物理内存总量（MiB）：Windows ``ullTotalPhys``，Linux ``MemTotal``；其他系统 ``None``。"""
+
+    system = (system or platform.system()).lower()
+    if system == "windows":
+        return _memory_status()[1]
+    if system == "linux":
+        try:
+            return _meminfo(meminfo, ("MemTotal",))["MemTotal"] / 1024
+        except (OSError, ValueError, KeyError, IndexError):
+            return None
+    return None
 
 
-def configure_packed_gemm(
-    environ: MutableMapping[str, str] | None = None,
-    *,
-    commit_mib: float | None | Callable[[], float | None] = commit_available_mib,
-) -> PackState:
-    """可用提交内存不足时关掉 CTranslate2 的 MKL 权重预打包（#113）。
+def mkl_in_use(environ: Mapping[str, str] | None = None) -> bool:
+    """CTranslate2 这次会不会用 MKL 做 GEMM（只有 MKL 才预打包）。
 
-    CTranslate2（4.8 起默认开）用 MKL 做 GEMM 时，加载模型就把每个线性层权重预打包，缓冲按
-    ``cblas_gemm_s8u8s32_pack_get_size`` 申请：每个矩阵至少约 12.3 MB（与形状、线程数、指令集
-    无关），MKL 实际只写入约权重本身大小。tc-big + zh-en 因此多申请约 1.7 GiB。Linux 默认超额
-    分配，没写过的页不占内存也不会失败；Windows 上这些页全部算进提交量（Private Bytes），系统提交
-    紧张时别的分配（如 OCR 子进程里的 onnxruntime）会失败。
-
-    关掉预打包译文逐字不变（整数 GEMM），提交量降到接近常驻内存，但解码慢 20–30%。所以默认保持
-    打包，只在启动时系统剩余可提交内存低于阈值（``SUIYI_PACKED_GEMM_MIN_COMMIT_MIB``，默认
-    4096）时关掉。用户设了 ``CT2_PACKED_GEMM`` 就不覆盖。AMD CPU 上 CTranslate2 默认用 oneDNN，
-    本来就不打包，这个变量不起作用。必须在 ``import ctranslate2`` 之前调用。
+    与 CTranslate2 的 ``mayiuse_mkl()`` 一致：设了 ``CT2_USE_MKL`` 就按它，否则 Intel CPU 用 MKL。
     """
 
-    global _PACK
-    record = environ is None
     env = os.environ if environ is None else environ
+    raw = env.get("CT2_USE_MKL", "").strip().lower()
+    if raw:
+        return raw in ("1", "true", "yes", "on")
+    return _cpu_vendor() == "GenuineIntel"
+
+
+def _cpu_vendor() -> str:
+    if sys.platform.startswith("linux"):
+        try:
+            for line in Path("/proc/cpuinfo").read_text(encoding="utf-8").splitlines():
+                if line.startswith("vendor_id"):
+                    return line.partition(":")[2].strip()
+        except OSError:
+            return ""
+        return ""
+    processor = platform.processor()
+    if "GenuineIntel" in processor:
+        return "GenuineIntel"
+    if "AuthenticAMD" in processor:
+        return "AuthenticAMD"
+    return ""
+
+
+def _int_env(env: Mapping[str, str], name: str, default: int) -> int:
     try:
-        threshold = int(env.get(MIN_COMMIT_ENV, "").strip() or DEFAULT_MIN_COMMIT_MIB)
+        return int(env.get(name, "").strip() or default)
     except ValueError:
-        threshold = DEFAULT_MIN_COMMIT_MIB
-    available = commit_mib() if callable(commit_mib) else commit_mib
-    user = env.get(PACK_ENV, "").strip()
-    if user:
-        state = PackState(user, "user", available, threshold)
-    elif available is not None and available < threshold:
-        env[PACK_ENV] = "0"
-        state = PackState("0", "auto", available, threshold)
-    else:
-        state = PackState(None, "unset", available, threshold)
-    if record:
-        _PACK = state
-    return state
+        return default
 
 
-def current_pack() -> PackState:
-    """包导入时对 ``CT2_PACKED_GEMM`` 的决定；还没决定过就现在决定。"""
+class PackGovernor:
+    """``CT2_PACKED_GEMM`` 的决定（#113 / #119）。
 
-    return _PACK if _PACK is not None else configure_packed_gemm()
+    CTranslate2 只在进程里第一次加载模型时读 ``CT2_PACKED_GEMM`` 并缓存
+    （``cpu/backend.cc`` 的 ``static const bool``），之后改环境变量对新模型无效，也没有按模型的
+    选项。所以：
+
+    - 第一次加载翻译模型之前判断并设置环境变量，之后这个进程就锁定了（``locked``）；
+    - 以后每次加载模型仍按当时的可用提交量重新判断一次，更新 :meth:`health`；新判断与锁定值
+      不同时记一条日志，提示重启服务后生效；
+    - 用户设了 ``CT2_PACKED_GEMM`` 就用它，不判断。
+
+    判断规则见 :func:`decide_pack`；预计额外提交量按 :func:`estimate_pack_extra_mib` 估算，
+    预热时按这一批要加载的全部模型累加（:meth:`planned`）。
+    """
+
+    def __init__(
+        self,
+        environ: MutableMapping[str, str] | None = None,
+        *,
+        commit_mib: Callable[[], float | None] = commit_available_mib,
+        physical_mib: Callable[[], float | None] = physical_memory_mib,
+        mkl: Callable[[], bool] | None = None,
+    ) -> None:
+        self._env = os.environ if environ is None else environ
+        self._commit = commit_mib
+        self._physical = physical_mib
+        self._mkl = mkl or (lambda: mkl_in_use(self._env))
+        self._lock = threading.Lock()
+        user = self._env.get(PACK_ENV, "").strip()
+        self.user_value: str | None = user or None
+        self.value: str | None = self.user_value
+        self.reason: str | None = "user" if user else None
+        self.locked = False
+        self.recommended: bool | None = None
+        self.commit_available_mib: float | None = None
+        self.physical_mib: float | None = None
+        self.extra_mib: float | None = None
+        self.models: dict[str, bool] = {}
+        # 锁定那一次（第一次加载）的判断依据，describe() 用；health() 报最近一次加载的值
+        self._decided: tuple[float | None, float | None, float] = (None, None, 0.0)
+        self._planned: dict[str, float] = {}
+
+    @property
+    def source(self) -> str:
+        if self.user_value is not None:
+            return "user"
+        return "auto" if self.locked else "pending"
+
+    def planned(self, models: Mapping[str, float]) -> _Planned:
+        """``with governor.planned({id: model.bin MiB}):`` 里第一次加载时按这一批整体估算。"""
+
+        return _Planned(self, dict(models))
+
+    def before_load(self, model_id: str, bin_mib: float) -> bool:
+        """加载一个 CT2 模型之前调用；返回这个模型会不会被预打包。"""
+
+        with self._lock:
+            pending = dict(self._planned)
+            pending.setdefault(model_id, bin_mib)
+            extra = sum(estimate_pack_extra_mib(size) for size in pending.values())
+            self._planned.pop(model_id, None)
+            commit = self._commit()
+            physical = self._physical()
+            pack, reason = decide_pack(
+                commit_mib=commit,
+                physical_mib=physical,
+                extra_mib=extra,
+                min_commit_mib=_int_env(self._env, MIN_COMMIT_ENV, DEFAULT_MIN_COMMIT_MIB),
+                small_ram_mib=_int_env(self._env, SMALL_RAM_ENV, DEFAULT_SMALL_RAM_MIB),
+            )
+            self.commit_available_mib = commit
+            self.physical_mib = physical
+            self.extra_mib = extra
+            self.recommended = pack
+            if self.user_value is None and not self.locked:
+                self.value = "1" if pack else "0"
+                self.reason = reason
+                self._env[PACK_ENV] = self.value
+                self.locked = True
+                self._decided = (commit, physical, extra)
+                logger.info("%s", self.describe())
+            elif self.user_value is None and pack != (self.value == "1"):
+                logger.warning(
+                    "CT2：加载 %s 时按当前内存判断应%s预打包（%s），但本进程第一次加载模型时已定为 "
+                    "%s=%s，CTranslate2 进程内只读一次；重启服务后生效",
+                    model_id,
+                    "开" if pack else "关",
+                    _reason_text(reason, commit, physical, extra),
+                    PACK_ENV,
+                    self.value,
+                )
+            effective = _truthy(self.value if self.value is not None else "1") and self._mkl()
+            self.models[model_id] = effective
+            return effective
+
+    def health(self, loaded: list[str] | None = None) -> dict[str, object]:
+        commit = self.commit_available_mib
+        models = self.models if loaded is None else {
+            model_id: self.models[model_id] for model_id in loaded if model_id in self.models
+        }  # fmt: skip
+        return {
+            "ct2_packed_gemm": self.value,
+            "ct2_packed_gemm_source": self.source,
+            "ct2_packed_gemm_reason": self.reason,
+            "ct2_packed_gemm_recommended": self.recommended,
+            "ct2_models_packed": models,
+            "commit_available_mib": None if commit is None else round(commit),
+            "physical_memory_mib": None if self.physical_mib is None else round(self.physical_mib),
+            "packed_gemm_extra_mib": None if self.extra_mib is None else round(self.extra_mib),
+        }
+
+    def describe(self) -> str:
+        if self.user_value is not None:
+            return f"CT2：使用用户设置的 {PACK_ENV}={self.user_value}"
+        if not self.locked:
+            return "CT2：MKL 权重预打包在第一次加载翻译模型时按物理内存和可用提交内存决定（#119）"
+        text = _reason_text(self.reason or "", *self._decided)
+        if self.value == "0":
+            return (
+                f"CT2：{text}，已设 {PACK_ENV}=0（关掉 MKL 权重预打包，每个模型少提交约 800 MiB，"
+                "译文不变，解码约慢 20–30%，#119）"
+            )
+        return f"CT2：{text}，MKL 权重预打包保持开启"
+
+
+class _Planned:
+    def __init__(self, governor: PackGovernor, models: dict[str, float]) -> None:
+        self._governor = governor
+        self._models = models
+
+    def __enter__(self) -> None:
+        with self._governor._lock:
+            self._governor._planned = dict(self._models)
+
+    def __exit__(self, *_exc: object) -> None:
+        with self._governor._lock:
+            self._governor._planned = {}
+
+
+def _truthy(value: str) -> bool:
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _reason_text(reason: str, commit: float | None, physical: float | None, extra: float) -> str:
+    free = "未知" if commit is None else f"{commit:.0f} MiB"
+    ram = "未知" if physical is None else f"{physical:.0f} MiB"
+    if reason == "small_ram":
+        return f"物理内存 {ram}，不超过小内存阈值"
+    if reason == "low_commit":
+        return f"可用提交内存 {free} − 预计额外 {extra:.0f} MiB 低于阈值"
+    return f"物理内存 {ram}，可用提交内存 {free}，预计额外 {extra:.0f} MiB"
+
+
+_GOVERNOR: PackGovernor | None = None
+
+
+def pack_governor() -> PackGovernor:
+    """进程内唯一的 :class:`PackGovernor`；包导入时创建（记下用户是否设了 ``CT2_PACKED_GEMM``）。"""
+
+    global _GOVERNOR
+    if _GOVERNOR is None:
+        _GOVERNOR = PackGovernor()
+    return _GOVERNOR

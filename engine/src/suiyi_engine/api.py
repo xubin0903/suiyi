@@ -211,7 +211,7 @@ def create_app(
                 **glossary_status(current),
                 "verbatim_enabled": verbatim_status(current),
                 **cpu_isa.current().health(),
-                **cpu_isa.current_pack().health(),
+                **cpu_isa.pack_governor().health(list(current.loaded_model_ids())),
                 "model_idle_unload_s": app.state.settings.model_idle_unload_s,
                 "ocr_idle_unload_s": app.state.settings.ocr_idle_unload_s,
                 "max_loaded_models": int(getattr(current.registry, "max_loaded", 0) or 0),
