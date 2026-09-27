@@ -154,3 +154,158 @@ def current() -> IsaState:
     """包导入时的决定；还没决定过就现在决定。"""
 
     return _STATE if _STATE is not None else configure_mkl_isa()
+
+
+# ---------------------------------------------------------------- MKL 预打包（#113）
+
+PACK_ENV = "CT2_PACKED_GEMM"
+"""CTranslate2 是否在加载时把线性层权重按 MKL 格式预打包（CTranslate2 默认开）。"""
+MIN_COMMIT_ENV = "SUIYI_PACKED_GEMM_MIN_COMMIT_MIB"
+"""可用提交内存低于这么多 MiB 时自动关掉预打包；默认 :data:`DEFAULT_MIN_COMMIT_MIB`。"""
+DEFAULT_MIN_COMMIT_MIB = 4096
+
+
+@dataclass(frozen=True, slots=True)
+class PackState:
+    """``CT2_PACKED_GEMM`` 的决定。
+
+    ``source``：``auto`` 因可用提交内存不足自动关掉，``user`` 用户设置，``unset`` 保持默认。
+    ``commit_available_mib`` 是启动时系统剩余可提交内存（Windows 的提交上限减已提交；Linux
+    只在 ``vm.overcommit_memory=2`` 时有意义），拿不到时为 ``None``。
+    """
+
+    value: str | None
+    source: str
+    commit_available_mib: float | None
+    min_commit_mib: int = DEFAULT_MIN_COMMIT_MIB
+
+    def health(self) -> dict[str, object]:
+        commit = self.commit_available_mib
+        return {
+            "ct2_packed_gemm": self.value,
+            "ct2_packed_gemm_source": self.source,
+            "commit_available_mib": None if commit is None else round(commit),
+        }
+
+    def describe(self) -> str:
+        commit = self.commit_available_mib
+        free = "未知" if commit is None else f"{commit:.0f} MiB"
+        if self.source == "auto":
+            return (
+                f"CT2：可用提交内存 {free}，低于 {self.min_commit_mib} MiB：已设 {PACK_ENV}=0"
+                "（关掉 MKL 权重预打包，提交内存约少 1.6 GiB，译文不变，解码约慢 20–30%，#113）"
+            )
+        if self.source == "user":
+            return f"CT2：使用用户设置的 {PACK_ENV}={self.value}（可用提交内存 {free}）"
+        return f"CT2：MKL 权重预打包保持默认（可用提交内存 {free}）"
+
+
+def _windows_commit_available_mib() -> float | None:
+    """``GlobalMemoryStatusEx`` 的 ``ullAvailPageFile``：系统还能再提交多少内存。"""
+
+    try:
+        import ctypes
+
+        class _Status(ctypes.Structure):
+            _fields_ = [  # noqa: RUF012 —— ctypes 结构体定义
+                ("dwLength", ctypes.c_uint32),
+                ("dwMemoryLoad", ctypes.c_uint32),
+                ("ullTotalPhys", ctypes.c_uint64),
+                ("ullAvailPhys", ctypes.c_uint64),
+                ("ullTotalPageFile", ctypes.c_uint64),
+                ("ullAvailPageFile", ctypes.c_uint64),
+                ("ullTotalVirtual", ctypes.c_uint64),
+                ("ullAvailVirtual", ctypes.c_uint64),
+                ("ullAvailExtendedVirtual", ctypes.c_uint64),
+            ]
+
+        status = _Status()
+        status.dwLength = ctypes.sizeof(_Status)
+        kernel32 = ctypes.WinDLL("kernel32")  # type: ignore[attr-defined]
+        if not kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return None
+        return status.ullAvailPageFile / (1024 * 1024)
+    except (AttributeError, OSError):
+        return None
+
+
+def _linux_commit_available_mib(
+    meminfo: Path = Path("/proc/meminfo"),
+    overcommit: Path = Path("/proc/sys/vm/overcommit_memory"),
+) -> float | None:
+    """只在严格记账（``vm.overcommit_memory=2``）时返回 ``CommitLimit - Committed_AS``。
+
+    默认的启发式超额分配下，没写过的页不会让分配失败，提交量不是瓶颈，返回 ``None``。
+    """
+
+    try:
+        if overcommit.read_text(encoding="ascii").strip() != "2":
+            return None
+        values: dict[str, int] = {}
+        for line in meminfo.read_text(encoding="ascii").splitlines():
+            key, _, rest = line.partition(":")
+            if key in ("CommitLimit", "Committed_AS"):
+                values[key] = int(rest.split()[0])
+        return (values["CommitLimit"] - values["Committed_AS"]) / 1024
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
+
+
+def commit_available_mib(system: str | None = None) -> float | None:
+    """系统剩余可提交内存（MiB）；拿不到或不适用时为 ``None``。"""
+
+    system = (system or platform.system()).lower()
+    if system == "windows":
+        return _windows_commit_available_mib()
+    if system == "linux":
+        return _linux_commit_available_mib()
+    return None
+
+
+_PACK: PackState | None = None
+
+
+def configure_packed_gemm(
+    environ: MutableMapping[str, str] | None = None,
+    *,
+    commit_mib: float | None | Callable[[], float | None] = commit_available_mib,
+) -> PackState:
+    """可用提交内存不足时关掉 CTranslate2 的 MKL 权重预打包（#113）。
+
+    CTranslate2（4.8 起默认开）用 MKL 做 GEMM 时，加载模型就把每个线性层权重预打包，缓冲按
+    ``cblas_gemm_s8u8s32_pack_get_size`` 申请：每个矩阵至少约 12.3 MB（与形状、线程数、指令集
+    无关），MKL 实际只写入约权重本身大小。tc-big + zh-en 因此多申请约 1.7 GiB。Linux 默认超额
+    分配，没写过的页不占内存也不会失败；Windows 上这些页全部算进提交量（Private Bytes），系统提交
+    紧张时别的分配（如 OCR 子进程里的 onnxruntime）会失败。
+
+    关掉预打包译文逐字不变（整数 GEMM），提交量降到接近常驻内存，但解码慢 20–30%。所以默认保持
+    打包，只在启动时系统剩余可提交内存低于阈值（``SUIYI_PACKED_GEMM_MIN_COMMIT_MIB``，默认
+    4096）时关掉。用户设了 ``CT2_PACKED_GEMM`` 就不覆盖。AMD CPU 上 CTranslate2 默认用 oneDNN，
+    本来就不打包，这个变量不起作用。必须在 ``import ctranslate2`` 之前调用。
+    """
+
+    global _PACK
+    record = environ is None
+    env = os.environ if environ is None else environ
+    try:
+        threshold = int(env.get(MIN_COMMIT_ENV, "").strip() or DEFAULT_MIN_COMMIT_MIB)
+    except ValueError:
+        threshold = DEFAULT_MIN_COMMIT_MIB
+    available = commit_mib() if callable(commit_mib) else commit_mib
+    user = env.get(PACK_ENV, "").strip()
+    if user:
+        state = PackState(user, "user", available, threshold)
+    elif available is not None and available < threshold:
+        env[PACK_ENV] = "0"
+        state = PackState("0", "auto", available, threshold)
+    else:
+        state = PackState(None, "unset", available, threshold)
+    if record:
+        _PACK = state
+    return state
+
+
+def current_pack() -> PackState:
+    """包导入时对 ``CT2_PACKED_GEMM`` 的决定；还没决定过就现在决定。"""
+
+    return _PACK if _PACK is not None else configure_packed_gemm()

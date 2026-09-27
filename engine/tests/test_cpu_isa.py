@@ -112,3 +112,95 @@ def test_package_import_decides_before_ctranslate2() -> None:
 
 def test_current_returns_package_decision() -> None:
     assert cpu_isa.current() is cpu_isa.current()
+
+
+# ---------------------------------------------------------------- MKL 预打包（#113）
+
+
+def test_packed_gemm_off_only_when_commit_is_low() -> None:
+    from suiyi_engine.cpu_isa import PackState, configure_packed_gemm
+
+    env: dict[str, str] = {}
+    state = configure_packed_gemm(env, commit_mib=2400.0)  # 负责人实机：已提交 56.1 / 58.5 GB
+    assert state == PackState("0", "auto", 2400.0, 4096)
+    assert env == {"CT2_PACKED_GEMM": "0"}
+    for plenty in (8192.0, None):  # 足够，或拿不到（Linux 默认超额分配）
+        env = {}
+        assert configure_packed_gemm(env, commit_mib=plenty).source == "unset"
+        assert env == {}
+
+
+def test_packed_gemm_threshold_env_and_user_value() -> None:
+    from suiyi_engine.cpu_isa import configure_packed_gemm
+
+    env = {"SUIYI_PACKED_GEMM_MIN_COMMIT_MIB": "999999"}
+    assert configure_packed_gemm(env, commit_mib=8192.0).source == "auto"
+    assert env["CT2_PACKED_GEMM"] == "0"
+    env = {"SUIYI_PACKED_GEMM_MIN_COMMIT_MIB": "oops"}
+    assert configure_packed_gemm(env, commit_mib=8192.0).min_commit_mib == 4096
+    for value in ("1", " 0 "):
+        env = {"CT2_PACKED_GEMM": value}
+        state = configure_packed_gemm(env, commit_mib=100.0)
+        assert (state.value, state.source) == (value.strip(), "user")
+        assert env == {"CT2_PACKED_GEMM": value}
+
+
+def test_linux_commit_only_counts_under_strict_overcommit(tmp_path: Path) -> None:
+    from suiyi_engine.cpu_isa import _linux_commit_available_mib
+
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemTotal:       16000000 kB\nCommitLimit:    10485760 kB\nCommitted_AS:    8388608 kB\n",
+        encoding="ascii",
+    )
+    mode = tmp_path / "overcommit"
+    mode.write_text("2\n", encoding="ascii")
+    assert _linux_commit_available_mib(meminfo, mode) == 2048.0
+    mode.write_text("0\n", encoding="ascii")
+    assert _linux_commit_available_mib(meminfo, mode) is None
+    assert _linux_commit_available_mib(tmp_path / "missing", tmp_path / "missing") is None
+
+
+def test_commit_available_on_this_system_is_number_or_none() -> None:
+    from suiyi_engine.cpu_isa import commit_available_mib
+
+    value = commit_available_mib()
+    assert value is None or value > 0
+    assert commit_available_mib("Darwin") is None
+
+
+def test_pack_state_health_and_describe() -> None:
+    from suiyi_engine.cpu_isa import PackState
+
+    auto = PackState("0", "auto", 2400.4, 4096)
+    assert auto.health() == {
+        "ct2_packed_gemm": "0",
+        "ct2_packed_gemm_source": "auto",
+        "commit_available_mib": 2400,
+    }
+    assert "CT2_PACKED_GEMM=0" in auto.describe() and "#113" in auto.describe()
+    assert "用户" in PackState("1", "user", None).describe()
+    assert "默认" in PackState(None, "unset", None).describe()
+    assert PackState(None, "unset", None).health()["commit_available_mib"] is None
+
+
+def test_package_import_configures_packed_gemm_before_ctranslate2() -> None:
+    code = (
+        "import json, os, sys\n"
+        "import suiyi_engine\n"
+        "from suiyi_engine import cpu_isa\n"
+        "print(json.dumps({'env': os.environ.get('CT2_PACKED_GEMM'),"
+        " 'state': cpu_isa.current_pack().health(),"
+        " 'ct2_loaded': 'ctranslate2' in sys.modules}))\n"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "CT2_PACKED_GEMM"}
+    env["SUIYI_PACKED_GEMM_MIN_COMMIT_MIB"] = "999999999"
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
+    ).stdout
+    report = json.loads(out.strip().splitlines()[-1])
+    state = report["state"]
+    if state["commit_available_mib"] is None:  # Linux 默认超额分配：保持默认
+        assert state["ct2_packed_gemm_source"] == "unset" and report["env"] is None
+    else:  # Windows / 严格记账：阈值设得极大，必定自动关掉
+        assert state["ct2_packed_gemm_source"] == "auto" and report["env"] == "0"
