@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Protocol
 
 from suiyi_engine.registry import (
@@ -174,13 +175,37 @@ class Ct2OpusBackend:
             translated[index] = text
         return translated
 
-    def _translate_ordered(self, sentences: list[str]) -> list[str]:
+    def translate_variant(
+        self, sentences: list[str], *, beam_size: int, suppress_zh: bool = False
+    ) -> list[str]:
+        """换一种解码设置重译（#106 中文译文检查用）。
+
+        ``suppress_zh`` 为真时禁止生成目标词表里的乱码 token、繁体 token 与西里尔字母 token
+        （见 :func:`zh_suppressed_tokens`）。只在检查发现问题时对个别句子调用，不影响正常路径。
+        """
+
+        extra: dict[str, object] = {}
+        if suppress_zh:
+            extra["suppress_sequences"] = [[token] for token in self._zh_suppressed()]
+        return self._translate_ordered(list(sentences), beam_size=beam_size, **extra)
+
+    def _zh_suppressed(self) -> tuple[str, ...]:
+        cached = getattr(self, "_zh_suppressed_cache", None)
+        if cached is None:
+            cached = zh_suppressed_tokens(_read_target_vocabulary(self._record.model_dir))
+            self._zh_suppressed_cache = cached
+        return cached
+
+    def _translate_ordered(
+        self, sentences: list[str], *, beam_size: int | None = None, **extra: object
+    ) -> list[str]:
         tokenized = [self._encode(sentence) for sentence in sentences]
         results = self._ct2.translate_batch(
             tokenized,
-            beam_size=self._beam_size,
+            beam_size=beam_size or self._beam_size,
             max_batch_size=self._max_batch_size,
             max_decoding_length=self._max_decoding_length,
+            **extra,
         )
         if len(results) != len(sentences):
             raise RuntimeError(
@@ -196,6 +221,49 @@ class Ct2OpusBackend:
     def _encode(self, text: str) -> list[str]:
         pieces = self._source_sp.encode(text, out_type=str)
         return prepare_source_tokens(pieces, self._prefix)
+
+
+def zh_suppressed_tokens(vocabulary: Sequence[str]) -> tuple[str, ...]:
+    """词表里含乱码字、繁体字或西里尔字母的 token（#106）。特殊 token 与 ``>>id<<`` 不算。"""
+
+    from suiyi_engine.zh_script import is_mojibake_char, is_traditional_char
+
+    def banned(char: str) -> bool:
+        if "\u0400" <= char <= "\u04ff":  # 西里尔字母（「我想你」→「и稱」）
+            return True
+        # 汉字乱码与繁体字；带音调的拉丁字母（café）等不禁，专名可能要用
+        return ("\u3400" <= char <= "\u9fff" and is_mojibake_char(char)) or is_traditional_char(
+            char
+        )
+
+    out: list[str] = []
+    for token in vocabulary:
+        if token in _SPECIAL_TOKENS or _CONTROL_TOKEN.fullmatch(token):
+            continue
+        if any(banned(char) for char in token.replace(_SP_SPACE, "")):
+            out.append(token)
+    return tuple(out)
+
+
+def _read_target_vocabulary(model_dir: Path) -> list[str]:
+    """CTranslate2 模型目录里的目标词表（``target_vocabulary`` 或 ``shared_vocabulary``）。"""
+
+    for name in ("target_vocabulary", "shared_vocabulary"):
+        for suffix, reader in ((".json", _read_json_list), (".txt", _read_lines)):
+            path = model_dir / f"{name}{suffix}"
+            if path.is_file():
+                return reader(path)
+    return []
+
+
+def _read_json_list(path: Path) -> list[str]:
+    import json
+
+    return [str(token) for token in json.loads(path.read_text(encoding="utf-8"))]
+
+
+def _read_lines(path: Path) -> list[str]:
+    return path.read_text(encoding="utf-8").splitlines()
 
 
 def _require_text(name: str, value: str) -> str:

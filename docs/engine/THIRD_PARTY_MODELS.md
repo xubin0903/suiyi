@@ -89,3 +89,21 @@ Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/
 ```
 
 清单里 `tier: "candidate"` 的其余 OCR 模型同为 Apache-2.0，只用于对比，默认不下载。
+
+## 简繁转换数据（#106）
+
+中文译文检查（见 [翻译核心 · 中文译文检查](翻译核心.md#中文译文检查乱码与繁体106)）用 OpenCC 的字级繁→简表把模型偶尔输出的繁体字转成简体。只取数据文件，不引入 OpenCC 程序或任何 Python 依赖。
+
+| 文件（随包分发） | 上游 | 许可证 | sha256 |
+|------|------|--------|--------|
+| `engine/src/suiyi_engine/data/opencc_ts_characters.txt` | [BYVoid/OpenCC](https://github.com/BYVoid/OpenCC) `ver.1.1.9` 的 `data/dictionary/TSCharacters.txt`，未修改 | Apache-2.0 | `6b5a0a799bea2bb22c001f635eaa3fc2904310f0c08addbff275477a80ecf09a` |
+| `engine/src/suiyi_engine/data/opencc_LICENSE.txt` | 同一标签的 `LICENSE`（Apache License 2.0 全文） | — | `b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308` |
+
+核对日：2026-09-27。随安装包分发时附上 `opencc_LICENSE.txt`，并保留下面的来源说明：
+
+```
+简繁转换数据：OpenCC（Open Chinese Convert）TSCharacters.txt，Copyright (c) BYVoid 及贡献者，
+Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+https://github.com/BYVoid/OpenCC
+```
+
