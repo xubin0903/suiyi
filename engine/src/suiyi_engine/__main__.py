@@ -83,6 +83,12 @@ def main(argv: list[str] | None = None) -> int:
         help="术语保护默认开关（--no-glossary 关闭），默认环境变量 SUIYI_GLOSSARY 或开启",
     )
     serve.add_argument(
+        "--verbatim",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="不翻译片段保护默认开关（--no-verbatim 关闭），默认环境变量 SUIYI_VERBATIM 或开启",
+    )
+    serve.add_argument(
         "--user-glossary",
         default=None,
         help="用户术语表（UTF-8 TSV），默认环境变量 SUIYI_USER_GLOSSARY 或 <设置目录>/glossary.tsv",

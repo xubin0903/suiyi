@@ -32,6 +32,7 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--max-image-bytes` | `SUIYI_MAX_IMAGE_BYTES`，否则 `8388608`（8 MiB） | OCR 请求体的字节上限 |
 | `--preload-ocr` | 关闭 | 开始监听前加载并预热 OCR 模型（启动日志「OCR 已预热 N ms」），之后 `/health` 的 `ocr_loaded` 为 `true`。**与 `--preload` 不同，失败不退出**：OCR 依赖未装或模型缺失/损坏时只在 stderr 打一行警告（含缺失的 OCR 模型 id 和下载命令），服务照常启动，文本翻译不受影响；`/health` 的 `ocr_error` 带上原因，OCR 接口返回 503。客户端设置 `engine.preloadOcr`（#58）为 `true` 时追加这个参数，可以安全地默认开启 |
 | `--glossary` / `--no-glossary` | 环境变量 `SUIYI_GLOSSARY`，否则开启 | 术语保护的默认开关（#83，见 [术语保护](术语保护.md)）。环境变量接受 `1/0`、`true/false`（也接受 `on/off`，不区分大小写），认不出的值在 stderr 告警并按开启处理。`/translate` 可以用 `glossary` 字段单次覆盖 |
+| `--verbatim` / `--no-verbatim` | 环境变量 `SUIYI_VERBATIM`，否则开启 | 不翻译片段保护的默认开关（#101，见 [不翻译片段](不翻译片段.md)）：代码块、代码行、命令行、JSON / YAML、堆栈原样保留不送模型，包名、标识符、路径、URL 等行内片段逐字保留。环境变量规则同 `SUIYI_GLOSSARY`。`/translate` 用 `verbatim` 字段、`/ocr_translate` 用同名 query 参数单次覆盖 |
 | `--user-glossary` | 环境变量 `SUIYI_USER_GLOSSARY`，否则 `<设置目录>/glossary.tsv` | 用户术语表路径，文件可以不存在。设置目录与客户端 `settings.json` 相同：`SUIYI_CONFIG_DIR`，否则 Windows `%APPDATA%\suiyi`，其他系统 `$XDG_CONFIG_HOME/suiyi`（默认 `~/.config/suiyi`） |
 | `--dev` | 关闭 | 才挂载 `/docs` 与 `/openapi.json` |
 | `--intra-threads` | 环境变量 `SUIYI_INTRA_THREADS`，否则 `min(4, CPU 数)`（拿不到 CPU 数时 2） | 单个模型内部的计算线程。命令行优先于环境变量；环境变量不是 ≥ 1 的整数时，在开始监听前非零退出。#87 起默认上限从 2 改为 4 |
@@ -123,6 +124,7 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "glossary_user_entries": 6,
   "glossary_error": null,
   "glossary_warnings": ["第 12 行：缺少目标词（源词和目标词之间要用 Tab 分隔）"],
+  "verbatim_enabled": true,
   "ocr_error": {
     "message": "缺少 OCR 模型：PP-OCRv6_det_small、ch_ppocr_mobile_v2.0_cls_mobile、PP-OCRv6_rec_small（目录 /path/to/models/ocr）。请执行 python scripts/download_ocr_models.py download 下载 OCR 模型",
     "reason": "models_missing",
@@ -148,6 +150,7 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `glossary_user_entries` | 当前生效的用户条目数，按方向展开；文件不存在或文件级错误时为 0。#83 新增 |
 | `glossary_error` | 文件级错误原因（不是 UTF-8、读不了、超过 1 MiB 或 5000 条；内置表加载失败）。没有错误时为 `null`。出错时只用内置表，翻译照常。#83 新增 |
 | `glossary_warnings` | 用户术语表的行级问题，最多 20 条，形如 `"第 12 行：缺少目标词…"`；这些行被跳过，其余照常生效。#83 新增 |
+| `verbatim_enabled` | 服务端默认是否开启不翻译片段保护（`--verbatim` / `SUIYI_VERBATIM` 的结果）。不反映单次请求的 `verbatim` 覆盖。老版引擎没有这个字段，客户端应把缺失当作「不支持」。#101 新增 |
 | `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增 |
 
 翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 也在线程池里执行，有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。
@@ -204,7 +207,14 @@ MVP 必测六个方向是 `zh↔en`、`zh↔ja`、`en↔ja`。它们是否出现
 
 `Content-Type: application/json`。`text` 与 `texts` 必须有且只有一个。`source` 可以是 `"auto"` 或 ISO 639-1（`zh-CN` 会收成 `zh`）。`target` 不能是 `"auto"`。
 
-可选字段 `glossary`（#83）：`true` / `false` 只影响这一次请求是否做术语保护（`text` 和 `texts` 都支持）；省略或 `null` 时用服务端默认。必须是 JSON 布尔值，`"yes"`、`1`、对象等返回 422 `invalid_request`。术语保护目前只作用于 zh↔en 直连，其他语向忽略这个字段。其他多出来的字段会被忽略。
+可选字段 `glossary`（#83）：`true` / `false` 只影响这一次请求是否做术语保护（`text` 和 `texts` 都支持）；省略或 `null` 时用服务端默认。必须是 JSON 布尔值，`"yes"`、`1`、对象等返回 422 `invalid_request`。术语保护目前只作用于 zh↔en 直连，其他语向忽略这个字段。
+
+可选字段 `verbatim`（#101）：`true` / `false` 只影响这一次请求是否保护不翻译片段，省略或 `null` 时用服务端默认（`--verbatim` / `SUIYI_VERBATIM`，默认开启），类型规则同 `glossary`。作用于所有语向（含英文中转）。开启时：
+
+- 整段都是代码 / 标识符 / 命令 / JSON / 日志堆栈等、没有要翻译的自然语言时，**原样返回，不加载也不调用模型**：`text` 与原文逐字相同，`route` 为空数组，`elapsed_ms` 通常不到 1 ms。与「检测结果等于 `target`」时的原样返回形状相同；`source` 仍是检测或指定的语种，客户端可以用 `source != target` 区分这两种情况。
+- 混合文本里代码块、代码行、日志行的时间戳 / 级别前缀、Markdown 列表 / 标题标记原样保留，其余照常翻译；包名、类名、标识符、`foo(bar)`、路径、URL、邮箱、版本号、命令与参数、环境变量、哈希 / UUID、行内代码、HTML 标签、正则、错误码、emoji 在译文里逐字出现。规则见 [不翻译片段](不翻译片段.md)。
+
+老版引擎会忽略 `verbatim` 字段。其他多出来的字段会被忽略。
 
 单条文本超过 `--max-text-chars`（默认 10000 个 Unicode 字符，按 Python `len`）返回 413。批量时每一条单独计，任一条超限则整次请求失败，不返回部分译文。
 
@@ -271,6 +281,7 @@ curl -sS -X POST http://127.0.0.1:18780/glossary/reload
 | `target` | 是 | 目标语种，不能是 `auto` |
 | `source` | 否，默认 `auto` | 原文语种或 `auto` |
 | `fallback_target` | 否 | 次目标：原文语种等于 `target` 时改译为它（客户端的主/次目标规则）。与 `target` 相同或为空时忽略 |
+| `verbatim` | 否 | 本次是否保护不翻译片段（#101），含义同 `/translate` 的 `verbatim` 字段，写法同 `glossary`（`?verbatim=false`）。不传时按服务配置（`--verbatim` / `SUIYI_VERBATIM`） |
 | `glossary` | 否 | 本次是否做术语保护（#87），含义同 `/translate` 的 `glossary` 字段。写法是 `?glossary=true` 或 `?glossary=false`；不传时按服务配置（`--glossary` / `SUIYI_GLOSSARY`）。框架也接受 `1/0`、`yes/no`、`on/off`，其他值返回 422 `invalid_request`（`details.errors[].loc` 为 `["query", "glossary"]`），不做 OCR。只作用于 zh↔en 直连。老版引擎会忽略这个参数（已在 main 3a7aebf 上实测：带 `glossary=false` 仍返回 200，按默认开启翻译） |
 
 处理顺序与对应错误：
@@ -420,6 +431,7 @@ PowerShell 7 也可以给 `Invoke-RestMethod` 加 `-SkipHttpErrorCheck`，再读
 
 - 没有鉴权、没有 TLS、没有流式输出、没有命名管道。
 - 术语保护只作用于 zh↔en 直连（#83）。`/translate` 用 JSON 字段 `glossary`，`/ocr_translate` 用同名 query 参数（#87）。
+- 不翻译片段靠规则识别（#101），没有覆盖的写法会照常送模型；片段太多（一句超过 8 个）或占位符被模型弄丢时按片段切开只翻译中间的文字，片段一定保留，但那一句的语序可能不如整句翻译自然。
 - 批量条数没有单独上限；每一条仍受字符上限约束。同时只执行一路翻译，多出来的请求在线程池里排队。`/health` 不排队。
 - `internal_error` 不把异常文本返回给客户端。服务端日志里有栈。
 - `elapsed_ms` 不含语种检测和 HTTP 开销。

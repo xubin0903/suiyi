@@ -1,0 +1,169 @@
+{"id": "en-zh-package-01", "category": "package", "src": "en", "tgt": "zh", "text": "Uninstall com.tencent.mm and then reinstall it from the store.", "keep": ["com.tencent.mm"]}
+{"id": "en-zh-package-02", "category": "package", "src": "en", "tgt": "zh", "text": "The crash only happens in com.android.systemui after the update.", "keep": ["com.android.systemui"]}
+{"id": "en-zh-package-03", "category": "package", "src": "en", "tgt": "zh", "text": "Grant the notification permission to com.whatsapp before testing push delivery.", "keep": ["com.whatsapp"]}
+{"id": "zh-en-package-01", "category": "package", "src": "zh", "tgt": "en", "text": "请先卸载 com.tencent.mm，然后重新安装。", "keep": ["com.tencent.mm"]}
+{"id": "zh-en-package-02", "category": "package", "src": "zh", "tgt": "en", "text": "微信的包名是 com.tencent.mm，支付宝的包名是 com.eg.android.AlipayGphone。", "keep": ["com.tencent.mm", "com.eg.android.AlipayGphone"]}
+{"id": "zh-en-package-03", "category": "package", "src": "zh", "tgt": "en", "text": "如果 com.google.android.gms 版本太旧，推送会收不到。", "keep": ["com.google.android.gms"]}
+{"id": "en-zh-package-04", "category": "package", "src": "en", "tgt": "zh", "text": "Our app id changed from org.example.notes to org.example.notes.pro in version 3.", "keep": ["org.example.notes", "org.example.notes.pro"]}
+{"id": "zh-en-package-04", "category": "package", "src": "zh", "tgt": "en", "text": "把 io.flutter.embedding.android 相关的类加入混淆白名单。", "keep": ["io.flutter.embedding.android"]}
+{"id": "en-zh-package-05", "category": "package", "src": "en", "tgt": "zh", "text": "com.tencent.mm", "keep": ["com.tencent.mm"], "verbatim": true}
+{"id": "en-zh-fqcn-01", "category": "fqcn", "src": "en", "tgt": "zh", "text": "The service throws java.lang.IllegalStateException when the socket is closed twice.", "keep": ["java.lang.IllegalStateException"]}
+{"id": "en-zh-fqcn-02", "category": "fqcn", "src": "en", "tgt": "zh", "text": "Extend android.app.Service and override onStartCommand to keep the worker alive.", "keep": ["android.app.Service", "onStartCommand"]}
+{"id": "zh-en-fqcn-01", "category": "fqcn", "src": "zh", "tgt": "en", "text": "启动时报 java.lang.ClassNotFoundException: com.example.app.MainActivity，检查一下清单文件。", "keep": ["java.lang.ClassNotFoundException", "com.example.app.MainActivity"]}
+{"id": "zh-en-fqcn-02", "category": "fqcn", "src": "zh", "tgt": "en", "text": "这里用的是 org.springframework.web.bind.annotation.RestController 注解。", "keep": ["org.springframework.web.bind.annotation.RestController"]}
+{"id": "en-zh-fqcn-03", "category": "fqcn", "src": "en", "tgt": "zh", "text": "Replace System.Collections.Generic.List with an array if the size never changes.", "keep": ["System.Collections.Generic.List"]}
+{"id": "zh-en-fqcn-03", "category": "fqcn", "src": "zh", "tgt": "en", "text": "所有请求都经过 kotlinx.coroutines.Dispatchers.IO 线程池。", "keep": ["kotlinx.coroutines.Dispatchers.IO"]}
+{"id": "en-zh-identifier-01", "category": "identifier", "src": "en", "tgt": "zh", "text": "Call getUserProfile before rendering; see user_profile_cache for details.", "keep": ["getUserProfile", "user_profile_cache"]}
+{"id": "en-zh-identifier-02", "category": "identifier", "src": "en", "tgt": "zh", "text": "If MAX_RETRY_COUNT is zero, the client never retries a failed upload.", "keep": ["MAX_RETRY_COUNT"]}
+{"id": "en-zh-identifier-03", "category": "identifier", "src": "en", "tgt": "zh", "text": "The isEnabled flag is ignored when featureFlags is null.", "keep": ["isEnabled", "featureFlags"]}
+{"id": "zh-en-identifier-01", "category": "identifier", "src": "zh", "tgt": "en", "text": "把 max_connections 调到 200 以后，连接池就不再报错了。", "keep": ["max_connections"]}
+{"id": "zh-en-identifier-02", "category": "identifier", "src": "zh", "tgt": "en", "text": "如果 userId 为空，就不要调用 loadOrderHistory。", "keep": ["userId", "loadOrderHistory"]}
+{"id": "zh-en-identifier-03", "category": "identifier", "src": "zh", "tgt": "en", "text": "配置项 enable_gpu_acceleration 默认关闭，打开后启动会慢一点。", "keep": ["enable_gpu_acceleration"]}
+{"id": "en-zh-identifier-04", "category": "identifier", "src": "en", "tgt": "zh", "text": "Rename the HttpClientFactory class to ApiClientFactory to match the new module.", "keep": ["HttpClientFactory", "ApiClientFactory"]}
+{"id": "zh-en-identifier-04", "category": "identifier", "src": "zh", "tgt": "en", "text": "SUIYI_MODELS_DIR 没设置时，服务会去仓库根目录找模型。", "keep": ["SUIYI_MODELS_DIR"]}
+{"id": "en-zh-call-01", "category": "call", "src": "en", "tgt": "zh", "text": "Call getUserProfile(userId) before rendering the page.", "keep": ["getUserProfile(userId)"]}
+{"id": "en-zh-call-02", "category": "call", "src": "en", "tgt": "zh", "text": "Use os.path.join(base, name) instead of string concatenation.", "keep": ["os.path.join(base, name)"]}
+{"id": "zh-en-call-01", "category": "call", "src": "zh", "tgt": "en", "text": "在 onDestroy() 里调用 unregisterReceiver(receiver)，否则会内存泄漏。", "keep": ["onDestroy()", "unregisterReceiver(receiver)"]}
+{"id": "zh-en-call-02", "category": "call", "src": "zh", "tgt": "en", "text": "先调用 init()，再调用 connect(host, port)。", "keep": ["init()", "connect(host, port)"]}
+{"id": "en-zh-call-03", "category": "call", "src": "en", "tgt": "zh", "text": "The bug was in parseInt(value, 10) returning NaN for empty strings.", "keep": ["parseInt(value, 10)"]}
+{"id": "zh-en-call-03", "category": "call", "src": "zh", "tgt": "en", "text": "JSON.parse(text) 抛异常时要给用户一个友好的提示。", "keep": ["JSON.parse(text)"]}
+{"id": "en-zh-path_win-01", "category": "path_win", "src": "en", "tgt": "zh", "text": "The config file is at C:\\Users\\me\\AppData\\Roaming\\suiyi\\settings.json (create it if missing).", "keep": ["C:\\Users\\me\\AppData\\Roaming\\suiyi\\settings.json"]}
+{"id": "en-zh-path_win-02", "category": "path_win", "src": "en", "tgt": "zh", "text": "Delete D:\\Games\\Steam\\steamapps\\downloading and restart the client.", "keep": ["D:\\Games\\Steam\\steamapps\\downloading"]}
+{"id": "zh-en-path_win-01", "category": "path_win", "src": "zh", "tgt": "en", "text": "日志保存在 %LOCALAPPDATA%\\suiyi\\logs\\engine.log 里。", "keep": ["%LOCALAPPDATA%\\suiyi\\logs\\engine.log"]}
+{"id": "zh-en-path_win-02", "category": "path_win", "src": "zh", "tgt": "en", "text": "把 C:\\Program Files\\Git\\bin 加到系统 PATH 里。", "keep": ["C:\\Program Files\\Git\\bin", "PATH"]}
+{"id": "en-zh-path_win-03", "category": "path_win", "src": "en", "tgt": "zh", "text": "Copy the driver to C:\\Windows\\System32\\drivers\\etc and reboot.", "keep": ["C:\\Windows\\System32\\drivers\\etc"]}
+{"id": "zh-en-path_win-03", "category": "path_win", "src": "zh", "tgt": "en", "text": "安装包下载到了 E:\\Downloads\\suiyi-setup-0.3.1.exe，双击运行即可。", "keep": ["E:\\Downloads\\suiyi-setup-0.3.1.exe"]}
+{"id": "zh-en-path_unix-01", "category": "path_unix", "src": "zh", "tgt": "en", "text": "配置文件在 ~/.config/suiyi/glossary.tsv，修改后无需重启。", "keep": ["~/.config/suiyi/glossary.tsv"]}
+{"id": "en-zh-path_unix-01", "category": "path_unix", "src": "en", "tgt": "zh", "text": "Edit /etc/nginx/nginx.conf and reload the service.", "keep": ["/etc/nginx/nginx.conf"]}
+{"id": "en-zh-path_unix-02", "category": "path_unix", "src": "en", "tgt": "zh", "text": "The build output goes to ./build/outputs/apk/release by default.", "keep": ["./build/outputs/apk/release"]}
+{"id": "zh-en-path_unix-02", "category": "path_unix", "src": "zh", "tgt": "en", "text": "把证书放到 /usr/local/share/ca-certificates/ 目录下再执行更新。", "keep": ["/usr/local/share/ca-certificates/"]}
+{"id": "en-zh-path_unix-03", "category": "path_unix", "src": "en", "tgt": "zh", "text": "Open src/main/java/com/example/App.java and fix the import.", "keep": ["src/main/java/com/example/App.java"]}
+{"id": "zh-en-path_unix-03", "category": "path_unix", "src": "zh", "tgt": "en", "text": "临时文件都在 /tmp/suiyi-cache 里，可以随时删掉。", "keep": ["/tmp/suiyi-cache"]}
+{"id": "en-zh-url-01", "category": "url", "src": "en", "tgt": "zh", "text": "Download the models from https://github.com/xubin0903/suiyi/releases and unzip them.", "keep": ["https://github.com/xubin0903/suiyi/releases"]}
+{"id": "zh-en-url-01", "category": "url", "src": "zh", "tgt": "en", "text": "文档地址是 https://docs.python.org/3/library/re.html，里面有完整的语法说明。", "keep": ["https://docs.python.org/3/library/re.html"]}
+{"id": "en-zh-url-02", "category": "url", "src": "en", "tgt": "zh", "text": "Open http://127.0.0.1:18796/health in a browser to check the service.", "keep": ["http://127.0.0.1:18796/health"]}
+{"id": "zh-en-url-02", "category": "url", "src": "zh", "tgt": "en", "text": "请访问 https://example.com/login?next=/dashboard&lang=zh 登录。", "keep": ["https://example.com/login?next=/dashboard&lang=zh"]}
+{"id": "en-zh-url-03", "category": "url", "src": "en", "tgt": "zh", "text": "https://github.com/xubin0903/suiyi/issues/101", "keep": ["https://github.com/xubin0903/suiyi/issues/101"], "verbatim": true}
+{"id": "en-zh-email-01", "category": "email", "src": "en", "tgt": "zh", "text": "Send the crash log to support@example.com with a short description.", "keep": ["support@example.com"]}
+{"id": "zh-en-email-01", "category": "email", "src": "zh", "tgt": "en", "text": "有问题请发邮件到 dev-team@suiyi.app，我们会在一天内回复。", "keep": ["dev-team@suiyi.app"]}
+{"id": "en-zh-email-02", "category": "email", "src": "en", "tgt": "zh", "text": "Contact john.smith+billing@company.co.uk if the invoice is wrong.", "keep": ["john.smith+billing@company.co.uk"]}
+{"id": "zh-en-email-02", "category": "email", "src": "zh", "tgt": "en", "text": "把 noreply@github.com 加到白名单，不然通知会进垃圾箱。", "keep": ["noreply@github.com"]}
+{"id": "en-zh-version-01", "category": "version", "src": "en", "tgt": "zh", "text": "Upgrade to v1.2.3-rc.1 before the migration.", "keep": ["v1.2.3-rc.1"]}
+{"id": "zh-en-version-01", "category": "version", "src": "zh", "tgt": "en", "text": "这个问题在 2.14.0 修复了，请升级到 2.14.1 或更高版本。", "keep": ["2.14.0", "2.14.1"]}
+{"id": "en-zh-version-02", "category": "version", "src": "en", "tgt": "zh", "text": "Python 3.11.4 and Node 18.17.0 are the minimum supported versions.", "keep": ["3.11.4", "18.17.0"]}
+{"id": "zh-en-version-02", "category": "version", "src": "zh", "tgt": "en", "text": "Android 14 上需要 targetSdkVersion 34 和 Gradle 8.2.1。", "keep": ["targetSdkVersion", "8.2.1"]}
+{"id": "en-zh-version-03", "category": "version", "src": "en", "tgt": "zh", "text": "The tag v0.9.0-beta.2+build.15 was pushed by mistake.", "keep": ["v0.9.0-beta.2+build.15"]}
+{"id": "en-zh-cli-01", "category": "cli", "src": "en", "tgt": "zh", "text": "Upgrade with pip install suiyi-engine==1.2.3rc1 --upgrade before running the tests.", "keep": ["pip install suiyi-engine==1.2.3rc1 --upgrade"]}
+{"id": "en-zh-cli-02", "category": "cli", "src": "en", "tgt": "zh", "text": "Start the server with --port=18796 --preload zh-en,en-zh to warm up both directions.", "keep": ["--port=18796", "--preload zh-en,en-zh"]}
+{"id": "zh-en-cli-01", "category": "cli", "src": "zh", "tgt": "en", "text": "运行 adb shell pm clear com.tencent.mm 可以清除微信的数据。", "keep": ["adb shell pm clear com.tencent.mm"]}
+{"id": "zh-en-cli-02", "category": "cli", "src": "zh", "tgt": "en", "text": "用 git rebase -i HEAD~3 合并最近三个提交。", "keep": ["git rebase -i HEAD~3"]}
+{"id": "en-zh-cli-03", "category": "cli", "src": "en", "tgt": "zh", "text": "Pass --max-batch-size=8 if the machine has little memory.", "keep": ["--max-batch-size=8"]}
+{"id": "zh-en-cli-03", "category": "cli", "src": "zh", "tgt": "en", "text": "执行 docker run -d -p 8080:80 --name web nginx:1.25 启动容器。", "keep": ["docker run -d -p 8080:80 --name web nginx:1.25"]}
+{"id": "en-zh-cli-04", "category": "cli", "src": "en", "tgt": "zh", "text": "kubectl rollout restart deployment/api -n production", "keep": ["kubectl rollout restart deployment/api -n production"], "verbatim": true}
+{"id": "en-zh-env-01", "category": "env", "src": "en", "tgt": "zh", "text": "Set JAVA_HOME and add %JAVA_HOME%\\bin to PATH, or export PATH=$HOME/bin:$PATH.", "keep": ["JAVA_HOME", "%JAVA_HOME%\\bin", "PATH=$HOME/bin:$PATH"]}
+{"id": "zh-en-env-01", "category": "env", "src": "zh", "tgt": "en", "text": "默认目录是 %APPDATA%\\suiyi，可以用 SUIYI_CONFIG_DIR 覆盖。", "keep": ["%APPDATA%\\suiyi", "SUIYI_CONFIG_DIR"]}
+{"id": "en-zh-env-02", "category": "env", "src": "en", "tgt": "zh", "text": "The script reads $HOME and ${XDG_CONFIG_HOME} to find the config.", "keep": ["$HOME", "${XDG_CONFIG_HOME}"]}
+{"id": "zh-en-env-02", "category": "env", "src": "zh", "tgt": "en", "text": "在 PowerShell 里用 $env:PYTHONPATH 指定源码目录。", "keep": ["$env:PYTHONPATH"]}
+{"id": "en-zh-env-03", "category": "env", "src": "en", "tgt": "zh", "text": "If %USERPROFILE% contains spaces, quote the whole path.", "keep": ["%USERPROFILE%"]}
+{"id": "en-zh-hash_uuid-01", "category": "hash_uuid", "src": "en", "tgt": "zh", "text": "Commit 3f9a2c1e fixed the bug; the request id was 123e4567-e89b-12d3-a456-426614174000.", "keep": ["3f9a2c1e", "123e4567-e89b-12d3-a456-426614174000"]}
+{"id": "zh-en-hash_uuid-01", "category": "hash_uuid", "src": "zh", "tgt": "en", "text": "SHA-256 校验值应该是 9bfe340595d7c80fe869a2fe3dd4d03e2d9751514ff8c35724be464819b36a8e。", "keep": ["9bfe340595d7c80fe869a2fe3dd4d03e2d9751514ff8c35724be464819b36a8e"]}
+{"id": "zh-en-hash_uuid-02", "category": "hash_uuid", "src": "zh", "tgt": "en", "text": "这个问题是提交 99bd4e0 引入的，回滚到 5c46c7a 就好了。", "keep": ["99bd4e0", "5c46c7a"]}
+{"id": "en-zh-hash_uuid-02", "category": "hash_uuid", "src": "en", "tgt": "zh", "text": "Device 7c9e6679-7425-40de-944b-e07fc1f90ae7 failed to register.", "keep": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"]}
+{"id": "en-zh-hash_uuid-03", "category": "hash_uuid", "src": "en", "tgt": "zh", "text": "550e8400-e29b-41d4-a716-446655440000", "keep": ["550e8400-e29b-41d4-a716-446655440000"], "verbatim": true}
+{"id": "en-zh-inline_code-01", "category": "inline_code", "src": "en", "tgt": "zh", "text": "Run `adb shell pm clear com.tencent.mm` to reset the app data.", "keep": ["`adb shell pm clear com.tencent.mm`"]}
+{"id": "zh-en-inline_code-01", "category": "inline_code", "src": "zh", "tgt": "en", "text": "把 `beam_size` 调小可以加快速度，但质量会下降。", "keep": ["`beam_size`"]}
+{"id": "en-zh-inline_code-02", "category": "inline_code", "src": "en", "tgt": "zh", "text": "Set `\"strict\": true` in `tsconfig.json` to catch more bugs.", "keep": ["`\"strict\": true`", "`tsconfig.json`"]}
+{"id": "zh-en-inline_code-02", "category": "inline_code", "src": "zh", "tgt": "en", "text": "返回值是 `None` 的时候，说明模型还没加载。", "keep": ["`None`"]}
+{"id": "en-zh-inline_code-03", "category": "inline_code", "src": "en", "tgt": "zh", "text": "Use `git stash pop` after switching back to the feature branch.", "keep": ["`git stash pop`"]}
+{"id": "en-zh-code_block-01", "category": "code_block", "src": "en", "tgt": "zh", "text": "Add the following to your settings:\n\n```json\n{\n  \"engine\": {\"port\": 18796}\n}\n```\n\nThen restart the app.", "keep": ["```json\n{\n  \"engine\": {\"port\": 18796}\n}\n```"]}
+{"id": "zh-en-code_block-01", "category": "code_block", "src": "zh", "tgt": "en", "text": "在 build.gradle 里加上：\n\n```groovy\nimplementation 'com.squareup.okhttp3:okhttp:4.12.0'\n```\n\n然后同步项目。", "keep": ["```groovy\nimplementation 'com.squareup.okhttp3:okhttp:4.12.0'\n```"]}
+{"id": "en-zh-code_block-02", "category": "code_block", "src": "en", "tgt": "zh", "text": "def main():\n    # parse args\n    args = parse_args()\n    return run(args)", "keep": ["def main():\n    # parse args\n    args = parse_args()\n    return run(args)"], "verbatim": true}
+{"id": "zh-en-code_block-02", "category": "code_block", "src": "zh", "tgt": "en", "text": "示例代码如下：\n```python\nfor i in range(3):\n    print(i)  # 打印 0 到 2\n```\n注意缩进。", "keep": ["```python\nfor i in range(3):\n    print(i)  # 打印 0 到 2\n```"]}
+{"id": "en-zh-code_block-03", "category": "code_block", "src": "en", "tgt": "zh", "text": "public static void main(String[] args) {\n    System.out.println(\"Hello\");\n}", "keep": ["public static void main(String[] args) {\n    System.out.println(\"Hello\");\n}"], "verbatim": true}
+{"id": "en-zh-code_block-04", "category": "code_block", "src": "en", "tgt": "zh", "text": "The fix is a one-liner:\n\n    if (list == null) return;\n\nIt prevents the crash on empty input.", "keep": ["    if (list == null) return;"]}
+{"id": "en-zh-json_yaml-01", "category": "json_yaml", "src": "en", "tgt": "zh", "text": "{\"name\": \"suiyi\", \"version\": \"0.1.0\", \"private\": true}", "keep": ["{\"name\": \"suiyi\", \"version\": \"0.1.0\", \"private\": true}"], "verbatim": true}
+{"id": "en-zh-json_yaml-02", "category": "json_yaml", "src": "en", "tgt": "zh", "text": "The response looks like {\"status\": \"ok\", \"loaded_models\": []} when nothing is loaded.", "keep": ["{\"status\": \"ok\", \"loaded_models\": []}"]}
+{"id": "zh-en-json_yaml-01", "category": "json_yaml", "src": "zh", "tgt": "en", "text": "返回 {\"error\": \"unsupported_pair\"} 表示这个语向没装模型。", "keep": ["{\"error\": \"unsupported_pair\"}"]}
+{"id": "en-zh-json_yaml-03", "category": "json_yaml", "src": "en", "tgt": "zh", "text": "services:\n  web:\n    image: nginx:1.25\n    ports:\n      - \"8080:80\"", "keep": ["services:\n  web:\n    image: nginx:1.25\n    ports:\n      - \"8080:80\""], "verbatim": true}
+{"id": "zh-en-json_yaml-02", "category": "json_yaml", "src": "zh", "tgt": "en", "text": "在配置里写上：\nretries: 3\ntimeout_ms: 1500\n这样超时后会自动重试。", "keep": ["retries: 3", "timeout_ms: 1500"]}
+{"id": "en-zh-json_yaml-04", "category": "json_yaml", "src": "en", "tgt": "zh", "text": "Set the following keys:\nlog_level: debug\nmax_workers: 4\nand restart the worker.", "keep": ["log_level: debug", "max_workers: 4"]}
+{"id": "en-zh-html-01", "category": "html", "src": "en", "tgt": "zh", "text": "Wrap the warning in <strong>bold</strong> tags so users notice it.", "keep": ["<strong>", "</strong>"]}
+{"id": "zh-en-html-01", "category": "html", "src": "zh", "tgt": "en", "text": "把 <br/> 换成 <p></p>，不然样式会乱。", "keep": ["<br/>", "<p></p>"]}
+{"id": "en-zh-html-02", "category": "html", "src": "en", "tgt": "zh", "text": "Add <meta name=\"viewport\" content=\"width=device-width\"> to the head of the page.", "keep": ["<meta name=\"viewport\" content=\"width=device-width\">"]}
+{"id": "zh-en-html-02", "category": "html", "src": "zh", "tgt": "en", "text": "按钮要用 <button type=\"submit\"> 而不是 <div>。", "keep": ["<button type=\"submit\">", "<div>"]}
+{"id": "en-zh-html-03", "category": "html", "src": "en", "tgt": "zh", "text": "<div class=\"alert\">Session expired</div>", "keep": ["<div class=\"alert\">", "</div>"]}
+{"id": "en-zh-regex-01", "category": "regex", "src": "en", "tgt": "zh", "text": "Use the regex ^[a-z0-9_-]{3,16}$ to validate usernames.", "keep": ["^[a-z0-9_-]{3,16}$"]}
+{"id": "zh-en-regex-01", "category": "regex", "src": "zh", "tgt": "en", "text": "手机号可以用 ^1[3-9]\\d{9}$ 这个正则粗略校验。", "keep": ["^1[3-9]\\d{9}$"]}
+{"id": "en-zh-regex-02", "category": "regex", "src": "en", "tgt": "zh", "text": "The pattern \\b\\d{4}-\\d{2}-\\d{2}\\b matches ISO dates.", "keep": ["\\b\\d{4}-\\d{2}-\\d{2}\\b"]}
+{"id": "zh-en-regex-02", "category": "regex", "src": "zh", "tgt": "en", "text": "用 (?i)error|fatal 过滤日志里的错误行。", "keep": ["(?i)error|fatal"]}
+{"id": "en-zh-log-01", "category": "log", "src": "en", "tgt": "zh", "text": "2024-05-01 12:00:03.123 ERROR [main] c.e.app.Server - Failed to bind port 8080: Address already in use", "keep": ["2024-05-01 12:00:03.123 ERROR [main] c.e.app.Server -"]}
+{"id": "en-zh-log-02", "category": "log", "src": "en", "tgt": "zh", "text": "java.lang.NullPointerException: Attempt to invoke virtual method on a null object reference\n    at com.example.app.MainActivity.onCreate(MainActivity.java:42)\n    at android.app.Activity.performCreate(Activity.java:8051)", "keep": ["java.lang.NullPointerException", "    at com.example.app.MainActivity.onCreate(MainActivity.java:42)", "    at android.app.Activity.performCreate(Activity.java:8051)"]}
+{"id": "en-zh-log-03", "category": "log", "src": "en", "tgt": "zh", "text": "09-27 10:32:01.123  1234  5678 E AndroidRuntime: FATAL EXCEPTION: main", "keep": ["09-27 10:32:01.123  1234  5678 E AndroidRuntime:"]}
+{"id": "zh-en-log-01", "category": "log", "src": "zh", "tgt": "en", "text": "服务启动失败，日志如下：\n[2026-09-27 10:05:11] WARNING suiyi.serve: 端口 18796 已被占用\n请换一个端口。", "keep": ["[2026-09-27 10:05:11] WARNING suiyi.serve:"]}
+{"id": "en-zh-log-04", "category": "log", "src": "en", "tgt": "zh", "text": "Traceback (most recent call last):\n  File \"/app/main.py\", line 12, in <module>\n    main()\nValueError: invalid literal for int() with base 10: 'abc'", "keep": ["  File \"/app/main.py\", line 12, in <module>", "    main()", "ValueError"]}
+{"id": "en-zh-log-05", "category": "log", "src": "en", "tgt": "zh", "text": "2026-09-27T02:15:00Z INFO  worker-3 job=export id=42 finished in 1.8s", "keep": ["2026-09-27T02:15:00Z INFO", "job=export", "id=42"]}
+{"id": "en-zh-error_code-01", "category": "error_code", "src": "en", "tgt": "zh", "text": "The installer failed with error 0x80070005, which usually means access is denied.", "keep": ["0x80070005"]}
+{"id": "zh-en-error_code-01", "category": "error_code", "src": "zh", "tgt": "en", "text": "浏览器提示 ERR_CONNECTION_REFUSED，说明服务没启动。", "keep": ["ERR_CONNECTION_REFUSED"]}
+{"id": "en-zh-error_code-02", "category": "error_code", "src": "en", "tgt": "zh", "text": "Oracle returned ORA-00942 because the table does not exist.", "keep": ["ORA-00942"]}
+{"id": "zh-en-error_code-02", "category": "error_code", "src": "zh", "tgt": "en", "text": "编译报错 CS0246，找不到类型或命名空间。", "keep": ["CS0246"]}
+{"id": "en-zh-error_code-03", "category": "error_code", "src": "en", "tgt": "zh", "text": "The request failed with HTTP 503 and code E_UPSTREAM_TIMEOUT.", "keep": ["503", "E_UPSTREAM_TIMEOUT"]}
+{"id": "zh-en-error_code-03", "category": "error_code", "src": "zh", "tgt": "en", "text": "这个漏洞编号是 CVE-2024-3094，影响 xz 5.6.0 和 5.6.1。", "keep": ["CVE-2024-3094", "5.6.0", "5.6.1"]}
+{"id": "en-zh-emoji-01", "category": "emoji", "src": "en", "tgt": "zh", "text": "Great job 🎉 the build passed and the release is ready 🚀.", "keep": ["🎉", "🚀"]}
+{"id": "zh-en-emoji-01", "category": "emoji", "src": "zh", "tgt": "en", "text": "今天终于修好了这个 bug 😭 明天发版 🚀", "keep": ["😭", "🚀"]}
+{"id": "en-zh-emoji-02", "category": "emoji", "src": "en", "tgt": "zh", "text": "Tests: ✅ unit, ❌ integration, ⚠️ lint.", "keep": ["✅", "❌", "⚠️"]}
+{"id": "zh-en-emoji-02", "category": "emoji", "src": "zh", "tgt": "en", "text": "点 👍 表示同意，点 👎 表示反对。", "keep": ["👍", "👎"]}
+{"id": "en-zh-emoji-03", "category": "emoji", "src": "en", "tgt": "zh", "text": "Thanks for the quick fix 🙏", "keep": ["🙏"]}
+{"id": "zh-en-mixed-01", "category": "mixed", "src": "zh", "tgt": "en", "text": "在 Android Studio 里打开 app/build.gradle，把 minSdk 改成 24，然后点 Sync Now。", "keep": ["app/build.gradle", "minSdk"]}
+{"id": "zh-en-mixed-02", "category": "mixed", "src": "zh", "tgt": "en", "text": "iOS 端用 URLSession，Android 端用 OkHttp 4.12.0，超时都设成 15 秒。", "keep": ["URLSession", "4.12.0"]}
+{"id": "en-zh-mixed-01", "category": "mixed", "src": "en", "tgt": "zh", "text": "Open Settings > Apps > WeChat (com.tencent.mm) > Storage and tap Clear cache.", "keep": ["com.tencent.mm"]}
+{"id": "zh-en-mixed-03", "category": "mixed", "src": "zh", "tgt": "en", "text": "我在 macOS 14.5 上用 brew install ffmpeg 装好之后，ffmpeg -version 还是报错。", "keep": ["brew install ffmpeg", "ffmpeg -version"]}
+{"id": "en-zh-mixed-02", "category": "mixed", "src": "en", "tgt": "zh", "text": "After upgrading react-native to 0.74.1, run cd ios && pod install again.", "keep": ["react-native", "0.74.1", "cd ios && pod install"]}
+{"id": "zh-en-mixed-04", "category": "mixed", "src": "zh", "tgt": "en", "text": "后端返回的 created_at 是 UTC 时间，前端要用 dayjs(created_at).local() 转成本地时间。", "keep": ["created_at", "dayjs(created_at).local()"]}
+{"id": "en-zh-punct-01", "category": "punct", "src": "en", "tgt": "zh", "text": "Note: the options are (a) retry, (b) skip, or (c) abort; choose one carefully.", "ref": "注意：可选项有（a）重试、（b）跳过或（c）中止；请谨慎选择。", "keep": []}
+{"id": "en-zh-punct-02", "category": "punct", "src": "en", "tgt": "zh", "text": "The update (which, frankly, took far too long) is finally out.", "ref": "这次更新（说实话，拖得太久了）终于发布了。", "keep": []}
+{"id": "en-zh-punct-03", "category": "punct", "src": "en", "tgt": "zh", "text": "He said, \"Don't touch the red button!\" and walked away.", "ref": "他说：“别碰那个红色按钮！”然后就走开了。", "keep": []}
+{"id": "en-zh-punct-04", "category": "punct", "src": "en", "tgt": "zh", "text": "Three things matter here: speed, accuracy, and cost.", "ref": "这里有三件事很重要：速度、准确率和成本。", "keep": []}
+{"id": "en-zh-punct-05", "category": "punct", "src": "en", "tgt": "zh", "text": "Supported formats: PNG/JPEG/WebP, e.g. screenshots, i.e. anything under 20 MB.", "ref": "支持的格式：PNG/JPEG/WebP，例如截图，也就是 20 MB 以内的任何图片。", "keep": []}
+{"id": "en-zh-punct-06", "category": "punct", "src": "en", "tgt": "zh", "text": "Wait... is it really finished? I thought we had two more weeks.", "ref": "等等……真的做完了吗？我以为我们还有两周。", "keep": []}
+{"id": "en-zh-punct-07", "category": "punct", "src": "en", "tgt": "zh", "text": "The result — surprisingly — was better than the baseline.", "ref": "结果——出乎意料——比基线更好。", "keep": []}
+{"id": "en-zh-punct-08", "category": "punct", "src": "en", "tgt": "zh", "text": "Read/write access is required; read-only access is not enough.", "ref": "需要读写权限；只读权限是不够的。", "keep": []}
+{"id": "en-zh-punct-09", "category": "punct", "src": "en", "tgt": "zh", "text": "Prices (excluding tax) start at $9.99/month — or $99/year.", "ref": "价格（不含税）每月 9.99 美元起——或每年 99 美元。", "keep": []}
+{"id": "en-zh-punct-10", "category": "punct", "src": "en", "tgt": "zh", "text": "\"Is this a bug?\" she asked. \"No,\" he replied, \"it's a feature.\"", "ref": "“这是个 bug 吗？”她问。“不是，”他回答，“这是个功能。”", "keep": []}
+{"id": "en-zh-punct-11", "category": "punct", "src": "en", "tgt": "zh", "text": "Before you start, check the following: power, network, and (if needed) the VPN.", "ref": "开始之前，请检查以下几项：电源、网络，以及（如果需要的话）VPN。", "keep": []}
+{"id": "en-zh-punct-12", "category": "punct", "src": "en", "tgt": "zh", "text": "The meeting is moved to Friday (not Thursday!), 3 p.m. sharp.", "ref": "会议改到周五（不是周四！）下午三点整。", "keep": []}
+{"id": "en-zh-punct-13", "category": "punct", "src": "en", "tgt": "zh", "text": "Some users — especially those on older phones — reported crashes.", "ref": "一些用户——尤其是用旧手机的用户——报告了崩溃。", "keep": []}
+{"id": "en-zh-punct-14", "category": "punct", "src": "en", "tgt": "zh", "text": "Yes/no questions are easy; open-ended ones are harder.", "ref": "是非题很容易；开放式问题更难。", "keep": []}
+{"id": "en-zh-punct-15", "category": "punct", "src": "en", "tgt": "zh", "text": "First, back up your data; second, update the app; third, restart.", "ref": "第一，备份数据；第二，更新应用；第三，重启。", "keep": []}
+{"id": "en-zh-punct-16", "category": "punct", "src": "en", "tgt": "zh", "text": "It works on Windows, macOS, and Linux (Ubuntu 22.04 or later).", "ref": "它可以在 Windows、macOS 和 Linux（Ubuntu 22.04 或更高版本）上运行。", "keep": []}
+{"id": "en-zh-punct-17", "category": "punct", "src": "en", "tgt": "zh", "text": "The word \"free\" (as in \"free beer\") is misleading here.", "ref": "这里的“免费”（就像“免费啤酒”里的那样）容易引起误解。", "keep": []}
+{"id": "en-zh-punct-18", "category": "punct", "src": "en", "tgt": "zh", "text": "Hmm... that's odd; the log says \"success\", but nothing changed.", "ref": "嗯……奇怪；日志显示“成功”，但什么都没变。", "keep": []}
+{"id": "en-zh-punct-19", "category": "punct", "src": "en", "tgt": "zh", "text": "Please reply by Monday, i.e. before the release freeze.", "ref": "请在周一之前回复，也就是在发布冻结之前。", "keep": []}
+{"id": "en-zh-punct-20", "category": "punct", "src": "en", "tgt": "zh", "text": "Options include: cache size, thread count, and so on.", "ref": "选项包括：缓存大小、线程数等等。", "keep": []}
+{"id": "en-zh-punct-21", "category": "punct", "src": "en", "tgt": "zh", "text": "The test passed (finally!) after three retries.", "ref": "测试在重试三次之后（终于！）通过了。", "keep": []}
+{"id": "en-zh-punct-22", "category": "punct", "src": "en", "tgt": "zh", "text": "Input/output errors usually mean the disk is failing.", "ref": "输入/输出错误通常意味着磁盘出了问题。", "keep": []}
+{"id": "zh-en-punct-01", "category": "punct", "src": "zh", "tgt": "en", "text": "注意：可选项有（1）重试；（2）跳过——或者（3）放弃……请谨慎选择！", "ref": "Note: the options are (1) retry; (2) skip — or (3) give up... Please choose carefully!", "keep": []}
+{"id": "zh-en-punct-02", "category": "punct", "src": "zh", "tgt": "en", "text": "他说：“别急，先把日志发给我。”然后就下线了。", "ref": "He said, \"Don't rush, send me the logs first,\" and then went offline.", "keep": []}
+{"id": "zh-en-punct-03", "category": "punct", "src": "zh", "tgt": "en", "text": "这次更新（说实话，拖得太久了）终于上线了。", "ref": "This update (frankly, it took far too long) is finally live.", "keep": []}
+{"id": "zh-en-punct-04", "category": "punct", "src": "zh", "tgt": "en", "text": "需要准备三样东西：身份证、银行卡和手机。", "ref": "You need to prepare three things: your ID card, your bank card and your phone.", "keep": []}
+{"id": "zh-en-punct-05", "category": "punct", "src": "zh", "tgt": "en", "text": "结果——出乎所有人意料——比预期好得多。", "ref": "The result — to everyone's surprise — was much better than expected.", "keep": []}
+{"id": "zh-en-punct-06", "category": "punct", "src": "zh", "tgt": "en", "text": "等等……你是说服务器昨晚就宕机了？", "ref": "Wait... you mean the server went down last night?", "keep": []}
+{"id": "zh-en-punct-07", "category": "punct", "src": "zh", "tgt": "en", "text": "支持的系统：Windows/macOS/Linux，其中 Linux 需要自己编译。", "ref": "Supported systems: Windows/macOS/Linux, and Linux requires building it yourself.", "keep": []}
+{"id": "zh-en-punct-08", "category": "punct", "src": "zh", "tgt": "en", "text": "第一，备份数据；第二，升级应用；第三，重启手机。", "ref": "First, back up your data; second, upgrade the app; third, restart your phone.", "keep": []}
+{"id": "zh-en-punct-09", "category": "punct", "src": "zh", "tgt": "en", "text": "“这是 bug 吗？”她问。“不是，”他说，“这是设计如此。”", "ref": "\"Is this a bug?\" she asked. \"No,\" he said, \"it's by design.\"", "keep": []}
+{"id": "zh-en-punct-10", "category": "punct", "src": "zh", "tgt": "en", "text": "价格（不含税）每月 30 元起，或者每年 300 元。", "ref": "Prices (excluding tax) start at 30 yuan per month, or 300 yuan per year.", "keep": []}
+{"id": "zh-en-punct-11", "category": "punct", "src": "zh", "tgt": "en", "text": "会议改到周五（不是周四！）下午三点。", "ref": "The meeting has been moved to Friday (not Thursday!) at 3 p.m.", "keep": []}
+{"id": "zh-en-punct-12", "category": "punct", "src": "zh", "tgt": "en", "text": "部分用户——尤其是用旧手机的——反馈闪退。", "ref": "Some users — especially those with old phones — reported crashes.", "keep": []}
+{"id": "zh-en-punct-13", "category": "punct", "src": "zh", "tgt": "en", "text": "读/写权限都要开，只读是不够的。", "ref": "Both read/write permissions need to be enabled; read-only is not enough.", "keep": []}
+{"id": "zh-en-punct-14", "category": "punct", "src": "zh", "tgt": "en", "text": "嗯……奇怪，日志显示“成功”，可什么都没变。", "ref": "Hmm... strange, the log says \"success\", but nothing changed.", "keep": []}
+{"id": "zh-en-punct-15", "category": "punct", "src": "zh", "tgt": "en", "text": "开始前请检查：电源、网络，以及（如有需要）代理设置。", "ref": "Before starting, please check: power, network, and (if needed) the proxy settings.", "keep": []}
+{"id": "zh-en-punct-16", "category": "punct", "src": "zh", "tgt": "en", "text": "这个词“免费”（比如“免费试用”）其实有很多限制。", "ref": "The word \"free\" (as in \"free trial\") actually comes with many restrictions.", "keep": []}
+{"id": "zh-en-punct-17", "category": "punct", "src": "zh", "tgt": "en", "text": "选项包括：缓存大小、线程数、超时时间等。", "ref": "Options include: cache size, thread count, timeout and so on.", "keep": []}
+{"id": "zh-en-punct-18", "category": "punct", "src": "zh", "tgt": "en", "text": "测试重试了三次之后（终于！）通过了。", "ref": "The test passed (finally!) after three retries.", "keep": []}
+{"id": "zh-en-punct-19", "category": "punct", "src": "zh", "tgt": "en", "text": "请在周一前回复，也就是发版冻结之前。", "ref": "Please reply before Monday, that is, before the release freeze.", "keep": []}
+{"id": "zh-en-punct-20", "category": "punct", "src": "zh", "tgt": "en", "text": "我们试了很多方法——重装、清缓存、换网络——都没用。", "ref": "We tried many things — reinstalling, clearing the cache, switching networks — but nothing worked.", "keep": []}
+{"id": "en-zh-path_win-04", "category": "path_win", "src": "en", "tgt": "zh", "text": "C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv", "keep": ["C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv"], "verbatim": true}
+{"id": "zh-en-code_block-03", "category": "code_block", "src": "zh", "tgt": "en", "text": "SELECT id, name FROM users WHERE created_at > '2026-01-01' ORDER BY id;", "keep": ["SELECT id, name FROM users WHERE created_at > '2026-01-01' ORDER BY id;"], "verbatim": true}
+{"id": "en-zh-log-06", "category": "log", "src": "en", "tgt": "zh", "text": "    at com.example.app.MainActivity.onCreate(MainActivity.java:42)\n    at android.app.Activity.performCreate(Activity.java:8051)\n    ... 12 more", "keep": ["    at com.example.app.MainActivity.onCreate(MainActivity.java:42)", "    at android.app.Activity.performCreate(Activity.java:8051)", "    ... 12 more"], "verbatim": true}
+{"id": "zh-en-cli-04", "category": "cli", "src": "zh", "tgt": "en", "text": "git clone https://github.com/xubin0903/suiyi.git\ncd suiyi\npip install -e \"engine[dev]\"", "keep": ["git clone https://github.com/xubin0903/suiyi.git", "cd suiyi", "pip install -e \"engine[dev]\""], "verbatim": true}
+{"id": "zh-en-json_yaml-03", "category": "json_yaml", "src": "zh", "tgt": "en", "text": "[\n  {\"id\": 1, \"tags\": [\"a\", \"b\"]},\n  {\"id\": 2, \"tags\": []}\n]", "keep": ["[\n  {\"id\": 1, \"tags\": [\"a\", \"b\"]},\n  {\"id\": 2, \"tags\": []}\n]"], "verbatim": true}
+{"id": "zh-en-identifier-05", "category": "identifier", "src": "zh", "tgt": "en", "text": "getUserProfile", "keep": ["getUserProfile"], "verbatim": true}

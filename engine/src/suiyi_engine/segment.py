@@ -86,6 +86,8 @@ def split_sentences(
     text: str,
     lang: str | None = None,
     max_chars: int = 400,
+    *,
+    keep_spans: bool = False,
 ) -> list[Segment]:
     """把 ``text`` 切成句子。
 
@@ -96,6 +98,8 @@ def split_sentences(
             否则也合并成空格。句末标点规则与 ``lang`` 无关。
         max_chars: 单句最大字符数（Unicode 码位）。超长时先在 ``；;，,、`` 处再切，
             仍超长则硬切。必须是 ``>= 1`` 的整数。
+        keep_spans: 为 True 时，不翻译片段（见 :mod:`suiyi_engine.verbatim`）内部的
+            ``? ! .`` 等不再当作句末，例如正则 ``(?i)error|fatal``。
 
     Returns:
         按出现顺序排列的句子。空字符串和纯空白返回空列表，不会产生空句。
@@ -112,6 +116,10 @@ def split_sentences(
     parts: list[tuple[str, int, int]] = []
     for piece in _build_pieces(text, _newline_policy(lang)):
         spans = _protected_spans(piece.cleaned)
+        if keep_spans:
+            from suiyi_engine.verbatim import find_spans
+
+            spans = sorted(spans + [(s.start, s.end) for s in find_spans(piece.cleaned)])
         for start, end in _sentence_ranges(piece.cleaned, spans):
             parts.extend(_split_long(piece.cleaned, piece.orig, start, end, max_chars))
     return _with_trailing(text, parts)

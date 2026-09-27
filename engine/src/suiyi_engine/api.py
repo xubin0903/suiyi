@@ -87,6 +87,9 @@ class TranslateRequest(BaseModel):
 
     ``glossary``：本次是否做术语保护（#83）。省略或 ``null`` 时用服务端默认（``--glossary`` /
     ``SUIYI_GLOSSARY``）；必须是 JSON 布尔值，其他类型返回 422。
+
+    ``verbatim``：本次是否保护不翻译片段（#101，代码、包名、路径等原样保留）。规则同 ``glossary``，
+    服务端默认见 ``--verbatim`` / ``SUIYI_VERBATIM``。
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -96,6 +99,7 @@ class TranslateRequest(BaseModel):
     source: str
     target: str
     glossary: StrictBool | None = None
+    verbatim: StrictBool | None = None
 
 
 class ApiError(Exception):
@@ -203,6 +207,7 @@ def create_app(
                 "ocr_loaded": bool(app.state.ocr.loaded),
                 "ocr_error": app.state.ocr.health(),
                 **glossary_status(current),
+                "verbatim_enabled": verbatim_status(current),
                 "model_idle_unload_s": app.state.settings.model_idle_unload_s,
                 "ocr_idle_unload_s": app.state.settings.ocr_idle_unload_s,
                 "max_loaded_models": int(getattr(current.registry, "max_loaded", 0) or 0),
@@ -275,6 +280,13 @@ def glossary_status(translator: object) -> dict[str, object]:
     return {**_GLOSSARY_OFF, **status()}
 
 
+def verbatim_status(translator: object) -> bool:
+    """``/health`` 的 ``verbatim_enabled``：翻译器的不翻译片段保护默认开关（#101）。"""
+
+    value = getattr(translator, "verbatim", False)
+    return value if isinstance(value, bool) else False
+
+
 def language_catalog(translator: SupportsTranslation) -> dict[str, object]:
     """已安装模型实际能走的语向，含英文中转。"""
 
@@ -308,8 +320,10 @@ def perform_translate(
         sources = [_normalize_source(body.source)] * len(texts)
     for index, (text, src) in enumerate(zip(texts, sources, strict=True)):
         _preflight(translator, src, target, text, index if batched else None)
-    # 只在请求带了 glossary 时才传，测试里的假翻译器和旧实现不必认识这个参数。
+    # 只在请求带了 glossary / verbatim 时才传，测试里的假翻译器和旧实现不必认识这两个参数。
     extra: dict[str, object] = {} if body.glossary is None else {"glossary": body.glossary}
+    if body.verbatim is not None:
+        extra["verbatim"] = body.verbatim
     if not auto and batched:
         translated = translator.translate_many(texts, sources[0], target, **extra)
         return {"results": [_public_result(item, detected=False) for item in translated]}
