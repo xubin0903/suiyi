@@ -5,11 +5,11 @@
 """
 
 # 必须在任何模块导入 ctranslate2 之前：带 AMX 的 CPU 上设 MKL_ENABLE_INSTRUCTIONS（#103）；
-# 系统可提交内存不足时关掉 MKL 权重预打包，少提交约 1.6 GiB（#113）
-from suiyi_engine.cpu_isa import configure_mkl_isa, configure_packed_gemm
+# 记下用户是否设了 CT2_PACKED_GEMM；是否预打包在第一次加载翻译模型时再决定（#113 / #119）
+from suiyi_engine.cpu_isa import configure_mkl_isa, pack_governor
 
 configure_mkl_isa()
-configure_packed_gemm()
+pack_governor()
 
 from suiyi_engine.translator import (  # noqa: E402
     TranslationResult,

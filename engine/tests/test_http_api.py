@@ -15,7 +15,7 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from suiyi_engine import __version__
+from suiyi_engine import __version__, cpu_isa
 from suiyi_engine.api import ApiSettings, create_app
 from suiyi_engine.langdetect import Detection, detect
 from suiyi_engine.registry import ModelRecord
@@ -153,7 +153,12 @@ def test_health_reports_version_models_dir_and_uptime(tmp_path: Path) -> None:
         "mkl_enable_instructions_source",
         "ct2_packed_gemm",
         "ct2_packed_gemm_source",
+        "ct2_packed_gemm_reason",
+        "ct2_packed_gemm_recommended",
+        "ct2_models_packed",
         "commit_available_mib",
+        "physical_memory_mib",
+        "packed_gemm_extra_mib",
         "model_idle_unload_s",
         "max_loaded_models",
         "ocr_idle_unload_s",
@@ -169,6 +174,57 @@ def test_health_reports_version_models_dir_and_uptime(tmp_path: Path) -> None:
     assert body["glossary_enabled"] is False
     assert body["glossary_warnings"] == []
     assert "access-control-allow-origin" not in {name.lower() for name in response.headers}
+
+
+class PackingBackend(TagBackend):
+    """像 Ct2OpusBackend 一样在加载前问 PackGovernor（#119）。"""
+
+    def __init__(self, record: ModelRecord) -> None:
+        super().__init__(record)
+        self.packed = cpu_isa.pack_governor().before_load(record.id, 80.0)
+
+
+def test_health_rejudges_pack_on_every_model_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install(tmp_path, "opus-mt-zh-en", "zh", "en")
+    commit = {"mib": 4500.0}  # 模型加载后可用量只剩约 4.5 GB
+    env: dict[str, str] = {}
+    governor = cpu_isa.PackGovernor(
+        env,
+        commit_mib=lambda: commit["mib"],
+        physical_mib=lambda: 32768.0,
+        mkl=lambda: True,
+    )
+    monkeypatch.setattr(cpu_isa, "_GOVERNOR", governor)
+    translator = Translator(tmp_path, backend_factory=PackingBackend)
+    with _client(translator) as client:
+        before = client.get("/health").json()
+        assert before["ct2_packed_gemm_source"] == "pending"
+        assert before["commit_available_mib"] is None
+        assert before["ct2_models_packed"] == {}
+
+        client.post("/translate", json={"text": "你好", "source": "zh", "target": "en"})
+        first = client.get("/health").json()
+        # 4500 − 预计额外 768 < 4096 → 关
+        assert first["ct2_packed_gemm"] == "0"
+        assert first["ct2_packed_gemm_source"] == "auto"
+        assert first["ct2_packed_gemm_reason"] == "low_commit"
+        assert first["commit_available_mib"] == 4500
+        assert first["ct2_models_packed"] == {"opus-mt-zh-en": False}
+        assert env["CT2_PACKED_GEMM"] == "0"
+
+        # 空闲卸载后内存宽裕了，再次加载时重新判断，/health 显示当次的值
+        assert translator.registry.unload("opus-mt-zh-en")
+        assert client.get("/health").json()["ct2_models_packed"] == {}
+        commit["mib"] = 20000.0
+        client.post("/translate", json={"text": "再见", "source": "zh", "target": "en"})
+        second = client.get("/health").json()
+        assert second["commit_available_mib"] == 20000
+        assert second["ct2_packed_gemm_recommended"] is True
+        # CTranslate2 进程内只读一次环境变量：实际值保持锁定，按模型如实报告
+        assert second["ct2_packed_gemm"] == "0"
+        assert second["ct2_models_packed"] == {"opus-mt-zh-en": False}
 
 
 def test_languages_lists_direct_and_pivot_but_not_uninstalled_direct(tmp_path: Path) -> None:

@@ -110,10 +110,12 @@ jobs:
             done
             exit 0
           fi
-          # #113：强制 MKL（runner 是 AMD，默认走 oneDNN），对比预打包开 / 自动关（把阈值调到 1 TB 触发）/ 手动关。
-          # 内存列：Windows 为 WS 与 Private Bytes（提交），Linux 为 RSS 与 VmData。Linux 未开严格 overcommit，自动关不触发。
-          PG=(--config "MKL 打包=CT2_USE_MKL=1"
-              --config "MKL 自动关打包=CT2_USE_MKL=1,SUIYI_PACKED_GEMM_MIN_COMMIT_MIB=1000000"
+          # #113/#119：强制 MKL（runner 是 AMD，默认走 oneDNN），对比预打包强制开 / 自动（runner 物理内存 16 GB → small_ram 关）/
+          # 提交量不足自动关（小内存阈值调到 1、提交量阈值调到 1 TB；Linux 未开严格 overcommit 时提交量不可知，不触发）/ 手动关。
+          # 内存列：Windows 为 WS 与 Private Bytes（提交），Linux 为 RSS 与 VmData。
+          PG=(--config "MKL 强制打包=CT2_USE_MKL=1,CT2_PACKED_GEMM=1"
+              --config "MKL 自动=CT2_USE_MKL=1"
+              --config "MKL 提交量不足自动关=CT2_USE_MKL=1,SUIYI_PACKED_GEMM_SMALL_RAM_MIB=1,SUIYI_PACKED_GEMM_MIN_COMMIT_MIB=1000000"
               --config "MKL 手动关打包=CT2_USE_MKL=1,CT2_PACKED_GEMM=0"
               --config "默认后端=")
           if [ "${{ inputs.mode || 'full' }}" = "packed-gemm" ]; then
@@ -131,9 +133,9 @@ jobs:
           # 强制 CT2_USE_MKL=1 复现 Intel 机器上 Private Bytes 远大于 WS 的现象（MKL 在 AMD 上很慢，延迟不代表 Intel）。
           CT2_USE_MKL=1 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1" --out "$OUT/baseline-mkl.json" --port 18805 --rounds 1
           CT2_USE_MKL=1 CT2_PACKED_GEMM=0 run serve --models-dir "$M" --src "$B" --label "基线 $BASE + CT2_USE_MKL=1 + CT2_PACKED_GEMM=0" --out "$OUT/baseline-mkl-nopack.json" --port 18806 --rounds 1
-          CT2_USE_MKL=1 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1" --out "$OUT/head-mkl.json" --port 18807 --rounds 1
-          # #113：可用提交量低于阈值时自动关预打包；阈值调到 1 TB 在 runner 上触发
-          CT2_USE_MKL=1 SUIYI_PACKED_GEMM_MIN_COMMIT_MIB=1000000 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1 + 提交量不足自动关预打包" --out "$OUT/head-mkl-auto.json" --port 18808 --rounds 1
+          CT2_USE_MKL=1 CT2_PACKED_GEMM=1 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1 + 强制预打包" --out "$OUT/head-mkl.json" --port 18807 --rounds 1
+          # #119：默认自动判断；runner 物理内存 16 GB，按 small_ram 关预打包
+          CT2_USE_MKL=1 run serve --models-dir "$M" --src "$S" --label "当前 $HEAD + CT2_USE_MKL=1 + 自动（16 GB 关预打包）" --out "$OUT/head-mkl-auto.json" --port 18808 --rounds 1
           "$PY" scripts/compare_packed_gemm.py --models-dir "$M" --rounds 1 --summary "$GITHUB_STEP_SUMMARY" --out "$OUT/packed-gemm.json" "${PG[@]}"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

@@ -5,7 +5,8 @@
 - 内存：Windows 为 WS 与 Private Bytes（提交量），Linux 为 RSS 与 VmData（≈ 提交量）；
 - 全部请求往返延迟的 P50 / P95；
 - 与第一种配置逐字比较，不同的条数（整数 GEMM，打包与否应当逐字相同）；
-- ``/health`` 里 ``ct2_packed_gemm`` / ``ct2_packed_gemm_source`` / ``commit_available_mib``。
+- ``/health`` 里 ``ct2_packed_gemm`` / ``ct2_packed_gemm_source`` / ``ct2_packed_gemm_reason`` /
+  ``commit_available_mib`` / ``physical_memory_mib``。
 
 ``--alternate N`` 把全部配置轮流跑 N 遍，延迟取每种配置各遍 P95 的中位数，抵消机器负载波动。
 
@@ -13,7 +14,7 @@
 
     $env:PYTHONPATH = "$PWD\\engine\\src"
     python scripts\\compare_packed_gemm.py --models-dir models --alternate 2 --out packed.json `
-        --config "打包=" --config "不打包=CT2_PACKED_GEMM=0"
+        --config "打包=CT2_PACKED_GEMM=1" --config "不打包=CT2_PACKED_GEMM=0"
 """
 
 from __future__ import annotations
@@ -59,7 +60,12 @@ def _run(args: argparse.Namespace, name: str, extra: dict[str, str], port: int) 
     env["SUIYI_USER_GLOSSARY"] = str(
         Path(tempfile.gettempdir()) / "suiyi-113-no-glossary.tsv"
     )
-    for key in ("CT2_PACKED_GEMM", "CT2_USE_MKL", "SUIYI_PACKED_GEMM_MIN_COMMIT_MIB"):
+    for key in (
+        "CT2_PACKED_GEMM",
+        "CT2_USE_MKL",
+        "SUIYI_PACKED_GEMM_MIN_COMMIT_MIB",
+        "SUIYI_PACKED_GEMM_SMALL_RAM_MIB",
+    ):
         env.pop(key, None)  # 只用 --config 给的值
     env.update(extra)
     command = [sys.executable, "-m", "suiyi_engine", "serve", "--port", str(port)]
@@ -110,7 +116,9 @@ def _run(args: argparse.Namespace, name: str, extra: dict[str, str], port: int) 
             for k in (
                 "ct2_packed_gemm",
                 "ct2_packed_gemm_source",
+                "ct2_packed_gemm_reason",
                 "commit_available_mib",
+                "physical_memory_mib",
             )
         },
         "idle": {k: round(idle.get(k, 0.0), 1) for k in keys},
@@ -194,7 +202,8 @@ def main(argv: list[str] | None = None) -> int:
         lines.append(
             f"| {row['name']} | {used[0]:.1f} | {used[1]:.1f} | {row['p50_ms']:.1f} | "
             f"{row['p95_ms']:.1f} | {change:+.1f}% | {row['differs_from_first']} / "
-            f"{row['samples']} | {health['ct2_packed_gemm']}（{health['ct2_packed_gemm_source']}）|"
+            f"{row['samples']} | {health['ct2_packed_gemm']}（{health['ct2_packed_gemm_source']}，"
+            f"{health.get('ct2_packed_gemm_reason')}）|"
         )
     table = "\n".join(lines) + "\n"
     print(table)

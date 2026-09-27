@@ -533,7 +533,7 @@ def _print_startup(
         print(f"语种检测已预热 {detector_ms:.0f} ms", flush=True)
     isa = cpu_isa.current()
     print(isa.describe(), flush=True)
-    print(cpu_isa.current_pack().describe(), flush=True)
+    print(cpu_isa.pack_governor().describe(), flush=True)
     if isa.late:
         print(
             f"警告：设置 {cpu_isa.ENV} 前 ctranslate2 已被导入，可能不生效；"
