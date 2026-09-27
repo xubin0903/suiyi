@@ -402,6 +402,19 @@ class OcrProcessProvider:
         with self._lock:
             try:
                 reply = self._call_locked(meta, blob)
+                if reply.get("kind") == "internal":
+                    # 子进程里的意外异常（如提交内存不足时 onnxruntime 的 bad allocation，#114）：
+                    # 重启子进程再试一次；识别与预热都是幂等的
+                    first = str(reply.get("message"))
+                    logger.warning("OCR 子进程内部错误，重启后重试一次：%s", first)
+                    self._stop_locked(graceful=False)
+                    reply = self._call_locked(meta, blob)
+                    if reply.get("kind") == "internal":
+                        self._stop_locked(graceful=False)
+                        raise OcrUnavailable(
+                            f"OCR 子进程内部错误，重启重试后仍失败：{reply.get('message')}",
+                            reason="worker_error",
+                        )
             except OcrUnavailable as exc:
                 self.last_error = exc
                 raise
@@ -416,8 +429,6 @@ class OcrProcessProvider:
             from suiyi_engine.ocr import InvalidImageError
 
             raise InvalidImageError(str(reply.get("message")))
-        if kind == "internal":
-            raise RuntimeError(f"OCR 子进程内部错误：{reply.get('message')}")
         return reply
 
     def _call_locked(self, meta: dict[str, object], blob: bytes) -> dict[str, object]:
