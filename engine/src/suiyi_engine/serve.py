@@ -211,6 +211,29 @@ def resolve_glossary_enabled(cli_value: bool | None) -> bool:
     return value
 
 
+def resolve_verbatim_enabled(cli_value: bool | None) -> bool:
+    """命令行 ``--verbatim`` / ``--no-verbatim`` 优先，其次 ``SUIYI_VERBATIM``，默认开启（#101）。
+
+    环境变量规则同 :func:`resolve_glossary_enabled`：认不出的值只告警、按开启处理。
+    """
+
+    if cli_value is not None:
+        return bool(cli_value)
+    raw = os.environ.get("SUIYI_VERBATIM", "")
+    if not raw.strip():
+        return True
+    value = parse_bool(raw)
+    if value is None:
+        print(
+            f"警告：SUIYI_VERBATIM 的值 {raw!r} 无法识别（应为 1/0 或 true/false），"
+            "不翻译片段保护按默认开启",
+            file=sys.stderr,
+            flush=True,
+        )
+        return True
+    return value
+
+
 def resolve_user_glossary(cli_value: str | Path | None) -> Path:
     """命令行 ``--user-glossary`` 优先，其次 ``SUIYI_USER_GLOSSARY``，默认见
     :func:`suiyi_engine.terms.default_user_glossary_path`。文件可以不存在。"""
@@ -257,6 +280,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         preload_pairs = parse_preload(args.preload)
         glossary_enabled = resolve_glossary_enabled(getattr(args, "glossary", None))
         user_glossary = resolve_user_glossary(getattr(args, "user_glossary", None))
+        verbatim_enabled = resolve_verbatim_enabled(getattr(args, "verbatim", None))
         intra_threads = resolve_intra_threads(args.intra_threads)
         model_idle_unload_s = resolve_model_idle_unload(getattr(args, "model_idle_unload", None))
         max_loaded_models = resolve_max_loaded_models(getattr(args, "max_loaded_models", None))
@@ -278,6 +302,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
         preload_ocr=bool(getattr(args, "preload_ocr", False)),
         glossary_enabled=glossary_enabled,
         user_glossary=user_glossary,
+        verbatim_enabled=verbatim_enabled,
         model_idle_unload_s=model_idle_unload_s,
         max_loaded_models=max_loaded_models,
         ocr_idle_unload_s=ocr_idle_unload_s,
@@ -299,6 +324,7 @@ def run_server(
     preload_ocr: bool = False,
     glossary_enabled: bool = True,
     user_glossary: Path | str | None = None,
+    verbatim_enabled: bool = True,
     model_idle_unload_s: int = DEFAULT_MODEL_IDLE_UNLOAD_S,
     max_loaded_models: int = DEFAULT_MAX_LOADED_MODELS,
     ocr_idle_unload_s: int | None = None,
@@ -309,6 +335,7 @@ def run_server(
     OCR 依赖或模型缺失从不阻止启动，文本翻译不受影响：``preload_ocr`` 加载失败只在 stderr 告警
     （含缺失的模型 id），``/health`` 的 ``ocr_error`` 带上原因，OCR 接口返回 503。
     术语表同理：用户术语表缺失或格式错误只告警，``/health`` 的 ``glossary_*`` 字段带上状态。
+    ``verbatim_enabled`` 是不翻译片段保护的默认开关（#101），请求里的 ``verbatim`` 可覆盖。
 
     内存（#92）：加载模型前调 :func:`memory.configure_allocator`；监听期间由
     :class:`memory.ModelJanitor` 在翻译空闲时卸载超过 ``model_idle_unload_s`` 秒没用的模型
@@ -343,7 +370,11 @@ def run_server(
     glossary = GlossaryStore(user_glossary, enabled=glossary_enabled)
     try:
         translator = Translator(
-            models_dir, glossary=glossary, max_loaded_models=max_loaded_models, **decode
+            models_dir,
+            glossary=glossary,
+            max_loaded_models=max_loaded_models,
+            verbatim=verbatim_enabled,
+            **decode,
         )
         if preload_pairs:
             translator.preload(preload_pairs)

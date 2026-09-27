@@ -364,6 +364,7 @@ def test_cli_passes_decode_flags(
     assert code == 0
     kwargs = dict(seen["kwargs"])  # type: ignore[call-overload]
     assert kwargs.pop("glossary").enabled is True
+    assert kwargs.pop("verbatim") is True  # 不翻译片段保护默认开启（#101）
     assert kwargs == {
         "intra_threads": 2,
         "beam_size": 4,

@@ -28,15 +28,18 @@ from suiyi_engine.glossary import (
     KEEP,
     GlossaryError,
     Protected,
+    Slot,
     Term,
+    TermMatch,
     find_terms,
     has_placeholder_like,
     parse_terms,
-    protect_matches,
+    placeholder,
     restore,
     target_form,
     term_present,
 )
+from suiyi_engine.verbatim import Span
 
 __all__ = [
     "GlossaryStore",
@@ -347,10 +350,20 @@ class TermStats:
     slots: int = 0
     variant_fixes: int = 0
     fallbacks: int = 0
+    # 不翻译片段（#101）
+    verbatim_sentences: int = 0
+    verbatim_copied: int = 0
+    verbatim_placeholder: int = 0
+    verbatim_chunked: int = 0
 
     def reset(self) -> None:
         for name in self.__slots__:  # type: ignore[attr-defined]
             setattr(self, name, 0)
+
+
+VERBATIM = "verbatim"
+# 一句里不翻译片段的占位符超过这么多个时不再用占位符，直接按片段切开翻译（#101）
+MAX_VERBATIM_SLOTS = 8
 
 
 def translate_with_terms(
@@ -360,32 +373,253 @@ def translate_with_terms(
     terms: Sequence[Term],
     translate_batch: Callable[[list[str]], list[str]],
     stats: TermStats | None = None,
+    spans: Sequence[Sequence[Span]] | None = None,
 ) -> list[str]:
-    """按术语表翻译一批句子（方式见上面的注释）。
+    """按术语表翻译一批句子（方式见上面的注释），并保证不翻译片段逐字出现在译文里（#101）。
 
     占位符丢失或重复时这一句用不保护的译文，并记一条日志（术语 id 与原因，不含原文）。
+
+    ``spans[i]`` 是第 ``i`` 句里要逐字保留的片段（:func:`suiyi_engine.verbatim.find_spans`）：
+
+    1. 整句只剩片段和标点时直接照抄，不送模型；
+    2. 先正常翻译（有术语要保护的句子，占位符版和原句同批翻译，占位符版里片段也换成占位符）；
+       片段都原样出现在译文里就用它，模型的语序最自然；
+    3. 否则把第一遍丢了的片段换成占位符再翻一遍
+       （片段多于 :data:`MAX_VERBATIM_SLOTS` 个时跳过这一步）；
+    4. 占位符丢失 / 重复时按片段切开，只翻译片段之间的文字，再按原顺序拼回。这一步一定保留片段。
     """
 
     record = stats if stats is not None else TermStats()
     record.sentences += len(sentences)
+    span_lists = [list(item) for item in spans] if spans is not None else [[] for _ in sentences]
+    outputs: dict[int, str] = {}
+    pending: list[int] = []
+    for index, source in enumerate(sentences):
+        if span_lists[index]:
+            record.verbatim_sentences += 1
+            if _only_spans(source, span_lists[index]):
+                outputs[index] = source
+                record.verbatim_copied += 1
+                continue
+        pending.append(index)
+    if pending:
+        batch = [sentences[index] for index in pending]
+        batch_spans = [span_lists[index] for index in pending]
+        translated = _translate_core(batch, batch_spans, src, tgt, terms, translate_batch, record)
+        outputs.update(zip(pending, translated, strict=True))
+    return [outputs[index] for index in range(len(sentences))]
+
+
+def _translate_core(
+    sentences: list[str],
+    span_lists: list[list[Span]],
+    src: str,
+    tgt: str,
+    terms: Sequence[Term],
+    translate_batch: Callable[[list[str]], list[str]],
+    record: TermStats,
+) -> list[str]:
     protected: dict[int, Protected] = {}
     for index, source in enumerate(sentences):
         if not source.strip() or has_placeholder_like(source):
             continue
+        verbatim = span_lists[index]
         matches = [
             match
             for match in find_terms(source, src, terms, every=True)
-            if target_form(match.term, match.surface, tgt)
+            if target_form(match.term, match.surface, tgt) and not _overlaps(match, verbatim)
         ]
         if not matches:
             continue
         record.matched += 1
-        item = protect_matches(source, matches, tgt)
+        item = _protect(source, matches, verbatim, src, tgt)
         if item.slots:
             protected[index] = item
     if not protected:
-        return translate_batch(sentences)
-    return _speculative(sentences, protected, src, tgt, translate_batch, record)
+        outputs = translate_batch(sentences)
+    else:
+        outputs = _speculative(sentences, protected, src, tgt, translate_batch, record)
+    if len(outputs) != len(sentences) or not any(span_lists):
+        return outputs
+    return _ensure_verbatim(
+        sentences, span_lists, outputs, protected, src, tgt, translate_batch, record
+    )
+
+
+def _overlaps(match: TermMatch, spans: Sequence[Span]) -> bool:
+    return any(match.start < span.end and span.start < match.end for span in spans)
+
+
+def _only_spans(source: str, spans: Sequence[Span]) -> bool:
+    """去掉片段后只剩空白和标点（没有字母、数字、汉字）。"""
+
+    cursor = 0
+    rest: list[str] = []
+    for span in spans:
+        rest.append(source[cursor : span.start])
+        cursor = span.end
+    rest.append(source[cursor:])
+    return not any(char.isalnum() for char in "".join(rest))
+
+
+def _verbatim_term(text: str, kind: str, src: str, tgt: str) -> Term:
+    return Term(
+        id=f"{VERBATIM}:{kind}",
+        kind=KEEP,
+        domain=VERBATIM,
+        forms={src: (text,), tgt: (text,)},
+        case_sensitive=True,
+    )
+
+
+def _protect(
+    source: str, matches: Sequence[TermMatch], spans: Sequence[Span], src: str, tgt: str
+) -> Protected:
+    """术语与不翻译片段一起换成占位符（按位置编号）。"""
+
+    items: list[tuple[int, int, Term, str, str]] = []
+    for match in matches:
+        target = target_form(match.term, match.surface, tgt)
+        if target:
+            items.append((match.start, match.end, match.term, match.surface, target))
+    for span in spans:
+        text = source[span.start : span.end]
+        items.append((span.start, span.end, _verbatim_term(text, span.kind, src, tgt), text, text))
+    items.sort(key=lambda item: item[0])
+    pieces: list[str] = []
+    slots: list[Slot] = []
+    cursor = 0
+    for index, (start, end, term, surface, target) in enumerate(items):
+        slot = Slot(placeholder(index), term, surface, target)
+        slots.append(slot)
+        pieces.append(source[cursor:start])
+        pieces.append(slot.placeholder)
+        cursor = end
+    pieces.append(source[cursor:])
+    return Protected("".join(pieces), tuple(slots))
+
+
+def _kept(output: str, source: str, spans: Sequence[Span]) -> bool:
+    """每个片段在译文里出现的次数不少于原文里的次数。"""
+
+    for span in spans:
+        text = source[span.start : span.end]
+        if output.count(text) < source.count(text):
+            return False
+    return True
+
+
+def _ensure_verbatim(
+    sentences: list[str],
+    span_lists: list[list[Span]],
+    outputs: list[str],
+    protected: Mapping[int, Protected],
+    src: str,
+    tgt: str,
+    translate_batch: Callable[[list[str]], list[str]],
+    record: TermStats,
+) -> list[str]:
+    result = list(outputs)
+    retry: dict[int, Protected] = {}
+    chunk: list[int] = []
+    for index, source in enumerate(sentences):
+        spans = span_lists[index]
+        if not spans or _kept(result[index], source, spans):
+            continue
+        if (
+            index in protected  # 术语句的占位符版已经试过了
+            or has_placeholder_like(source)
+            or len(spans) > MAX_VERBATIM_SLOTS
+        ):
+            chunk.append(index)
+        else:
+            # 只把第一遍丢了的片段换成占位符，占位符越少模型语序越自然
+            missing = [span for span in spans if not _kept(result[index], source, [span])]
+            retry[index] = _protect(source, (), missing, src, tgt)
+    if retry:
+        order = sorted(retry)
+        raw = translate_batch([retry[index].text for index in order])
+        for index, candidate in zip(order, raw, strict=True):
+            item = retry[index]
+            candidate = _strip_placeholder_suffix(candidate, item, tgt)
+            restored, failed = restore(candidate, item, tgt)
+            if failed or not _kept(restored, sentences[index], span_lists[index]):
+                chunk.append(index)
+                continue
+            if _new_repeat(restored, result[index], item, tgt):
+                chunk.append(index)
+                continue
+            record.verbatim_placeholder += 1
+            result[index] = restored
+    if chunk:
+        chunked = _translate_chunks(
+            {index: (sentences[index], span_lists[index]) for index in chunk},
+            tgt,
+            translate_batch,
+        )
+        for index, text in chunked.items():
+            record.verbatim_chunked += 1
+            result[index] = text
+        logger.info("不翻译片段：%d 句按片段切开翻译 %s→%s", len(chunk), src, tgt)
+    return result
+
+
+_FULL_TO_ASCII = {
+    "，": ", ",
+    "。": ". ",
+    "；": "; ",
+    "：": ": ",
+    "！": "! ",
+    "？": "? ",
+    "、": ", ",
+}
+
+
+def _translate_chunks(
+    items: Mapping[int, tuple[str, Sequence[Span]]],
+    tgt: str,
+    translate_batch: Callable[[list[str]], list[str]],
+) -> dict[int, str]:
+    """把句子按片段切开，只翻译片段之间含文字的部分，再按原顺序拼回（一定保留片段）。"""
+
+    plans: dict[int, list[tuple[str, bool]]] = {}
+    queue: list[str] = []
+    for index, (source, spans) in items.items():
+        plan: list[tuple[str, bool]] = []
+        cursor = 0
+        for span in spans:
+            plan.append((source[cursor : span.start], True))
+            plan.append((source[span.start : span.end], False))
+            cursor = span.end
+        plan.append((source[cursor:], True))
+        plans[index] = plan
+        for text, translate in plan:
+            if translate and any(char.isalpha() for char in text):
+                queue.append(text.strip())
+    translated = iter(translate_batch(queue) if queue else [])
+    cjk_target = tgt in ("zh", "ja")
+    result: dict[int, str] = {}
+    for index, plan in plans.items():
+        pieces: list[str] = []
+        for text, translate in plan:
+            if not translate or not text:
+                pieces.append(text)
+                continue
+            if any(char.isalpha() for char in text):
+                lead = text[: len(text) - len(text.lstrip())]
+                trail = text[len(text.rstrip()) :]
+                body = next(translated)
+                if not cjk_target:
+                    lead = lead or (" " if pieces and pieces[-1][-1:].isalnum() else "")
+                    trail = trail or " "
+                pieces.append(lead + body + trail)
+            elif not cjk_target:
+                pieces.append("".join(_FULL_TO_ASCII.get(char, char) for char in text))
+            else:
+                pieces.append(text)
+        joined = "".join(pieces)
+        result[index] = joined.strip() if not cjk_target else joined
+    return result
 
 
 def _speculative(
@@ -493,6 +727,10 @@ def _fix_first_pass(output: str, item: Protected, tgt: str) -> str | None:
     text = output
     for slot in item.slots:
         term = slot.term
+        if term.domain == VERBATIM:
+            if slot.source not in output:
+                return None
+            continue
         if term.kind == KEEP and slot.target == slot.source:
             if slot.source.casefold() in text.casefold():
                 continue

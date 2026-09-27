@@ -8,13 +8,15 @@ tc-big 的 en→zh 输出常带半角标点（「开源系统,用于」「CNCF(C
 - 括号：成对出现、且外侧紧挨着中文或括号里有中文时改成全角。括号里没有中文时还要求
   括号内容以大写字母或数字开头（小写开头时要求左边紧挨着中文），且不是紧跟在标识符后面的
   无空格内容，所以 ``O(n log n)``、``foo(bar)``、``f(X)`` 保持原样。
-- URL、邮箱、反引号里的代码、Windows 路径整段跳过。
+- URL、邮箱、反引号里的代码、Windows 路径整段跳过；调用方传入的 ``keep``（不翻译片段，#101）
+  也整段跳过。
 - 只处理半角 ``, ; : ? ! ( )``。引号、句点（句末已由 ``restore_final_punct`` 处理）不动。
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 __all__ = ["normalize_zh_punct"]
 
@@ -34,8 +36,11 @@ _TARGET = frozenset(_SIMPLE) | {"(", ")"}
 _GAP = " \t\u00a0"
 
 
-def normalize_zh_punct(text: str) -> str:
-    """把中文语境里的半角标点改成全角。没有需要改的标点时原样返回。"""
+def normalize_zh_punct(text: str, keep: Iterable[str] = ()) -> str:
+    """把中文语境里的半角标点改成全角。没有需要改的标点时原样返回。
+
+    ``keep`` 里的字符串在译文里每次出现都整段不动（不翻译片段，#101）。
+    """
 
     if not any(char in _TARGET for char in text) or _HAN_ONLY.search(text) is None:
         return text
@@ -44,6 +49,14 @@ def normalize_zh_punct(text: str) -> str:
     for match in _SKIP.finditer(text):
         for index in range(match.start(), match.end()):
             frozen[index] = True
+    for value in keep:
+        if not value:
+            continue
+        start = text.find(value)
+        while start >= 0:
+            for index in range(start, start + len(value)):
+                frozen[index] = True
+            start = text.find(value, start + 1)
     replace: dict[int, str] = {}
     changed = True
     while changed:  # 「, ,求」这种连着的半角标点：一个改了之后，旁边的也跟着改

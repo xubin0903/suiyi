@@ -26,6 +26,7 @@ from suiyi_engine.registry import (
 )
 from suiyi_engine.segment import join_segments, split_sentences
 from suiyi_engine.terms import GlossaryStore, TermStats, translate_with_terms
+from suiyi_engine.verbatim import Block, find_spans, space_spans, split_blocks
 from suiyi_engine.zh_punct import normalize_zh_punct
 
 __all__ = ["TranslationResult", "Translator", "UnsupportedPairError"]
@@ -61,6 +62,10 @@ class Translator:
     ``glossary`` 为 :class:`GlossaryStore` 时启用术语保护（#83，zh↔en 直连），
     默认开关取 ``glossary.enabled``，每次调用可用 ``glossary=True/False`` 覆盖；
     为 ``None`` 时不做术语保护。
+
+    ``verbatim`` 为真（默认）时保护不翻译片段（#101）：代码块、代码行、命令行照抄，包名、路径、
+    URL、标识符等逐字保留；整段几乎全是代码或标识符时原样返回、不经过模型（``route`` 为空）。
+    每次调用可用 ``verbatim=True/False`` 覆盖。
     """
 
     def __init__(
@@ -78,6 +83,7 @@ class Translator:
         max_decoding_length: int = DEFAULT_MAX_DECODING_LENGTH,
         glossary: GlossaryStore | None = None,
         max_loaded_models: int = 0,
+        verbatim: bool = True,
     ) -> None:
         intra = default_intra_threads() if intra_threads is None else intra_threads
         options: dict[str, object] = {
@@ -98,6 +104,7 @@ class Translator:
             max_loaded=max_loaded_models,
         )
         self.glossary = glossary
+        self.verbatim = bool(verbatim)
         self.term_stats = TermStats()
 
     def glossary_status(self) -> dict[str, object]:
@@ -137,13 +144,21 @@ class Translator:
         return self.registry.loaded_model_ids()
 
     def translate(
-        self, text: str, src: str, tgt: str, *, glossary: bool | None = None
+        self,
+        text: str,
+        src: str,
+        tgt: str,
+        *,
+        glossary: bool | None = None,
+        verbatim: bool | None = None,
     ) -> TranslationResult:
         """翻译一段文本。长文先分句，再批量翻译，再按目标语拼回。
 
         中转时两跳一一对应，中间的英文不再分句，以免和原文的段落分隔错位。
         ``src == tgt`` 原样返回。空白文本返回空字符串，且不检查模型是否已下载。
         ``glossary`` 为 ``None`` 时按术语表的默认开关，``True`` / ``False`` 只影响这一次。
+        ``verbatim`` 同理，``None`` 时按 :attr:`verbatim`（#101）。
+        整段没有要翻译的自然语言时原样返回，``route`` 为空，不加载模型（语向仍要支持）。
         """
 
         started = time.perf_counter()
@@ -152,13 +167,25 @@ class Translator:
             body = text if src_code == tgt_code else ""
             return _result(body, src_code, tgt_code, [], started)
         records = self.registry.resolve(src_code, tgt_code)
+        protect = self.verbatim if verbatim is None else bool(verbatim)
+        blocks = split_blocks(text) if protect else [Block(text, True)]
+        if not any(block.translate for block in blocks):
+            return _result(text, src_code, tgt_code, [], started)
         backends = [self.registry.get(record.id) for record in records]
         terms = self._terms(src_code, tgt_code, glossary) if len(backends) == 1 else ()
-        output = _translate_text(text, src_code, tgt_code, backends, terms, self.term_stats)
+        output = _translate_blocks(
+            blocks, src_code, tgt_code, backends, terms, self.term_stats, protect
+        )
         return _result(output, src_code, tgt_code, [record.id for record in records], started)
 
     def translate_many(
-        self, texts: Sequence[str], src: str, tgt: str, *, glossary: bool | None = None
+        self,
+        texts: Sequence[str],
+        src: str,
+        tgt: str,
+        *,
+        glossary: bool | None = None,
+        verbatim: bool | None = None,
     ) -> list[TranslationResult]:
         """翻译多段文本。语向不支持时在产出结果前失败。
 
@@ -172,7 +199,10 @@ class Translator:
                 raise TypeError("texts 中的每一项都必须是 str")
         if src_code != tgt_code and any(text.strip() for text in texts):
             self.registry.resolve(src_code, tgt_code)
-        return [self.translate(text, src_code, tgt_code, glossary=glossary) for text in texts]
+        return [
+            self.translate(text, src_code, tgt_code, glossary=glossary, verbatim=verbatim)
+            for text in texts
+        ]
 
     def _terms(self, src: str, tgt: str, override: bool | None) -> tuple[Term, ...]:
         store = self.glossary
@@ -194,29 +224,80 @@ def _translate_text(
     backends: Sequence[TranslationBackend],
     terms: Sequence[Term] = (),
     stats: TermStats | None = None,
+    verbatim: bool = False,
 ) -> str:
-    segments = split_sentences(text, lang=src)
-    if not segments:
-        return ""
-    sources = [segment.text for segment in segments]
-    current = sources
-    expected = len(current)
-    if terms and len(backends) == 1:
-        current = translate_with_terms(current, src, tgt, terms, backends[0].translate_batch, stats)
-        if len(current) != expected:
-            raise RuntimeError(f"后端返回了 {len(current)} 句，期望 {expected} 句")
-    else:
+    return _translate_blocks([Block(text, True)], src, tgt, backends, terms, stats, verbatim)
+
+
+def _chain(backends: Sequence[TranslationBackend]):
+    def translate_batch(sentences: list[str]) -> list[str]:
+        current = list(sentences)
         for backend in backends:
-            current = backend.translate_batch(current)
-            if len(current) != expected:
-                raise RuntimeError(f"后端返回了 {len(current)} 句，期望 {expected} 句")
+            if not current:
+                return []
+            output = backend.translate_batch(current)
+            if len(output) != len(current):
+                raise RuntimeError(f"后端返回了 {len(output)} 句，期望 {len(current)} 句")
+            current = output
+        return current
+
+    return translate_batch
+
+
+def _translate_blocks(
+    blocks: Sequence[Block],
+    src: str,
+    tgt: str,
+    backends: Sequence[TranslationBackend],
+    terms: Sequence[Term] = (),
+    stats: TermStats | None = None,
+    verbatim: bool = False,
+) -> str:
+    """翻译 ``blocks`` 里要翻译的块，照抄块原样拼回。所有块的句子一次批量送给后端。"""
+
+    units = [
+        split_sentences(block.text, lang=src, keep_spans=verbatim) if block.translate else []
+        for block in blocks
+    ]
+    sources = [segment.text for unit in units for segment in unit]
+    if not sources:
+        return "".join(block.text for block in blocks if not block.translate)
+    spans = [find_spans(source) for source in sources] if verbatim else None
+    expected = len(sources)
+    translate_batch = _chain(backends)
+    if (terms and len(backends) == 1) or (spans is not None and any(spans)):
+        current = translate_with_terms(
+            sources, src, tgt, terms if len(backends) == 1 else (), translate_batch, stats, spans
+        )
+    else:
+        current = translate_batch(sources)
+    if len(current) != expected:
+        raise RuntimeError(f"后端返回了 {len(current)} 句，期望 {expected} 句")
+    keeps = [
+        [source[span.start : span.end] for span in spans[index]] if spans else []
+        for index, source in enumerate(sources)
+    ]
     current = [
         restore_final_punct(source, output, tgt)
         for source, output in zip(sources, current, strict=True)
     ]
     if tgt == "zh":
-        current = [normalize_zh_punct(output) for output in current]
-    return join_segments(current, segments, tgt)
+        current = [
+            space_spans(normalize_zh_punct(output, keeps[index]), keeps[index])
+            for index, output in enumerate(current)
+        ]
+    pieces: list[str] = []
+    cursor = 0
+    for block, unit in zip(blocks, units, strict=True):
+        if not block.translate:
+            pieces.append(block.text)
+            continue
+        if not unit:
+            pieces.append(block.text)
+            continue
+        pieces.append(join_segments(current[cursor : cursor + len(unit)], unit, tgt))
+        cursor += len(unit)
+    return "".join(pieces)
 
 
 _FINAL_TO_CJK = {".": "。", "。": "。", "!": "！", "！": "！", "?": "？", "？": "？"}
@@ -226,6 +307,10 @@ _CJK_TARGETS = frozenset({"zh", "ja"})
 
 def _is_cjk(char: str) -> bool:
     return "\u4e00" <= char <= "\u9fff" or "\u3040" <= char <= "\u30ff"
+
+
+def _is_emoji(char: str) -> bool:
+    return ord(char) >= 0x1F000 or "\u2600" <= char <= "\u27bf" or char == "\ufe0f"
 
 
 def restore_final_punct(source: str, output: str, tgt: str) -> str:
@@ -246,8 +331,13 @@ def restore_final_punct(source: str, output: str, tgt: str) -> str:
     if mark == "." and src_tail.endswith(".."):
         return output  # 省略号
     last = out_tail[-1]
-    if tgt in _CJK_TARGETS and last in ".!?" and len(out_tail) > 1 and _is_cjk(out_tail[-2]):
-        # 中文译文句末却是半角标点（「保持一致.」）：换成全角
+    if (
+        tgt in _CJK_TARGETS
+        and last in ".!?"
+        and len(out_tail) > 1
+        and (_is_cjk(out_tail[-2]) or _is_emoji(out_tail[-2]))
+    ):
+        # 中文译文句末却是半角标点（「保持一致.」「准备 🚀.」）：换成全角
         return out_tail[:-1] + _FINAL_TO_CJK[last] + output[len(out_tail) :]
     if not (last.isalnum() or _is_cjk(last)):
         return output

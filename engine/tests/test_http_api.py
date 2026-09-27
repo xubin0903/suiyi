@@ -147,6 +147,7 @@ def test_health_reports_version_models_dir_and_uptime(tmp_path: Path) -> None:
         "glossary_user_entries",
         "glossary_error",
         "glossary_warnings",
+        "verbatim_enabled",
         "model_idle_unload_s",
         "max_loaded_models",
         "ocr_idle_unload_s",
