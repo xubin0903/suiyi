@@ -78,7 +78,7 @@
       "architecture": "marian-base",
       "weight_file": "pytorch_model.bin",
       "weight_bytes": 312087009,
-      "notes": "旧版 en→zh，已被 opus-mt-eng-zho-tc-big-2022-05-14 取代（Issue #83），不再属于 mvp。只在新模型未安装时作为回退使用（服务启动时告警并提示补装命令）。直连 en→zh，多目标中文。模型卡要求源文本句首加 >>id<<。本修订 vocab.json 中 >>cmn_Hans<< 的 id 为 5（保留号段）；同时存在 >>cmn<<（361）与 >>cmn_Hant<<（21）。简体默认用 >>cmn_Hans<<，与原文之间加一个空格，字段本身不含空格。模型卡列出的 gan/lzh/cjy 在该词表中没有对应 >>id<<。YAML 为 apache-2.0，正文未再写许可证，仓库内无 LICENSE 文件；权重发布说明见 upstream_license。Tatoeba-test.eng.zho BLEU 31.4、chrF 0.268（模型卡）。Marian base，d_model 512，6+6 层，8 头，FFN 2048。"
+      "notes": "旧版 en→zh，已被 opus-mt-eng-zho-tc-big-2022-05-14 取代（Issue #83），不再属于 mvp。只在新模型未安装时作为回退使用（服务启动时告警并提示补装命令）。装了时还用作表外极短句（1–5 个词）的兜底：按需加载、占常驻名额、最先被挤掉，译文过质量门才用（Issue #122）。直连 en→zh，多目标中文。模型卡要求源文本句首加 >>id<<。本修订 vocab.json 中 >>cmn_Hans<< 的 id 为 5（保留号段）；同时存在 >>cmn<<（361）与 >>cmn_Hant<<（21）。简体默认用 >>cmn_Hans<<，与原文之间加一个空格，字段本身不含空格。模型卡列出的 gan/lzh/cjy 在该词表中没有对应 >>id<<。YAML 为 apache-2.0，正文未再写许可证，仓库内无 LICENSE 文件；权重发布说明见 upstream_license。Tatoeba-test.eng.zho BLEU 31.4、chrF 0.268（模型卡）。Marian base，d_model 512，6+6 层，8 头，FFN 2048。"
     },
     {
       "id": "opus-mt-zho-jpn-tc-big-2022-07-28",

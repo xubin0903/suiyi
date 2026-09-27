@@ -296,7 +296,7 @@ def test_fallback_model_is_transient(models: Path) -> None:
         made[record.id] = backend
         return backend
 
-    translator = Translator(models, backend_factory=factory, glossary=None)
+    translator = Translator(models, backend_factory=factory, glossary=None, short_fallback=False)
     assert translator.translate("x.", "en", "zh").text == "这是旧模型。"
     assert "opus-mt-en-zh" in made
     assert translator.loaded_model_ids() == [TC_BIG]  # 旧模型没有常驻

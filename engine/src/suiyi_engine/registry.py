@@ -167,6 +167,8 @@ class ModelRegistry:
         self._factory = backend_factory or _default_factory(options)
         self._backends: dict[str, TranslationBackend] = {}
         self._last_used: dict[str, float] = {}
+        self._auxiliary: set[str] = set()
+        """按需加载的辅助模型（表外极短句兜底，#122）：要腾名额时最先被挤掉。"""
         self._lock = threading.Lock()
 
     def available_pairs(self) -> list[tuple[str, str, str]]:
@@ -250,6 +252,7 @@ class ModelRegistry:
         cached = self._backends.get(model_id)
         if cached is not None:
             self._last_used[model_id] = time.monotonic()
+            self._auxiliary.discard(model_id)  # 作为常驻路由用到了，不再当辅助模型先挤
             return cached
         with self._lock:
             cached = self._backends.get(model_id)
@@ -263,6 +266,45 @@ class ModelRegistry:
             self._last_used[model_id] = time.monotonic()
             return cached
 
+    def get_auxiliary(self, model_id: str, *, min_idle_s: float) -> TranslationBackend | None:
+        """按需加载辅助模型（#122）。
+
+        已加载就直接用；否则要有空名额，或者能挤掉一个辅助模型 / 超过 ``min_idle_s`` 秒没用过的
+        常驻模型，才加载；挤不出名额返回 ``None``（调用方用默认模型）。
+
+        辅助模型也受空闲卸载和 ``max_loaded`` 管；常驻模型要名额时辅助模型最先被挤掉。
+        """
+
+        cached = self._backends.get(model_id)
+        if cached is not None:
+            self._last_used[model_id] = time.monotonic()
+            return cached
+        with self._lock:
+            cached = self._backends.get(model_id)
+            if cached is None:
+                record = self._by_id.get(model_id)
+                if record is None:
+                    return None
+                if self.max_loaded > 0 and len(self._backends) >= self.max_loaded:
+                    now = time.monotonic()
+                    victim = min(self._backends, key=self._eviction_key)
+                    idle = now - self._last_used.get(victim, now)
+                    if victim not in self._auxiliary and idle < min_idle_s:
+                        return None
+                self._evict_for_new_locked()
+                cached = self._factory(record)
+                self._backends[model_id] = cached
+                self._auxiliary.add(model_id)
+            self._last_used[model_id] = time.monotonic()
+            return cached
+
+    def is_auxiliary(self, model_id: str) -> bool:
+        return model_id in self._auxiliary and model_id in self._backends
+
+    def _eviction_key(self, model_id: str) -> tuple[bool, float]:
+        # 辅助模型排在最前，其次最久没用的
+        return (model_id not in self._auxiliary, self._last_used.get(model_id, 0.0))
+
     def _evict_for_new_locked(self) -> None:
         """同时常驻的模型数有上限时（#96），先卸载最久没用的，再加载新模型，峰值不叠加。
 
@@ -272,8 +314,8 @@ class ModelRegistry:
         if self.max_loaded <= 0:
             return
         while len(self._backends) >= self.max_loaded:
-            victim = min(self._backends, key=lambda item: self._last_used.get(item, 0.0))
-            logger.info("同时常驻模型已达 %d 个，卸载最久没用的 %s", self.max_loaded, victim)
+            victim = min(self._backends, key=self._eviction_key)
+            logger.info("同时常驻模型已达 %d 个，卸载 %s", self.max_loaded, victim)
             self._unload_locked(victim)
 
     def unload_idle(self, idle_s: float, *, now: float | None = None) -> list[str]:
@@ -311,6 +353,7 @@ class ModelRegistry:
     def _unload_locked(self, model_id: str) -> None:
         backend = self._backends.pop(model_id)
         self._last_used.pop(model_id, None)
+        self._auxiliary.discard(model_id)
         close = getattr(backend, "close", None)
         if callable(close):
             close()

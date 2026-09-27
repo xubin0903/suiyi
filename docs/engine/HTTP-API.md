@@ -42,6 +42,8 @@ python -m suiyi_engine serve --port 18781 --models-dir C:\path\to\models --prelo
 | `--ocr-idle-unload` | 环境变量 `SUIYI_OCR_IDLE_UNLOAD`，否则与 `--model-idle-unload` 相同 | OCR 连续这么多秒没被用到就卸载（#96），下次 OCR 请求时自动重新加载。`0` 表示不卸载。#104 起 OCR 在独立子进程里运行（见下文「OCR 子进程」），卸载就是让子进程退出，onnxruntime / OpenCV / numpy 占的内存全部还给系统；下次 OCR 冷启动（拉起子进程 + 加载模型）约 1 s（Linux），Windows runner 上约 1.4–2 s（见 [性能基线](性能基线.md#104-ocr-独立子进程)） |
 | `--max-loaded-models` | 环境变量 `SUIYI_MAX_LOADED_MODELS`，否则 `2` | 同时常驻的翻译模型上限（#96）。要加载新模型而已满时，先卸载最久没用过的（LRU），再加载。`0` 表示不限；`1` 不允许（ja→zh 这类英文中转要同时用两个模型）。中英双向正好 2 个，切到第三个方向（如 en→ja）时会卸掉较久没用的那个，再切回来要重新加载（约 0.2–0.5 s） |
 
+**表外极短句兜底（#122）**：en→zh 里单独输入的一到五个词的句子（带 `.` / `?` / `!`）没命中 #89 的常用极短句表时，引擎先用同方向的 `opus-mt-en-zh`（装了才有）翻，过了质量门（无乱码、无重复、长度比例正常、无多余英文，多出的分句截掉）才用，否则用 tc-big 的译文。兜底模型**不常驻**：按需加载，占 `--max-loaded-models` 的名额，要名额时最先被挤掉，也参与空闲卸载；名额已满时，只有某个常驻模型超过 `SUIYI_SHORT_FALLBACK_EVICT_IDLE_S` 秒（默认 `60`）没用过才挤掉它，否则这一句直接用 tc-big（不排队、不加延迟）。桌面端默认预热 zh↔en，所以只有 zh→en 闲了 60 秒以上才会加载兜底模型；之后第一次 zh→en 要重新加载（约 +110 ms，见 [性能基线](性能基线.md#122-表外极短句兜底)）。`SUIYI_SHORT_FALLBACK=0` 关闭。启动日志多一行「表外极短句兜底：…」，`/health` 的 `short_fallback_*` 显示状态。
+
 OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无论是否加 `--preload-ocr`），服务照常启动，翻译接口不受影响，只有 `/ocr`、`/ocr_translate` 返回 503 `ocr_unavailable`。补齐模型后下一次请求就能用，不用重启。
 
 ### OCR 子进程（#104）
@@ -136,6 +138,9 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "model_idle_unload_s": 600,
   "ocr_idle_unload_s": 600,
   "max_loaded_models": 2,
+  "short_fallback_model": "opus-mt-en-zh",
+  "short_fallback_loaded": false,
+  "short_fallback_stats": {"candidates": 3, "used": 3, "trimmed": 0, "rejected": {}, "skipped": 0},
   "glossary_enabled": true,
   "glossary_builtin_entries": 610,
   "glossary_user_path": "C:\\Users\\me\\AppData\\Roaming\\suiyi\\glossary.tsv",
@@ -163,6 +168,9 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `model_idle_unload_s` | 翻译模型空闲卸载的秒数，`0` 表示不卸载。#92 新增 |
 | `ocr_idle_unload_s` | OCR 模型空闲卸载的秒数，`0` 表示不卸载。#96 新增 |
 | `max_loaded_models` | 同时常驻的翻译模型上限，`0` 表示不限（#96 新增）。`loaded_models` 不会超过这个数 |
+| `short_fallback_model` | 表外极短句兜底用的模型 id（`"opus-mt-en-zh"`）；没装或 `SUIYI_SHORT_FALLBACK=0` 时为 `null`。#122 新增 |
+| `short_fallback_loaded` | 兜底模型此刻是否以兜底身份加载在内存里（也会出现在 `loaded_models`）。#122 新增 |
+| `short_fallback_stats` | 进程内累计计数：`candidates`（送去兜底的句数）、`used`（过了质量门被采用）、`trimmed`（截掉多余分句，含 tc-big 的译文）、`rejected`（按原因：`empty` / `mojibake` / `repeat` / `length` / `latin`）、`skipped`（名额满且常驻模型都刚用过，直接用 tc-big）。不含原文。#122 新增 |
 | `uptime_s` | 自开始监听起的秒数，保留 1 位小数 |
 | `ocr_loaded` | OCR 模型是否已加载进内存（`--preload-ocr` 成功或第一次 OCR 请求成功之后为 `true`）。#53 新增；#96 起 OCR 空闲超过 `ocr_idle_unload_s` 秒会被卸载，这里变回 `false`，下次 OCR 请求重新加载。#104 起含义不变，只是模型在 OCR 子进程里：子进程在运行且模型已加载时为 `true`，子进程退出（空闲退出、崩溃）后为 `false` |
 | `ocr_worker_pid` | OCR 子进程的 pid，没有子进程时为 `null`。#104 新增；老版引擎没有这个字段 |
