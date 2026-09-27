@@ -46,6 +46,8 @@ OCR 依赖（`engine[ocr]`）没装、或 `<models_dir>/ocr/` 缺模型时（无
 
 **客户端请用环境变量 `SUIYI_GLOSSARY` / `SUIYI_USER_GLOSSARY` 传术语表设置**：老版引擎会忽略不认识的环境变量，但遇到不认识的命令行参数会启动失败。
 
+**带 AMX 的 CPU（#103）**：引擎一导入就检测 AMX；启动前没设 `MKL_ENABLE_INSTRUCTIONS` 且检测到 AMX 时，在加载 CTranslate2 之前把它设为 `AVX512_E1`，避开 MKL 的 AMX int8 路径在多线程 / CPU 争用时译文不确定甚至乱码的问题（带 AMX 的 Xeon KVM 虚拟机上实测，速度不变）。启动前设了就用设的值（想强制用 AMX 可设 `AVX512_E4`）；没有 AMX 的 CPU 上不设。启动日志多一行 `CPU：检测到 AMX，已设 MKL_ENABLE_INSTRUCTIONS=AVX512_E1（…）`（或「使用用户设置的…」「未检测到 AMX，MKL 指令集不限制」），`/health` 的 `cpu_amx` / `mkl_enable_instructions` / `mkl_enable_instructions_source` 显示结果。客户端不用做任何事。
+
 进程起来后，标准输出有这几行：监听 URL、模型目录、可用语向数量，实际使用的 `intra_threads`、`beam_size`、`max_batch_size`，「语种检测已预热 N ms」，模型空闲卸载设置（「模型空闲卸载 600 秒」或「模型空闲卸载 关闭」，#92），以及术语表状态（「术语保护开启：内置 N 条，用户 M 条（路径）」）。清单推荐的模型没装、正在用同方向的旧模型时（例如只装了旧的 `opus-mt-en-zh`），stderr 多一行告警和补装命令，服务照常启动。可用语向只统计已经安装、现在就能翻译的方向（含英文中转）。这三个解码参数必须是大于等于 1 的整数，否则在开始监听前以非零状态退出。
 
 ### 端口占用判断
@@ -125,6 +127,9 @@ Invoke-RestMethod http://127.0.0.1:18780/health
   "glossary_error": null,
   "glossary_warnings": ["第 12 行：缺少目标词（源词和目标词之间要用 Tab 分隔）"],
   "verbatim_enabled": true,
+  "cpu_amx": false,
+  "mkl_enable_instructions": null,
+  "mkl_enable_instructions_source": "unset",
   "ocr_error": {
     "message": "缺少 OCR 模型：PP-OCRv6_det_small、ch_ppocr_mobile_v2.0_cls_mobile、PP-OCRv6_rec_small（目录 /path/to/models/ocr）。请执行 python scripts/download_ocr_models.py download 下载 OCR 模型",
     "reason": "models_missing",
@@ -151,6 +156,9 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 | `glossary_error` | 文件级错误原因（不是 UTF-8、读不了、超过 1 MiB 或 5000 条；内置表加载失败）。没有错误时为 `null`。出错时只用内置表，翻译照常。#83 新增 |
 | `glossary_warnings` | 用户术语表的行级问题，最多 20 条，形如 `"第 12 行：缺少目标词…"`；这些行被跳过，其余照常生效。#83 新增 |
 | `verbatim_enabled` | 服务端默认是否开启不翻译片段保护（`--verbatim` / `SUIYI_VERBATIM` 的结果）。不反映单次请求的 `verbatim` 覆盖。老版引擎没有这个字段，客户端应把缺失当作「不支持」。#101 新增 |
+| `cpu_amx` | 启动时是否检测到 CPU 和操作系统都支持 AMX（Linux 看 `/proc/cpuinfo` 的 `amx_tile` / `amx_int8`，Windows 看 `GetEnabledXStateFeatures` 的 XTILECFG / XTILEDATA 位；其他系统为 `false`）。#103 新增 |
+| `mkl_enable_instructions` | 引擎进程里 `MKL_ENABLE_INSTRUCTIONS` 的实际取值，即 MKL 的指令集上限；没设时为 `null`（MKL 用 CPU 支持的最高指令集）。#103 新增 |
+| `mkl_enable_instructions_source` | 取值来源：`auto`（检测到 AMX，引擎自动设为 `AVX512_E1`，避开 AMX int8 结果不稳定）、`user`（启动前用户已设，引擎不覆盖）、`unset`（没检测到 AMX，不设）。#103 新增 |
 | `ocr_error` | 最近一次加载 OCR 失败的原因，形状同 503 `ocr_unavailable` 的 `details` 再加 `message`：`reason`、`missing_models`、`message`。没有失败或还没尝试加载时为 `null`。加了 `--preload-ocr` 时启动就会尝试，所以缺模型能在启动后立刻从这里看到；不加时要等第一次 OCR 请求。加载成功后清空。#53 新增 |
 
 翻译在线程池里执行，并且进程内同时只跑一路翻译。OCR 也在线程池里执行，有自己的一把锁，与翻译互不阻塞。`/health` 两把锁都不进，长文本翻译或长 OCR 时它仍应在 200 毫秒内返回。

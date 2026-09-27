@@ -19,7 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, StrictBool
 
-from suiyi_engine import __version__
+from suiyi_engine import __version__, cpu_isa
 from suiyi_engine.errors import UnsupportedPairError
 from suiyi_engine.registry import normalize_lang
 from suiyi_engine.translator import TranslationResult
@@ -208,6 +208,7 @@ def create_app(
                 "ocr_error": app.state.ocr.health(),
                 **glossary_status(current),
                 "verbatim_enabled": verbatim_status(current),
+                **cpu_isa.current().health(),
                 "model_idle_unload_s": app.state.settings.model_idle_unload_s,
                 "ocr_idle_unload_s": app.state.settings.ocr_idle_unload_s,
                 "max_loaded_models": int(getattr(current.registry, "max_loaded", 0) or 0),

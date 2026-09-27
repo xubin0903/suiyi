@@ -12,7 +12,7 @@ import socket
 import sys
 from pathlib import Path
 
-from suiyi_engine import langdetect, memory
+from suiyi_engine import cpu_isa, langdetect, memory
 from suiyi_engine.api import DEFAULT_MAX_IMAGE_BYTES, ApiSettings, create_app, glossary_status
 from suiyi_engine.api_ocr import OcrProvider, OcrUnavailable
 from suiyi_engine.errors import UnsupportedPairError
@@ -527,6 +527,15 @@ def _print_startup(
     )
     if detector_ms is not None:
         print(f"语种检测已预热 {detector_ms:.0f} ms", flush=True)
+    isa = cpu_isa.current()
+    print(isa.describe(), flush=True)
+    if isa.late:
+        print(
+            f"警告：设置 {cpu_isa.ENV} 前 ctranslate2 已被导入，可能不生效；"
+            f"请在启动前设置环境变量 {cpu_isa.ENV}={isa.value}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _print_glossary(translator: Translator) -> None:
