@@ -155,6 +155,7 @@ M3 主流程（#58）：框选快捷键 `hotkey.region` 或托盘「框选翻译
 ```
 TranslateRegionAsync(trigger)
   → 遮罩已显示？忽略（RegionCaptureTrigger 同样忽略）
+  → 服务 Ready？IOcrPrewarmer.Prewarm()：后台预热 OCR 子进程，不等结果（#109）
   → 取消进行中的请求（复制翻译或上一次框选），隐藏浮窗
   → IRegionCapture：Esc / 右键取消 → 结束，不弹浮窗；截屏异常 → 托盘提示「框选截屏失败，请重试（详情见日志）」
   → 服务未就绪？浮窗「正在准备翻译服务…」（围绕选区），就绪后自动继续
@@ -184,6 +185,7 @@ TranslateRegionAsync(trigger)
 - **「重试」不会点了没反应：** 编排器通过 `PopupViewModel.SetRetryAvailability(text, ocr)` 告知两种来源是否还有可重发的请求，`CanRetry` 按当前 `Mode` 取值，没有截图（或没有上一次文本）时隐藏「重试」。
 - **关闭浮窗即取消**进行中或等待服务的框选请求；托盘左键重新显示时是可重试的「已取消」（用同一张截图重发），关闭时结果已到则显示结果（见[主流程](#主流程)「忙碌时关闭」）。
 - **暂停监听不影响框选**（Issue 要求）。
+- **OCR 预热（#109）：** 按下快捷键（或托盘入口）、遮罩出现前，后台检查 `/health`，OCR 子进程已空闲退出（`stopped`）时发一张 32×32 白图 `/ocr` 把它拉起；不等结果、失败静默、5 s 节流、老引擎不预热。构造参数 `ocrPrewarmer`（可选）。详见[与引擎通信 · OCR 预热](#ocr-预热109)。
 - **目标语言：** 与复制翻译一样读 `primaryTarget` / `secondaryTarget`，识别出的主要语种等于主目标时由 `OcrTranslationService` 改译为次目标。
 - **错误：** OCR 错误码经 `PopupErrorMapper` → `OcrResultMapper.MapError`：`image_too_large`「选区过大…」（不可重试）、`invalid_image` / `unsupported_media_type`「截图无法识别，请重新框选」、`ocr_unavailable`「OCR 模型未安装：…」+ 第二行修复方法（可重试，不触发重启，见下）；`Unavailable` / 超时 / 服务 Failed 与复制翻译一致（催健康检查、30 s 就绪等待、重试重启）。
 - **OCR 不可用（`ocr_unavailable`）与 `/health.ocr_error`：** 原因取 503 `details.reason`，缺时取最近一次 `/health.ocr_error.reason`（`EngineClient.KnownOcrError`，由监管器就绪探测与看门狗的 `/health` 刷新，成功识别或 `Invalidate()` 后清空；缺失模型列表同理补齐）。浮窗第一行说明问题、第二行（`PopupError.Hint`）给命令：`models_missing` / 未知原因「OCR 模型未安装：…」+「请在随译仓库根目录运行 `python scripts\download_ocr_models.py download` 下载，完成后点「重试」」（服务端不缓存失败，补齐模型后重试即可，不用重启）；`models_invalid`「OCR 模型文件不完整或已损坏」+ 同一条命令重新下载（脚本会重下校验不过的文件）；`dependency_missing`「OCR 组件未安装」+「运行 `pip install -e "engine[ocr]"`，然后在托盘点「重启翻译服务」」；`manifest_unavailable`「OCR 模型清单不可用」+「请更新随译源码（git pull）后重启随译」。服务端 `message` 含服务端路径，只写日志不显示。服务就绪时若 `ocr_error` 非空，编排器写一行 Warning（只记 `reason` 与模型 id）。复制翻译的错误不受 `ocr_error` 影响。
@@ -533,7 +535,45 @@ OCR 请求（暂无 OCR 性能基线，等 #52 后按 P95 调整）：
 - 调用方取消（新请求取代、用户关闭浮窗）不重试；超时与取消同时发生按取消处理。
 - 服务端翻译是串行的（翻译锁），第一次请求超时后服务端仍在做，重发的请求排在它后面；第一次已把模型加载好，重发一般很快返回。
 - 最坏等待：复制翻译短句 1.5 + 10 s，冷方向 10 + 10 s；框选 15 + 30 s，冷方向 30 + 30 s。期间浮窗一直是「正在翻译 / 正在识别」，用户可以关闭浮窗取消。
-- `/ocr`（只识别）不重试：服务端不卸载 OCR 模型。
+- `/ocr`（只识别）不重试（目前只有 #109 的 OCR 预热用它，失败本来就忽略）。
+
+### OCR 预热（#109）
+
+引擎 #104 起 OCR 放在独立子进程里，空闲 `ocr_idle_unload_s` 秒（默认跟随 `model_idle_unload_s`，即 600）整个退出；之后第一次框选要先拉起子进程、加载模型，多等 0.6–2.9 s（Linux 开发机实测，Windows 以实机为准）。`Engine/OcrPrewarmer.cs` 在用户**按下框选快捷键（或点托盘「框选翻译」）时**后台预热，趁用户拖选区的一两秒把这段等待消化掉。
+
+**入口：** `TranslateFlowCoordinator.TranslateRegionAsync` 在确认遮罩没有显示之后、显示遮罩之前调用 `IOcrPrewarmer.Prewarm()`；只在服务 `Ready` 时调（服务没就绪时正式请求本来就要等）。`Prewarm()` 同步部分只做节流判断，`/health` 和预热请求在 `Task.Run` 里进行，从不等结果、从不抛出；预热器本身出错也只写一行 Warning，框选照常。
+
+**用哪个接口：** 引擎没有专门的预热 HTTP 接口（子进程协议里的 `warmup` 只给 `--preload-ocr` 用）。客户端 `POST /ocr` 一张硬编码的 32×32 白色 PNG（95 字节）：与引擎自己的 `OcrEngine.warmup()`（160×48 白图）等价，已热时服务端约 5 ms、识别结果为空，只多一行不含内容的服务日志。长期建议引擎加 `POST /ocr/warmup`（见 #109）。
+
+**决策（`OcrPrewarmer.Decide`，纯函数，看后台现取的 `/health`）：**
+
+| `/health` | 结论 |
+|------|------|
+| 没有 `ocr_worker_state`（#104 之前的引擎） | 不预热（老引擎 OCR 常驻，`--preload-ocr` 已在启动时加载） |
+| `ocr_error.reason` 是 `dependency_missing` / `models_missing` / `models_invalid` / `manifest_unavailable` | 不预热（必然失败；框选时浮窗照常提示下载命令） |
+| `stopped` | **预热**（包括 `worker_crashed` / `worker_timeout` 之后：下次请求会重启子进程） |
+| `starting` / `ready` / `busy` | 不预热（已热或正在起来） |
+| `in_process`（`SUIYI_OCR_WORKER=0`） | `ocr_loaded` 为 `true` 时不预热，否则预热 |
+| 其他值 | 不预热 |
+
+不直接用缓存的 `KnownOcrLoaded`：它由看门狗每 10 s 刷新，子进程刚退出时仍是 `true`。
+
+**节流：** 同一时间最多一个预热在进行；距上一次启动不到 5 s（`OcrPrewarmer.DefaultCooldown`）不再检查。遮罩显示期间的重复触发在更早一步就被忽略，不会走到预热。
+
+**失败：** 超时（沿用 `/ocr` 超时，冷时 30000 ms）、5xx、连接失败、取消一律吞掉；`/health` 失败不发请求也不写日志。只有真的发了预热请求才写一行 Info：`框选预热：OCR 子进程为 stopped，已预热（639 ms）` 或 `框选预热失败（已忽略）：kind=Timeout 用时 30000 ms`。预热成功后 `KnownOcrLoaded` 变为 `true`，正式 `/ocr_translate` 用热超时 15000 ms。
+
+**和正式请求的关系：** 不改变正式请求。服务端 OCR 串行执行，用户选得很快时正式请求排在预热后面，等的是同一次冷启动，不会更慢。
+
+**代价：** 按了快捷键又 Esc 也会预热，子进程多留 `ocr_idle_unload_s`（约 160 MiB，见引擎 #104）；只预热 OCR，不预热翻译模型（翻译模型冷启动由 #94 的超时规则兜底）。
+
+实测（Linux 开发机，`--ocr-idle-unload 8`，`zh_web_01.png`，翻译模型已热；`EngineOcrPrewarmLiveTests` 与脚本各测几轮）：
+
+| 情况 | 首次 `/ocr_translate` 客户端耗时 |
+|------|------|
+| 热（子进程在） | 约 400–450 ms |
+| 子进程退出后、无预热 | 1482–4049 ms（8 次，中位约 2.4 s） |
+| 子进程退出后、预热 + 2 s 选框 | 446–1293 ms（8 次，6 次在 470 ms 内；超过的两次是预热本身超过 2 s） |
+| 预热后只隔 0.3 s 就发正式请求 | 与无预热相当（排在预热后面） |
 
 ### 错误
 

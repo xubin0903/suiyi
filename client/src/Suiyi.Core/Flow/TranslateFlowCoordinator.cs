@@ -78,6 +78,7 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
     /// <param name="options">参数。</param>
     /// <param name="ocr">框选翻译服务（#56）；为 <see langword="null"/> 时不启用框选翻译。</param>
     /// <param name="region">框选入口（#55）；为 <see langword="null"/> 时不启用框选翻译。</param>
+    /// <param name="ocrPrewarmer">框选前的 OCR 预热（#109）；为 <see langword="null"/> 时不预热。</param>
     public TranslateFlowCoordinator(
         ITranslationService translator,
         IEngineStatus engine,
@@ -89,7 +90,8 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         Action<Action>? afterRender = null,
         TranslateFlowOptions? options = null,
         IOcrTranslationService? ocr = null,
-        RegionCaptureTrigger? region = null)
+        RegionCaptureTrigger? region = null,
+        IOcrPrewarmer? ocrPrewarmer = null)
     {
         _translator = translator ?? throw new ArgumentNullException(nameof(translator));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
@@ -105,6 +107,7 @@ public sealed partial class TranslateFlowCoordinator : IDisposable
         _readyWait = new OneShotTimer(_timeProvider, _dispatch);
         _ocr = ocr;
         _region = region;
+        _ocrPrewarmer = ocrPrewarmer;
         if (_region is not null)
         {
             _region.Failed += OnRegionCaptureFailed;

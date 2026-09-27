@@ -91,7 +91,9 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
     private async Task<EngineStateChangedEventArgs> CrashAsync(int exitCode = 1)
     {
         var restarting = WaitForState(EngineState.Restarting);
-        var parked = _time.NextTimer();
+
+        // 只认进入 Restarting 之后创建的计时器（退避）：刚就绪时看门狗计时器可能还没创建，NextTimer() 会被它提前满足（#115）。
+        var parked = _time.WaitForTimer(() => _supervisor.State == EngineState.Restarting);
         _launcher.Last.Exit(exitCode);
         var e = await restarting;
         await parked;
@@ -205,7 +207,7 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
     {
         await StartReadyAsync();
 
-        await Task.Run(() => SpinWait.SpinUntil(() => _endpoint.WarmUps > 0, TimeSpan.FromSeconds(5)));
+        await _endpoint.WarmedUp;
         Assert.Equal(1, _endpoint.WarmUps);
     }
 
@@ -414,8 +416,7 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
         _endpoint.Script(false); // 重启后的外部检查：端口上没有别的服务
         var ready = WaitForState(EngineState.Ready);
         await _supervisor.RestartAsync();
-        await ready;
-        await Task.Run(() => SpinWait.SpinUntil(() => _launcher.Started.Count == 5, TimeSpan.FromSeconds(5)));
+        await ready; // Ready 由新进程的启动探测发出，此时它已经启动
 
         Assert.Equal(1, current.KillCount);
         Assert.Equal(5, _launcher.Started.Count);
@@ -450,8 +451,10 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
         _endpoint.Script(false); // 重启后的外部检查：端口上没有别的服务
         _endpoint.Healthy = false; // 新进程迟迟不就绪：重启一直「进行中」
 
+        // 等循环停在新进程的启动探测计时器上；只看「进程已启动」不够，推进时钟可能早于计时器创建而落空（#115）。
+        var probing = _time.WaitForTimer(() => _launcher.Started.Count == before + 1);
         await _supervisor.RestartAsync();
-        await Task.Run(() => SpinWait.SpinUntil(() => _launcher.Started.Count == before + 1, TimeSpan.FromSeconds(5)));
+        await probing;
         Assert.True(_supervisor.IsRestarting);
         Assert.Equal(EngineState.Starting, _supervisor.State);
 
@@ -476,8 +479,11 @@ public sealed class EngineSupervisorTests : IAsyncDisposable
         _endpoint.Script(false);
         _endpoint.Healthy = false; // 推进时钟前不会就绪，保证所有调用都落在同一次重启里
 
+        // 等循环停在新进程的启动探测计时器上再推进时钟（#115）：只等「进程已启动」时，Advance 可能发生在探测计时器创建之前，
+        // 计时器随后按推进后的时间重新计时，再也等不到 Ready。
+        var probing = _time.WaitForTimer(() => _launcher.Started.Count == before + 1);
         await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => Task.Run(_supervisor.RestartAsync)));
-        await Task.Run(() => SpinWait.SpinUntil(() => _launcher.Started.Count == before + 1, TimeSpan.FromSeconds(5)));
+        await probing;
 
         var ready = WaitForState(EngineState.Ready);
         _endpoint.Healthy = true;

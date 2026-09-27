@@ -13,10 +13,40 @@ internal sealed class ObservableTimeProvider : FakeTimeProvider
     /// <summary>在执行动作之前取得，动作之后等待：下一次创建计时器时完成。</summary>
     public Task NextTimer() => Volatile.Read(ref _next).Task.WaitAsync(TimeSpan.FromSeconds(10));
 
+    private readonly List<(Func<bool> Condition, TaskCompletionSource Done)> _waiters = [];
+
+    /// <summary>
+    /// 在执行动作之前取得，动作之后等待：第一个「创建时 <paramref name="condition"/> 成立」的计时器创建后完成（#115）。
+    /// 条件在创建计时器的线程上、计时器注册之后判断，所以完成时推进时钟一定能命中它。
+    /// 用于区分「推进前不能落空」的那个计时器与之前创建的其他计时器（例如停止进程时的等待计时器、就绪后的看门狗计时器）。
+    /// </summary>
+    public Task WaitForTimer(Func<bool> condition)
+    {
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_waiters)
+        {
+            _waiters.Add((condition, done));
+        }
+
+        return done.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
         var timer = base.CreateTimer(callback, state, dueTime, period);
         Interlocked.Exchange(ref _next, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+        lock (_waiters)
+        {
+            for (var i = _waiters.Count - 1; i >= 0; i--)
+            {
+                if (_waiters[i].Condition())
+                {
+                    _waiters[i].Done.TrySetResult();
+                    _waiters.RemoveAt(i);
+                }
+            }
+        }
+
         return timer;
     }
 
@@ -140,6 +170,7 @@ internal sealed class FakeEndpoint : IEngineEndpoint
     private readonly ConcurrentQueue<bool> _scripted = new();
     private int _probes;
     private int _warmUps;
+    private readonly TaskCompletionSource _warmedUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>脚本用完后的默认结果。</summary>
     public bool Healthy { get; set; }
@@ -147,6 +178,9 @@ internal sealed class FakeEndpoint : IEngineEndpoint
     public int Probes => Volatile.Read(ref _probes);
 
     public int WarmUps => Volatile.Read(ref _warmUps);
+
+    /// <summary>第一次预热请求到达时完成（最多等 10 秒）。</summary>
+    public Task WarmedUp => _warmedUp.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
     public void Script(params bool[] results)
     {
@@ -166,6 +200,7 @@ internal sealed class FakeEndpoint : IEngineEndpoint
     public Task WarmUpAsync(CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _warmUps);
+        _warmedUp.TrySetResult();
         return Task.CompletedTask;
     }
 }
