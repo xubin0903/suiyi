@@ -50,7 +50,7 @@ public sealed partial class EngineClient
     /// <param name="source">原文语种或 <c>"auto"</c>。</param>
     /// <param name="target">目标语种。</param>
     /// <param name="fallbackTarget">次目标；没有时为 <see langword="null"/>。</param>
-    /// <remarks>#94：与 <see cref="GetTimeout"/> 一样，可能已被空闲卸载的翻译模型按未加载处理（OCR 模型服务端不卸载）。</remarks>
+    /// <remarks>#94：与 <see cref="GetTimeout"/> 一样，可能已被空闲卸载的翻译模型按未加载处理（OCR 子进程空闲退出由 #109 的 <see cref="OcrPrewarmer"/> 预热，超时仍按 <c>ocr_loaded</c>）。</remarks>
     public TimeSpan GetOcrTranslateTimeout(string source, string target, string? fallbackTarget) =>
         TimeSpan.FromMilliseconds(ComputeOcrTranslateTimeout(source, target, fallbackTarget).Effective);
 

@@ -37,6 +37,10 @@ public sealed record HealthResponse
     [JsonPropertyName("model_idle_unload_s")]
     public double? ModelIdleUnloadSeconds { get; init; }
 
+    /// <summary>OCR 子进程空闲多少秒后退出（#104，默认 600），0 表示不退出。旧版引擎没有该字段时为 <see langword="null"/>。</summary>
+    [JsonPropertyName("ocr_idle_unload_s")]
+    public double? OcrIdleUnloadSeconds { get; init; }
+
     /// <summary>
     /// OCR 模型是否已加载（#53）。旧版引擎没有该字段时为 <see langword="null"/>。
     /// 只表示是否已加载，不表示 OCR 可用；加载失败的原因见 <see cref="OcrError"/>。
@@ -50,6 +54,17 @@ public sealed record HealthResponse
     /// </summary>
     [JsonPropertyName("ocr_error")]
     public OcrHealthError? OcrError { get; init; }
+
+    /// <summary>OCR 子进程的 pid（#104），没有子进程时为 <see langword="null"/>；老版引擎没有该字段，同样为 <see langword="null"/>。</summary>
+    [JsonPropertyName("ocr_worker_pid")]
+    public int? OcrWorkerPid { get; init; }
+
+    /// <summary>
+    /// OCR 子进程状态（#104）：<c>stopped</c>（没有子进程）、<c>starting</c>（模型加载中）、<c>ready</c>（空闲）、<c>busy</c>（识别中）；
+    /// 引擎用 <c>SUIYI_OCR_WORKER=0</c> 退回进程内 OCR 时为 <c>in_process</c>。老版引擎没有该字段时为 <see langword="null"/>（见 <see cref="OcrWorkerStates"/>）。
+    /// </summary>
+    [JsonPropertyName("ocr_worker_state")]
+    public string? OcrWorkerState { get; init; }
 
     // ---- 术语保护（#83 约定第 3 节）：平铺字段；旧版引擎没有这些字段时均为 null ----
 
