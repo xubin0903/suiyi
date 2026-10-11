@@ -76,7 +76,9 @@ _REPO_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _ZIP_SOURCE_TYPE = "opus-mt-zip"
 # legacy：已被取代、只留作回退的旧模型（#83），不属于任何 --tier，需要时用 --ids 单独转换。
-_TIERS = ("mvp", "optional", "legacy")
+# bundled：默认随包下载、但不是该方向主模型
+# （#89：opus-mt-en-zh 短句兜底）；`--tier mvp` 会一并转换。
+_TIERS = ("mvp", "optional", "legacy", "bundled")
 _ZIP_URL_PREFIX = "https://object.pouta.csc.fi/"
 _SPM_FILES = ("source.spm", "target.spm")
 _VOCAB_FILES = ("vocab.json", "source.vocab", "target.vocab")
@@ -178,7 +180,9 @@ def select_models(
         return [by_id[model_id] for model_id in ids]
     if tier is None:
         raise ConvertError("请指定 --ids 或 --tier", code=2)
-    selected = [entry for entry in models if entry["tier"] == tier]
+    # mvp 安装包默认带上 bundled（短句兜底等），不把 bundled 算进「主模型」名额。
+    wanted = {"mvp", "bundled"} if tier == "mvp" else {tier}
+    selected = [entry for entry in models if entry["tier"] in wanted]
     if not selected:
         raise ConvertError(f"清单中没有 tier={tier} 的模型", code=2)
     return selected
@@ -605,7 +609,7 @@ def _validate_model_entry(entry: object, index: int) -> None:
     if token is not None and not isinstance(token, str):
         raise ConvertError(f"{model_id} 的 src_prefix_token 必须是字符串或 null", code=2)
     if entry["tier"] not in _TIERS:
-        raise ConvertError(f"{model_id} 的 tier 必须是 mvp、optional 或 legacy", code=2)
+        raise ConvertError(f"{model_id} 的 tier 必须是 mvp、optional、legacy 或 bundled", code=2)
     if not isinstance(entry["notes"], str):
         raise ConvertError(f"{model_id} 的 notes 必须是字符串", code=2)
 

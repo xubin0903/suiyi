@@ -631,7 +631,7 @@ def test_serve_reads_glossary_env_vars(
 NEW_EN_ZH = "opus-mt-eng-zho-tc-big-2022-05-14"
 
 
-def test_manifest_prefers_tc_big_and_keeps_old_en_zh_as_legacy() -> None:
+def test_manifest_prefers_tc_big_and_keeps_old_en_zh_as_bundled() -> None:
     from suiyi_engine.registry import default_manifest_path, load_manifest
 
     manifest = load_manifest(default_manifest_path())
@@ -640,7 +640,7 @@ def test_manifest_prefers_tc_big_and_keeps_old_en_zh_as_legacy() -> None:
     assert manifest.known["opus-mt-en-zh"] == ("en", "zh")
     raw = json.loads(default_manifest_path().read_text(encoding="utf-8"))
     tiers = {entry["id"]: entry["tier"] for entry in raw["models"]}
-    assert tiers[NEW_EN_ZH] == "mvp" and tiers["opus-mt-en-zh"] == "legacy"
+    assert tiers[NEW_EN_ZH] == "mvp" and tiers["opus-mt-en-zh"] == "bundled"
     entry = next(item for item in raw["models"] if item["id"] == NEW_EN_ZH)
     assert entry["license"] == "CC-BY-4.0" and entry["src_prefix_token"] == ">>cmn_Hans<<"
 
@@ -674,13 +674,13 @@ def test_new_en_zh_wins_when_both_are_installed(tmp_path: Path) -> None:
     assert translator.registry.outdated() == []
 
 
-def test_convert_accepts_legacy_tier_but_mvp_skips_it() -> None:
+def test_convert_mvp_includes_bundled_en_zh() -> None:
     from suiyi_engine.registry import default_manifest_path
     from suiyi_engine.tools import convert
 
     manifest = convert.load_manifest(default_manifest_path())
     mvp = {entry["id"] for entry in convert.select_models(manifest, None, "mvp")}
-    assert NEW_EN_ZH in mvp and "opus-mt-en-zh" not in mvp
+    assert NEW_EN_ZH in mvp and "opus-mt-en-zh" in mvp
     assert [e["id"] for e in convert.select_models(manifest, ["opus-mt-en-zh"], None)] == [
         "opus-mt-en-zh"
     ]
