@@ -138,7 +138,7 @@ def test_pivot_route_length_is_two_and_keeps_sentence_alignment(tmp_path: Path) 
 
 def test_manifest_direct_is_not_replaced_by_english_pivot(tmp_path: Path) -> None:
     _install(tmp_path, "opus-mt-zh-en", "zh", "en")
-    _install(tmp_path, "opus-mt-eng-jpn-2021-02-18", "en", "ja")
+    _install(tmp_path, "fugumt-en-ja", "en", "ja")
     log: list[str] = []
     translator = _translator(tmp_path, log, {})
 
@@ -201,7 +201,7 @@ def test_unlisted_pair_reports_manifest_hop_ids(tmp_path: Path) -> None:
     with pytest.raises(UnsupportedPairError) as exc_info:
         translator.translate("안녕하세요.", "ko", "ja")
 
-    assert exc_info.value.missing_ids == ("opus-mt-ko-en", "opus-mt-eng-jpn-2021-02-18")
+    assert exc_info.value.missing_ids == ("opus-mt-ko-en", "fugumt-en-ja")
 
 
 def test_src_equals_tgt_returns_input_without_loading(tmp_path: Path) -> None:

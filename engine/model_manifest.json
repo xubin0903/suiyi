@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "checked_on": "2026-09-26",
+  "checked_on": "2026-10-11",
   "language_codes": "ISO-639-1",
   "weight_note": "weight_bytes 是所钉修订上 pytorch_model.bin 的字节数，不是 CTranslate2 int8 体积。同一仓库里的 tf/flax/rust 文件是另一份权重，不要相加。",
-  "license_policy": "纳入模型的 license 一律写 CC-BY-4.0：OPUS-MT-train models/README.md 将预训练权重声明为 CC BY 4.0；weights_source 为上游 Marian zip 的条目，zip 内自带 CC BY 4.0 全文 LICENSE。hf_card_license 保留 Hugging Face 模型卡 YAML，二者不一致时仍按 CC-BY-4.0 署名。禁止 NC。",
+  "license_policy": "默认纳入 CC-BY-4.0 的 OPUS-MT / Tatoeba-MT 权重（OPUS-MT-train models/README.md 或 zip 内 LICENSE）。例外：en→ja 默认用 staka/fugumt-en-ja，许可证为 CC-BY-SA-4.0（模型卡 YAML）；int8 转换属于改编，须以同一 SA 许可随模型目录分发并署名，不要求把仓库代码从 MIT 改成 SA，也不把 SA 传染到其他 BY-4.0 权重。禁止 NC。hf_card_license 保留模型卡原文。",
   "models": [
     {
       "id": "opus-mt-zh-en",
@@ -138,41 +138,23 @@
       "notes": "直连 ja→en，亦是 ja→zh 中转的第一跳。模型卡：transformer-align，源 ja、目标 en，无目标语标记。Tatoeba.ja.en BLEU 41.7、chrF 0.589。YAML 为 apache-2.0，正文未写许可证，仓库内无 LICENSE 文件。Marian base 尺寸：d_model 512，6+6 层，8 头，FFN 2048，词表 60716。"
     },
     {
-      "id": "opus-mt-eng-jpn-2021-02-18",
+      "id": "fugumt-en-ja",
       "src": "en",
       "tgt": "ja",
-      "hf_repo": null,
-      "hf_revision": null,
-      "weights_source": {
-        "type": "opus-mt-zip",
-        "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-jpn/opus-2021-02-18.zip",
-        "sha256": "921cbab703a5ed7b2df1c35b72c0e260aefca698ce2bd6c077833f8dd2af8fce",
-        "bytes": 289140267,
-        "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
-        "vocab_files": [
-          "opus.spm32k-spm32k.vocab.yml"
-        ],
-        "copy_files": [
-          "source.spm",
-          "target.spm",
-          "LICENSE",
-          "README.md"
-        ]
-      },
-      "model_card": null,
-      "upstream_readme_url": "https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/master/models/eng-jpn/README.md",
-      "license": "CC-BY-4.0",
-      "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
-      "hf_card_license": null,
-      "upstream_license": "CC-BY-4.0",
-      "upstream_license_url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-jpn/opus-2021-02-18.zip",
-      "attribution": "Helsinki-NLP Tatoeba-MT eng-jpn opus-2021-02-18 (zip sha256 921cbab703a5ed7b2df1c35b72c0e260aefca698ce2bd6c077833f8dd2af8fce); Tiedemann & Thottingal, EAMT 2020; Tiedemann, WMT 2020; CC-BY-4.0",
+      "hf_repo": "staka/fugumt-en-ja",
+      "hf_revision": "fbb91252110cf97d90291eb808629ab0b10f7928",
+      "license": "CC-BY-SA-4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/legalcode",
+      "hf_card_license": "cc-by-sa-4.0",
+      "upstream_license": "CC-BY-SA-4.0",
+      "upstream_license_url": "https://huggingface.co/staka/fugumt-en-ja",
+      "attribution": "FuguMT fugumt-en-ja by s-taka / staka (revision fbb91252110cf97d90291eb808629ab0b10f7928); https://huggingface.co/staka/fugumt-en-ja ; https://github.com/s-taka/fugumt ; CC-BY-SA-4.0",
       "src_prefix_token": null,
       "tier": "mvp",
       "architecture": "marian-base",
-      "weight_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
-      "weight_bytes": 309987327,
-      "notes": "直连 en→ja，替换 opus-tatoeba-en-ja（Issue #25）。Tatoeba-Challenge eng-jpn 的另一次发布（HF 上没有），transformer（base），共享词表 32000，无语言标记。zip 内 LICENSE 为 CC BY 4.0 全文。上游 README：Tatoeba-test.eng-jpn BLEU 15.7、chrF 0.266。实测：随译样例 chrF 17.04（原 15.93）、FLORES-200 devtest 前 200 句 28.59（原 26.49）、Tatoeba v2021-08-07 前 300 句 23.63（原 23.02），三组都没有 URL 幻觉（原模型分别出现 1/2/1 次）。仍有偏短、专名音译不稳（Yuki→雄基）的问题。"
+      "weight_file": "pytorch_model.bin",
+      "weight_bytes": 121192965,
+      "notes": "直连 en→ja，替换 opus-mt-eng-jpn-2021-02-18（Issue #98）。Marian-NMT，无语言标记。许可证 CC BY-SA 4.0（模型卡）；随译 int8 转换为改编，须按 SA 署名分发，仓库代码仍为 MIT。禁止 NC。#98 实测（CT2 int8，beam 2，CT2_PACKED_GEMM=0）：专业集 en→ja 20 条 chrF 64.0（原 41.2），zh_core 10 条 62.9（原 15.1）；staging 样例可用（「ステージング」）；无 URL 幻觉。真实 serve 只 preload en→ja：RSS 约 132 MiB，P95 约 88 ms（packed=0）/31 ms（packed=1）。int8 目录约 64 MB（原 86 MB）。上游 Tatoeba 抽测 BLEU 32.7（模型卡，ja-mecab）。"
     },
     {
       "id": "opus-mt-ko-en",
@@ -435,6 +417,13 @@
     }
   ],
   "rejected": [
+    {
+      "upstream_zip": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-jpn/opus-2021-02-18.zip",
+      "sha256": "921cbab703a5ed7b2df1c35b72c0e260aefca698ce2bd6c077833f8dd2af8fce",
+      "former_id": "opus-mt-eng-jpn-2021-02-18",
+      "license": "CC-BY-4.0",
+      "reason": "被 fugumt-en-ja 取代（Issue #98）。专业集 chrF 41.2、zh_core 15.1；staging 句不可用（停滞/残業/スタミナ + 半角逗号）。许可证本身无问题（zip 内 CC BY 4.0）。"
+    },
     {
       "hf_repo": "Helsinki-NLP/opus-mt-tc-big-zh-ja",
       "hf_revision": "d621a8794dc9f9477b6e74e2fead2746a39ea999",

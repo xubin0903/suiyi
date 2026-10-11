@@ -608,7 +608,7 @@ def test_model_languages_and_auto_translate() -> None:
         "opus-mt-eng-zho-tc-big-2022-05-14",
         "opus-mt-zho-jpn-tc-big-2022-07-28",
         "opus-mt-ja-en",
-        "opus-mt-eng-jpn-2021-02-18",
+        "fugumt-en-ja",
     )
     root = Path(os.environ["SUIYI_MODELS_DIR"])
     missing = [
@@ -622,7 +622,7 @@ def test_model_languages_and_auto_translate() -> None:
         ("en", "zh"): ("direct", ["opus-mt-eng-zho-tc-big-2022-05-14"]),
         ("zh", "ja"): ("direct", ["opus-mt-zho-jpn-tc-big-2022-07-28"]),
         ("ja", "zh"): ("pivot", ["opus-mt-ja-en", "opus-mt-eng-zho-tc-big-2022-05-14"]),
-        ("en", "ja"): ("direct", ["opus-mt-eng-jpn-2021-02-18"]),
+        ("en", "ja"): ("direct", ["fugumt-en-ja"]),
         ("ja", "en"): ("direct", ["opus-mt-ja-en"]),
     }
     samples = [

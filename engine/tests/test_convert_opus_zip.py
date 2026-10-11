@@ -108,21 +108,33 @@ def _serve_zip(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> list[str]:
     return requested
 
 
-def test_official_manifest_ja_models_use_verified_zips() -> None:
+def test_official_manifest_ja_models_use_verified_sources() -> None:
     manifest = convert_mod.load_manifest(MANIFEST)
     mvp = {(m["src"], m["tgt"]): m for m in manifest["models"] if m["tier"] == "mvp"}
-    for direction in (("zh", "ja"), ("en", "ja")):
-        entry = mvp[direction]
-        source = entry["weights_source"]
-        assert source["type"] == "opus-mt-zip"
-        assert source["url"].startswith("https://object.pouta.csc.fi/Tatoeba-MT-models/")
-        assert len(source["sha256"]) == 64
-        assert "LICENSE" in source["copy_files"]
-        assert entry["license"] == "CC-BY-4.0"
-        assert "NC" not in entry["license"]
+
+    zh_ja = mvp[("zh", "ja")]
+    source = zh_ja["weights_source"]
+    assert source["type"] == "opus-mt-zip"
+    assert source["url"].startswith("https://object.pouta.csc.fi/Tatoeba-MT-models/")
+    assert len(source["sha256"]) == 64
+    assert "LICENSE" in source["copy_files"]
+    assert zh_ja["license"] == "CC-BY-4.0"
+    assert "NC" not in zh_ja["license"]
+
+    en_ja = mvp[("en", "ja")]
+    assert en_ja["id"] == "fugumt-en-ja"
+    assert en_ja["hf_repo"] == "staka/fugumt-en-ja"
+    assert en_ja["hf_revision"] == "fbb91252110cf97d90291eb808629ab0b10f7928"
+    assert en_ja["license"] == "CC-BY-SA-4.0"
+    assert "NC" not in en_ja["license"]
+    assert en_ja.get("weights_source") is None
+
     rejected = {item.get("hf_repo") for item in manifest["rejected"]}
     assert "Helsinki-NLP/opus-mt-tc-big-zh-ja" in rejected
     assert "Helsinki-NLP/opus-tatoeba-en-ja" in rejected
+    assert any(
+        item.get("former_id") == "opus-mt-eng-jpn-2021-02-18" for item in manifest["rejected"]
+    )
     covered = set(mvp)
     for pivot in manifest["pivots"]:
         assert (pivot["src"], pivot["via"]) in covered

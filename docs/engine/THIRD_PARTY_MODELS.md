@@ -2,23 +2,23 @@
 
 随安装包或「关于」页分发。权重不打进本仓库，按 [engine/model_manifest.json](../../engine/model_manifest.json) 按需下载。转成 CTranslate2 int8 的文件是对原权重的改编，改编方为随译项目，不表示 Helsinki-NLP 认可量化结果。
 
-核对日：2026-09-25（en→zh 于 2026-09-26 按 #83 更新；`opus-mt-en-zh` 于 2026-10-11 按 #89 改为默认随包 bundled）。许可证原文：<https://creativecommons.org/licenses/by/4.0/legalcode>。
+核对日：2026-09-25（en→zh 于 2026-09-26 按 #83 更新；`opus-mt-en-zh` 于 2026-10-11 按 #89 改为默认随包 bundled；en→ja 于 2026-10-11 按 #98 换成 FuguMT，CC BY-SA 4.0）。许可证原文：<https://creativecommons.org/licenses/by/4.0/legalcode>（OPUS-MT / Tatoeba-MT）、<https://creativecommons.org/licenses/by-sa/4.0/legalcode>（FuguMT）。
 
 ## 总述
 
-随译的机器翻译使用赫尔辛基大学语言技术研究组（Helsinki-NLP）的 OPUS-MT 模型。预训练权重采用知识共享署名 4.0 国际许可协议（CC BY 4.0）。
+随译的机器翻译主要使用赫尔辛基大学语言技术研究组（Helsinki-NLP）的 OPUS-MT / Tatoeba-MT 模型（预训练权重 CC BY 4.0）。英→日默认另用 FuguMT（CC BY-SA 4.0），见下方专节。仓库代码仍是 MIT：权重按各自许可证分发，SA 只约束该模型权重及其改编（如 int8），不要求把整仓改成 SA。
 
 请引用：
 
 Tiedemann, Jörg, and Santhosh Thottingal. 2020. OPUS-MT — Building open translation services for the World. Proceedings of the 22nd Annual Conference of the European Association for Machine Translation (EAMT).
 
-使用 Tatoeba-MT 发布包（英→中、中→日、英→日三颗）时同时引用：
+使用 Tatoeba-MT 发布包（英→中、中→日等）时同时引用：
 
 Tiedemann, Jörg. 2020. The Tatoeba Translation Challenge — Realistic Data Sets for Low Resource and Multilingual MT. Proceedings of the Fifth Conference on Machine Translation (WMT).
 
 ## MVP 模型
 
-下列修订号或发布包 sha256 与 manifest 中 `tier: "mvp"` 的条目一致。
+下列修订号或发布包 sha256 与 manifest 中 `tier: "mvp"` 的条目一致。其中 `fugumt-en-ja` 为 CC BY-SA 4.0，其余 OPUS/Tatoeba 条目为 CC BY 4.0。
 
 ### opus-mt-zh-en（中→英）
 
@@ -38,9 +38,13 @@ Helsinki-NLP Tatoeba-MT `zho-jpn` 发布包 `opusTCv20210807-sepvoc_transformer-
 
 Helsinki-NLP OPUS-MT `opus-mt-ja-en`，修订 `0770961a39ba6bd66305b149c3f4110bcafca2e6`。CC BY 4.0。https://creativecommons.org/licenses/by/4.0/
 
-### opus-mt-eng-jpn-2021-02-18（英→日）
+### fugumt-en-ja（英→日，#98 起）
 
-Helsinki-NLP Tatoeba-MT `eng-jpn` 发布包 `opus-2021-02-18.zip`，sha256 `921cbab703a5ed7b2df1c35b72c0e260aefca698ce2bd6c077833f8dd2af8fce`。来源：https://object.pouta.csc.fi/Tatoeba-MT-models/eng-jpn/opus-2021-02-18.zip （说明：https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/master/models/eng-jpn/README.md ）。CC BY 4.0，依据是发布包内的 `LICENSE`（CC BY 4.0 全文），随模型目录一并分发。https://creativecommons.org/licenses/by/4.0/
+[staka/fugumt-en-ja](https://huggingface.co/staka/fugumt-en-ja)，修订 `fbb91252110cf97d90291eb808629ab0b10f7928`。作者 s-taka；说明见 https://github.com/s-taka/fugumt 。**CC BY-SA 4.0**（模型卡 YAML `license: cc-by-sa-4.0`）。https://creativecommons.org/licenses/by-sa/4.0/
+
+随译把该权重转成 CTranslate2 int8，属于改编：改编后的权重须以 CC BY-SA 4.0 署名分发（与原模型相同）。这**不**要求把随译仓库代码从 MIT 改成 SA，也**不**把 SA 传染到其他仍为 CC BY 4.0 的 OPUS-MT 权重。
+
+使用 Tatoeba-MT / OPUS-MT（英→中、中→日等）时继续引用 Tiedemann；使用本模型时请同时保留上方 FuguMT 署名。
 
 ## 随包附带（`tier: "bundled"`）
 
@@ -55,12 +59,14 @@ Helsinki-NLP OPUS-MT `opus-mt-en-zh`，修订 `408d9bc410a388e1d9aef112a2daba955
 ## 可直接粘贴的一段
 
 ```
-机器翻译模型：Helsinki-NLP OPUS-MT（CC BY 4.0）。
+机器翻译模型：Helsinki-NLP OPUS-MT / Tatoeba-MT（CC BY 4.0）；
+英→日默认另用 FuguMT fugumt-en-ja（CC BY-SA 4.0，https://huggingface.co/staka/fugumt-en-ja ）。
 https://creativecommons.org/licenses/by/4.0/
-模型与修订（或发布包 sha256）见随译 model_manifest.json 的 tier=mvp 条目。
-量化权重由随译自上述修订或发布包转换，Helsinki-NLP 未背书该转换。
+https://creativecommons.org/licenses/by-sa/4.0/
+模型与修订见随译 model_manifest.json 的 tier=mvp 条目。
+量化权重由随译自上述修订转换；上游未背书该转换。FuguMT 的 int8 改编按 CC BY-SA 4.0 分发。
 请引用 Tiedemann & Thottingal, EAMT 2020；
-英→中、中→日、英→日模型同时引用 Tiedemann, WMT 2020。
+英→中、中→日模型同时引用 Tiedemann, WMT 2020。
 ```
 
 按需下载的 `optional` 模型使用同一许可和同一段署名，上架时把具体仓库名和修订补进清单即可。NLLB、SeamlessM4T 等 CC BY-NC 权重不在此列，默认不下载。
