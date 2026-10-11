@@ -39,7 +39,7 @@ jobs:
         with:
           path: ~/suiyi-mem-models
           key: mem-models-v2-${{ hashFiles('engine/model_manifest.json', 'engine/src/suiyi_engine/tools/convert.py') }}
-      - name: 转换 tc-big en→zh、eng-jpn、zh-en、opus-mt-en-zh（缓存未命中时）
+      - name: 转换 tc-big en→zh、fugumt-en-ja、zh-en、opus-mt-en-zh（缓存未命中时）
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         run: |
           python -m venv "$RUNNER_TEMP/convert-venv"
@@ -48,7 +48,7 @@ jobs:
           "$CPY" -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
           "$CPY" -m pip install --quiet -e "./engine[convert]"
           "$CPY" scripts/convert_models.py --out-dir ~/suiyi-mem-models \
-            --ids opus-mt-eng-zho-tc-big-2022-05-14 opus-mt-eng-jpn-2021-02-18 opus-mt-zh-en opus-mt-en-zh
+            --ids opus-mt-eng-zho-tc-big-2022-05-14 fugumt-en-ja opus-mt-zh-en opus-mt-en-zh
           rm -rf ~/suiyi-mem-models/.cache
       - uses: actions/upload-artifact@v4
         with:
