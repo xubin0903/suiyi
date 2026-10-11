@@ -130,7 +130,7 @@ class Manifest:
 
     direct: Mapping[tuple[str, str], str]
     pivots: Mapping[tuple[str, str], Pivot]
-    # 清单里列出的全部模型 id → 方向（含 tier=legacy 的旧模型）。中转的某一跳没装清单指定的
+    # 清单里列出的全部模型 id → 方向（含 tier=legacy / bundled）。中转的某一跳没装清单指定的
     # 模型、但装了清单里同方向的另一个模型（升级前的旧 en→zh）时，用已安装的那个（#83）。
     known: Mapping[str, tuple[str, str]] = field(default_factory=dict)
 

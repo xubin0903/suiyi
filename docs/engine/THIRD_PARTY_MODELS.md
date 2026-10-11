@@ -2,7 +2,7 @@
 
 随安装包或「关于」页分发。权重不打进本仓库，按 [engine/model_manifest.json](../../engine/model_manifest.json) 按需下载。转成 CTranslate2 int8 的文件是对原权重的改编，改编方为随译项目，不表示 Helsinki-NLP 认可量化结果。
 
-核对日：2026-09-25（en→zh 于 2026-09-26 按 #83 更新）。许可证原文：<https://creativecommons.org/licenses/by/4.0/legalcode>。
+核对日：2026-09-25（en→zh 于 2026-09-26 按 #83 更新；`opus-mt-en-zh` 于 2026-10-11 按 #89 改为默认随包 bundled）。许可证原文：<https://creativecommons.org/licenses/by/4.0/legalcode>。
 
 ## 总述
 
@@ -42,13 +42,15 @@ Helsinki-NLP OPUS-MT `opus-mt-ja-en`，修订 `0770961a39ba6bd66305b149c3f4110bc
 
 Helsinki-NLP Tatoeba-MT `eng-jpn` 发布包 `opus-2021-02-18.zip`，sha256 `921cbab703a5ed7b2df1c35b72c0e260aefca698ce2bd6c077833f8dd2af8fce`。来源：https://object.pouta.csc.fi/Tatoeba-MT-models/eng-jpn/opus-2021-02-18.zip （说明：https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/master/models/eng-jpn/README.md ）。CC BY 4.0，依据是发布包内的 `LICENSE`（CC BY 4.0 全文），随模型目录一并分发。https://creativecommons.org/licenses/by/4.0/
 
-## 旧模型（`tier: "legacy"`）
+## 随包附带（`tier: "bundled"`）
 
-不再默认下载，只在用户已经装了旧模型时作为回退。分发了就要同样署名。
+与 `mvp` 一并默认下载（`python scripts/convert_models.py --tier mvp` 会带上），不是该方向的主翻译模型。分发了就要同样署名。
 
-### opus-mt-en-zh（英→中，#83 前的默认）
+### opus-mt-en-zh（英→中短句兜底，#89 / #122）
 
 Helsinki-NLP OPUS-MT `opus-mt-en-zh`，修订 `408d9bc410a388e1d9aef112a2daba955b945255`。CC BY 4.0。https://creativecommons.org/licenses/by/4.0/
+
+#83 前曾是默认 en→zh；现在 int8 约 84 MB，用作表外极短句按需兜底与空译文 / 乱码回退，不替代 `opus-mt-eng-zho-tc-big-2022-05-14`。
 
 ## 可直接粘贴的一段
 

@@ -285,7 +285,7 @@
 {"id": "short-holdout-028", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Open the door.", "reference": "开门。"}
 {"id": "short-holdout-029", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Close the window.", "reference": "关上窗户。"}
 {"id": "short-holdout-030", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Turn it off.", "reference": "把它关掉。"}
-{"id": "short-holdout-031", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Sit tight.", "reference": "别动，等着。"}
+{"id": "short-holdout-031", "src_lang": "en", "tgt_lang": "zh", "category": "tabled", "source": "Sit tight.", "reference": "别动，等着。", "note": "已入常用短句表，计分时排除（Refs #89 随包短句跟进）"}
 {"id": "short-holdout-032", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Take a seat.", "reference": "请坐。"}
 {"id": "short-holdout-033", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Be patient.", "reference": "耐心点。"}
 {"id": "short-holdout-034", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Don't be late.", "reference": "别迟到。"}
@@ -323,9 +323,9 @@
 {"id": "short-holdout-066", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "That's weird.", "reference": "真奇怪。"}
 {"id": "short-holdout-067", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "That's funny.", "reference": "真好笑。"}
 {"id": "short-holdout-068", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "That makes sense.", "reference": "有道理。"}
-{"id": "short-holdout-069", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Nice try.", "reference": "想得美。"}
+{"id": "short-holdout-069", "src_lang": "en", "tgt_lang": "zh", "category": "tabled", "source": "Nice try.", "reference": "想得美。", "note": "已入常用短句表，计分时排除（Refs #89 随包短句跟进）"}
 {"id": "short-holdout-070", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Good point.", "reference": "说得对。"}
-{"id": "short-holdout-071", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Big deal.", "reference": "有什么大不了的。"}
+{"id": "short-holdout-071", "src_lang": "en", "tgt_lang": "zh", "category": "tabled", "source": "Big deal.", "reference": "有什么大不了的。", "note": "已入常用短句表，计分时排除（Refs #89 随包短句跟进）"}
 {"id": "short-holdout-072", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "No kidding.", "reference": "真的假的。"}
 {"id": "short-holdout-073", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "You're kidding.", "reference": "你开玩笑吧。"}
 {"id": "short-holdout-074", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Well, okay.", "reference": "嗯，好吧。"}
@@ -334,3 +334,6 @@
 {"id": "short-holdout-077", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "You're so kind.", "reference": "你真好。"}
 {"id": "short-holdout-078", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Take your time.", "reference": "慢慢来。"}
 {"id": "short-holdout-079", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "See you then.", "reference": "到时候见。"}
+{"id": "short-holdout-080", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Hold your horses.", "reference": "别急。", "note": "表外补入；入表前已确认不在短句表与调参集"}
+{"id": "short-holdout-081", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Fat chance.", "reference": "没门。", "note": "表外补入；入表前已确认不在短句表与调参集"}
+{"id": "short-holdout-082", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Cut it out.", "reference": "别闹了。", "note": "表外补入；入表前已确认不在短句表与调参集"}

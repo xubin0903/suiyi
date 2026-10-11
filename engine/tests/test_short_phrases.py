@@ -171,3 +171,23 @@ def test_decode_hypothesis_maps_unk_for_chinese_only() -> None:
     assert decode_hypothesis(JoinSP(), tokens, "zh", source) == "支持的格式包括 PNG、JPEG 和 WebP"
     assert decode_hypothesis(JoinSP(), tokens, "zh") == "支持的格式包括 PNGJPEG 和 WebP"
     assert decode_hypothesis(JoinSP(), ["▁a", "<unk>", "b"], "ja", "a, b") == "ab"
+
+
+def test_holdout_excludes_tabled_and_misses_table() -> None:
+    """计分用的留出集不在表里；已入表的条目标为 tabled。"""
+
+    rows = [json.loads(line) for line in SHORT_SET.read_text(encoding="utf-8").splitlines()]
+    holdout = [row for row in rows if row["category"] == "holdout"]
+    tabled = [row for row in rows if row["category"] == "tabled"]
+    assert len(holdout) >= 79
+    assert {row["source"] for row in tabled} >= {"Nice try.", "Big deal.", "Sit tight."}
+    for row in tabled:
+        assert lookup_short_phrase(row["source"], "en", "zh") is not None, row["id"]
+    for row in holdout:
+        assert lookup_short_phrase(row["source"], "en", "zh") is None, row["id"]
+
+
+def test_new_table_entries_for_issue_89_followup() -> None:
+    assert lookup_short_phrase("Nice try.", "en", "zh") == "想得美。"
+    assert lookup_short_phrase("Big deal.", "en", "zh") == "有什么大不了的。"
+    assert lookup_short_phrase("Sit tight.", "en", "zh") == "别动，等着。"

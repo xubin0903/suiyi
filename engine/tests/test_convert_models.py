@@ -406,6 +406,34 @@ def test_tier_selects_only_matching_models(
     ]
 
 
+def test_tier_mvp_also_converts_bundled_models(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`--tier mvp` 一并转换 bundled（默认随包的短句兜底模型）。"""
+
+    snapshot = _make_snapshot(tmp_path)
+    calls = _install_fakes(monkeypatch, snapshot)
+    bundled = _entry(
+        "opus-mt-en-zh",
+        src="en",
+        tgt="zh",
+        hf_repo="Helsinki-NLP/opus-mt-en-zh",
+        hf_revision=EN_ZH_REVISION,
+        tier="bundled",
+        src_prefix_token=">>cmn_Hans<<",
+    )
+    manifest = _write_manifest(tmp_path, _manifest(_entry(), bundled))
+    out_dir = tmp_path / "models"
+    assert _run(manifest, out_dir, "--tier", "mvp") == 0
+    assert (out_dir / "opus-mt-zh-en").is_dir()
+    assert (out_dir / "opus-mt-en-zh").is_dir()
+    assert calls["download"] == [
+        ("Helsinki-NLP/opus-mt-zh-en", ZH_EN_REVISION),
+        ("Helsinki-NLP/opus-mt-en-zh", EN_ZH_REVISION),
+    ]
+
+
 def test_unknown_id_and_bad_quantization_do_not_download(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
