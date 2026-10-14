@@ -48,6 +48,7 @@ public class EngineFailureHintsTests
 
     [Theory]
     [InlineData(EngineCommandSource.ConfiguredCommand, "engine.command")]
+    [InlineData(EngineCommandSource.BundledExecutable, "engine/suiyi-engine.exe")]
     [InlineData(EngineCommandSource.ConfiguredPython, "engine.pythonPath")]
     [InlineData(EngineCommandSource.RepositoryVenv, "未找到 Python")]
     [InlineData(EngineCommandSource.PathPython, "未找到 Python")]

@@ -153,4 +153,115 @@ public class EngineCommandResolverTests
 
         Assert.Equal(@"""C:\Program Files\py.exe"" -m x", command.ToString());
     }
+
+    [Fact]
+    public void ResolvePathAgainstBase_Relative_JoinsBaseDirectory()
+    {
+        var baseDir = Path.Combine(Path.GetTempPath(), "suiyi-pack-base");
+        var resolved = EngineCommandResolver.ResolvePathAgainstBase(Path.Combine("engine", "suiyi-engine.exe"), baseDir);
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(baseDir, "engine", "suiyi-engine.exe")), resolved);
+    }
+
+    [Fact]
+    public void ResolvePathAgainstBase_WindowsDrive_UnchangedOnAnyOs()
+    {
+        const string AbsoluteWindows = @"C:\Suiyi\engine\suiyi-engine.exe";
+        Assert.Equal(AbsoluteWindows, EngineCommandResolver.ResolvePathAgainstBase(AbsoluteWindows, BinDir));
+    }
+
+    [Fact]
+    public void Level1_RelativeCommand_ResolvedAgainstBaseDirectory()
+    {
+        var packRoot = Path.Combine(Path.GetTempPath(), "suiyi-portable-rel");
+        var env = new EngineCommandEnvironment
+        {
+            BaseDirectory = packRoot,
+            IsWindows = true,
+            FileExists = _ => false,
+            PathVariable = null,
+        };
+        var options = new EngineOptions
+        {
+            Command = Path.Combine("engine", "suiyi-engine.exe"),
+            ModelsDir = "models",
+        };
+
+        var command = EngineCommandResolver.Resolve(options, env);
+
+        Assert.Equal(EngineCommandSource.ConfiguredCommand, command.Source);
+        Assert.Equal(Path.GetFullPath(Path.Combine(packRoot, "engine", "suiyi-engine.exe")), command.FileName);
+        Assert.Equal(packRoot, command.WorkingDirectory);
+        Assert.Contains(Path.GetFullPath(Path.Combine(packRoot, "models")), command.Arguments);
+    }
+
+    [Fact]
+    public void Level1b_BundledExecutable_BeatsPythonWhenPresent()
+    {
+        var packRoot = Path.Combine(Path.GetTempPath(), "suiyi-portable-bundled");
+        var bundled = Path.GetFullPath(Path.Combine(packRoot, "engine", "suiyi-engine.exe"));
+        var env = new EngineCommandEnvironment
+        {
+            BaseDirectory = packRoot,
+            IsWindows = true,
+            FileExists = f => f == bundled,
+            PathVariable = PyDir,
+        };
+
+        var command = EngineCommandResolver.Resolve(new EngineOptions { PythonPath = @"C:\py\python.exe" }, env);
+
+        Assert.Equal(EngineCommandSource.BundledExecutable, command.Source);
+        Assert.Equal(bundled, command.FileName);
+        Assert.Equal(["serve", "--port", "18780", "--preload", "zh-en,en-zh", "--preload-ocr"], command.Arguments);
+        Assert.Equal(packRoot, command.WorkingDirectory);
+    }
+
+    [Fact]
+    public void Level1b_BundledMissing_FallsThroughToConfiguredPython()
+    {
+        var packRoot = Path.Combine(Path.GetTempPath(), "suiyi-portable-nobundle");
+        var env = new EngineCommandEnvironment
+        {
+            BaseDirectory = packRoot,
+            IsWindows = true,
+            FileExists = _ => false,
+            PathVariable = null,
+        };
+
+        var command = EngineCommandResolver.Resolve(new EngineOptions { PythonPath = @"C:\py\python.exe" }, env);
+
+        Assert.Equal(EngineCommandSource.ConfiguredPython, command.Source);
+        Assert.Equal(@"C:\py\python.exe", command.FileName);
+    }
+
+    [Fact]
+    public void BundledEnginePath_MatchesConvention()
+    {
+        var packRoot = Path.Combine(Path.GetTempPath(), "suiyi-portable-path");
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine(packRoot, "engine", "suiyi-engine.exe")),
+            EngineCommandResolver.BundledEnginePath(packRoot));
+        Assert.Equal("engine/suiyi-engine.exe", EngineCommandResolver.BundledEngineRelativePath);
+    }
+
+    [Fact]
+    public void ConfiguredCommand_BeatsBundledExecutable()
+    {
+        var packRoot = Path.Combine(Path.GetTempPath(), "suiyi-portable-cfg-wins");
+        var bundled = Path.GetFullPath(Path.Combine(packRoot, "engine", "suiyi-engine.exe"));
+        var env = new EngineCommandEnvironment
+        {
+            BaseDirectory = packRoot,
+            IsWindows = true,
+            FileExists = f => f == bundled,
+            PathVariable = null,
+        };
+
+        var command = EngineCommandResolver.Resolve(
+            new EngineOptions { Command = @"D:\custom\engine.exe" },
+            env);
+
+        Assert.Equal(EngineCommandSource.ConfiguredCommand, command.Source);
+        Assert.Equal(@"D:\custom\engine.exe", command.FileName);
+    }
 }

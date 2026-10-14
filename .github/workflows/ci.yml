@@ -271,6 +271,31 @@ jobs:
       - name: dotnet test
         run: dotnet test client/Suiyi.sln -c Release --no-build
 
+      # M4 #127：产出可说明的便携目录骨架（无引擎 exe、无模型权重），上传 zip。
+      - name: 发布便携骨架（win-x64，框架依赖）
+        run: |
+          OUT="$RUNNER_TEMP/suiyi-portable"
+          bash client/packaging/publish-portable.sh "$OUT"
+          test -f "$OUT/Suiyi.exe"
+          test -f "$OUT/engine/README.txt"
+          test -f "$OUT/models/README.txt"
+          test -f "$OUT/settings.portable.example.json"
+          # 确认未误打入权重
+          if find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) | grep -q .; then
+            echo "便携骨架不应包含模型权重文件"
+            find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \)
+            exit 1
+          fi
+          echo "便携骨架文件数: $(find "$OUT" -type f | wc -l)" >> "$GITHUB_STEP_SUMMARY"
+          echo "输出目录: $OUT" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传便携骨架制品
+        uses: actions/upload-artifact@v4
+        with:
+          name: suiyi-portable-win-x64
+          path: ${{ runner.temp }}/suiyi-portable/
+          if-no-files-found: error
+
   # 稳定的汇总检查，与「engine 检查」对称。
   # client job 被跳过时本 job 仍成功；client job 失败或被取消时本 job 失败。
   client-check:

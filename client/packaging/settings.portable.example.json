@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "primaryTarget": "zh",
+  "secondaryTarget": "en",
+  "clipboard": {
+    "monitorEnabled": true,
+    "debounceMs": 150,
+    "minChars": 2,
+    "maxChars": 2000
+  },
+  "hotkey": {
+    "translate": "Ctrl+Alt+T",
+    "region": "Ctrl+Alt+S"
+  },
+  "popup": {
+    "autoHideSeconds": 8,
+    "maxWidth": 480
+  },
+  "engine": {
+    "port": 18780,
+    "pythonPath": null,
+    "command": "engine\\suiyi-engine.exe",
+    "args": null,
+    "modelsDir": "models",
+    "preload": "zh-en,en-zh",
+    "preloadOcr": true
+  },
+  "glossary": {
+    "enabled": true
+  },
+  "startWithWindows": false
+}
