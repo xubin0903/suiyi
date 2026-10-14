@@ -397,8 +397,20 @@ def test_builtin_glossary_has_common_engineering_terms() -> None:
     assert by_id["builtin:flaky-test"].forms["zh"][0] == "不稳定测试"
     assert by_id["builtin:ci-pipeline"].forms["zh"][0] == "CI 流水线"
     assert by_id["builtin:ci-cd-pipeline"].forms["zh"][0] == "CI/CD 流水线"
+    assert by_id["builtin:influenza-vaccine"].forms["zh"][0] == "流感疫苗"
+    assert by_id["builtin:influenza-vaccine"].forms["en"][:2] == (
+        "influenza vaccine",
+        "flu vaccine",
+    )
     found = find_terms("The CI/CD pipeline runs every flaky test.", "en", list(by_id.values()))
     assert [match.term.id for match in found] == ["builtin:ci-cd-pipeline", "builtin:flaky-test"]
+    med = find_terms(
+        "老人和儿童建议每年秋季接种流感疫苗。",
+        "zh",
+        list(by_id.values()),
+        every=True,
+    )
+    assert [match.term.id for match in med] == ["builtin:influenza-vaccine"]
 
 
 # ---------------------------------------------------------------- 句末标点

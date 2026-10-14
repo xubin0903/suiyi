@@ -3098,6 +3098,24 @@
    ]
   },
   {
+   "id": "influenza-vaccine",
+   "kind": "fixed",
+   "domain": "med",
+   "en": [
+    "influenza vaccine",
+    "flu vaccine",
+    "vaccinated",
+    "vaccination"
+   ],
+   "zh": [
+    "流感疫苗"
+   ],
+   "ja": [
+    "インフルエンザワクチン",
+    "インフルエンザのワクチン"
+   ]
+  },
+  {
    "id": "pneumonia",
    "kind": "fixed",
    "domain": "med",
