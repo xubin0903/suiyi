@@ -52,6 +52,9 @@ public interface ITrayService
     /// <summary>「重启翻译服务」。</summary>
     event EventHandler? RestartEngineRequested;
 
+    /// <summary>「准备模型…」（#135）。</summary>
+    event EventHandler? PrepareModelsRequested;
+
     /// <summary>「专业术语 ▸ 专业术语保护」勾选变化（#84）。</summary>
     event EventHandler<TrayGlossaryToggledEventArgs>? GlossaryToggled;
 

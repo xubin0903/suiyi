@@ -10,7 +10,7 @@ public sealed class TrayMenuBuilderTests
         var menu = TrayMenuBuilder.Build(new TrayState { Status = TrayStatus.Ready });
 
         Assert.Equal(
-            ["就绪（中文）", "-", "翻译剪贴板", "框选翻译", "暂停监听", "目标语言", "专业术语", "-", "重启翻译服务", "打开设置文件", "打开日志目录", "-", "关于", "退出"],
+            ["就绪（中文）", "-", "翻译剪贴板", "框选翻译", "暂停监听", "目标语言", "专业术语", "-", "重启翻译服务", "准备模型…", "打开设置文件", "打开日志目录", "-", "关于", "退出"],
             menu.Select(i => i.IsSeparator ? "-" : i.Text));
     }
 
@@ -69,7 +69,7 @@ public sealed class TrayMenuBuilderTests
 
         Assert.All(menu.Where(i => i.Command != TrayCommand.None), i => Assert.True(i.IsEnabled));
         Assert.Equal(
-            [TrayCommand.TranslateClipboard, TrayCommand.TranslateRegion, TrayCommand.TogglePause, TrayCommand.RestartEngine, TrayCommand.OpenSettings, TrayCommand.OpenLogs, TrayCommand.About, TrayCommand.Exit],
+            [TrayCommand.TranslateClipboard, TrayCommand.TranslateRegion, TrayCommand.TogglePause, TrayCommand.RestartEngine, TrayCommand.PrepareModels, TrayCommand.OpenSettings, TrayCommand.OpenLogs, TrayCommand.About, TrayCommand.Exit],
             menu.Where(i => i.Command != TrayCommand.None).Select(i => i.Command));
     }
 

@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "notes": "客户端按需下载目录。翻译权重从与随译 int8 转换字节一致的 Hugging Face 仓库拉取（已校验 sha256），再写入 suiyi-model.json。OCR 从 ModelScope RapidOCR 官方源拉取。不把权重打进便携 zip。",
+  "default_translation_ids": [
+    "opus-mt-zh-en",
+    "opus-mt-en-zh"
+  ],
+  "default_ocr": true,
+  "translation_models": [
+    {
+      "id": "opus-mt-zh-en",
+      "src": "zh",
+      "tgt": "en",
+      "tier": "mvp",
+      "license": "CC-BY-4.0",
+      "attribution": "Helsinki-NLP OPUS-MT opus-mt-zh-en (revision cf109095479db38d6df799875e34039d4938aaa6); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
+      "hf_repo": "Helsinki-NLP/opus-mt-zh-en",
+      "hf_revision": "cf109095479db38d6df799875e34039d4938aaa6",
+      "src_prefix_token": null,
+      "quantization": "int8",
+      "ctranslate2_version": "4.8.2",
+      "architecture": "marian-base",
+      "download": {
+        "type": "hf-files",
+        "repo": "manancode/opus-mt-zh-en-ctranslate2-android",
+        "revision": "main",
+        "files": [
+          {
+            "name": "model.bin",
+            "sha256": "e4955858cae9542bef37424a9b79720e3db2f32501fe62264c0cd3eac6319777",
+            "bytes": 79567635
+          },
+          {
+            "name": "config.json",
+            "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af",
+            "bytes": 223
+          },
+          {
+            "name": "shared_vocabulary.json",
+            "sha256": "acbf13516c56af2bb78ebdb770c2e4648fd8232ddd17af75298119cbfa7ee33d",
+            "bytes": 1303998
+          },
+          {
+            "name": "source.spm",
+            "sha256": "e27a3a1b539f4959ec72ea60e453f49156289f95d4e6000b29332efc45616203",
+            "bytes": 804677
+          },
+          {
+            "name": "target.spm",
+            "sha256": "6a881f4717cd7265f53fea54fd3dc689c767c05338fac7a4590f3088cb2d7855",
+            "bytes": 806530
+          }
+        ]
+      },
+      "suiyi_model_template": {
+        "id": "opus-mt-zh-en",
+        "src": "zh",
+        "tgt": "en",
+        "hf_repo": "Helsinki-NLP/opus-mt-zh-en",
+        "hf_revision": "cf109095479db38d6df799875e34039d4938aaa6",
+        "license": "CC-BY-4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+        "hf_card_license": "CC-BY-4.0",
+        "upstream_license": "CC-BY-4.0",
+        "upstream_license_url": "https://github.com/Helsinki-NLP/OPUS-MT-train/blob/master/models/README.md",
+        "attribution": "Helsinki-NLP OPUS-MT opus-mt-zh-en (revision cf109095479db38d6df799875e34039d4938aaa6); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
+        "src_prefix_token": null,
+        "tier": "mvp",
+        "architecture": "marian-base",
+        "weight_file": "pytorch_model.bin",
+        "weight_bytes": 312087009,
+        "notes": "直连 zh→en。模型卡正文与 YAML 均为 CC-BY-4.0。Marian base：d_model 512，encoder/decoder 各 6 层，8 头，FFN 2048，词表 65001。训练说明为 transformer，源侧含 cmn_Hans 与 cmn_Hant 等中文变体，源文本不加语言标记。Tatoeba-test.zho.eng BLEU 36.1、chrF 0.548（模型卡）。仓库内无 LICENSE 文件。",
+        "quantization": "int8"
+      }
+    },
+    {
+      "id": "opus-mt-en-zh",
+      "src": "en",
+      "tgt": "zh",
+      "tier": "mvp",
+      "license": "CC-BY-4.0",
+      "attribution": "Helsinki-NLP OPUS-MT opus-mt-en-zh (revision 408d9bc410a388e1d9aef112a2daba955b945255); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
+      "hf_repo": "Helsinki-NLP/opus-mt-en-zh",
+      "hf_revision": "408d9bc410a388e1d9aef112a2daba955b945255",
+      "src_prefix_token": ">>cmn_Hans<<",
+      "quantization": "int8",
+      "ctranslate2_version": "4.8.2",
+      "architecture": "marian-base",
+      "download": {
+        "type": "hf-files",
+        "repo": "manancode/opus-mt-en-zh-ctranslate2-android",
+        "revision": "main",
+        "files": [
+          {
+            "name": "model.bin",
+            "sha256": "327584c20bb83c7e89d595bcfa30b6ef3771c10816f707e892c4bbb1f808a8fb",
+            "bytes": 79567635
+          },
+          {
+            "name": "config.json",
+            "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af",
+            "bytes": 223
+          },
+          {
+            "name": "shared_vocabulary.json",
+            "sha256": "37314a6abb25ed8f8497498aeeb31fcea98de892bf00ff7c2e8c966b26fe0b82",
+            "bytes": 1303887
+          },
+          {
+            "name": "source.spm",
+            "sha256": "5775ddc9e3ff2fae91554da56468ad35ff56edaba870fea74447bc7234bfdaa8",
+            "bytes": 806435
+          },
+          {
+            "name": "target.spm",
+            "sha256": "81dc94efa84e4025ef38d25d5d07429fe41e3eb29d44003f1db6fe98487b0052",
+            "bytes": 804600
+          }
+        ]
+      },
+      "suiyi_model_template": {
+        "id": "opus-mt-en-zh",
+        "src": "en",
+        "tgt": "zh",
+        "hf_repo": "Helsinki-NLP/opus-mt-en-zh",
+        "hf_revision": "408d9bc410a388e1d9aef112a2daba955b945255",
+        "license": "CC-BY-4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+        "hf_card_license": "Apache-2.0",
+        "upstream_license": "CC-BY-4.0",
+        "upstream_license_url": "https://github.com/Helsinki-NLP/OPUS-MT-train/blob/master/models/README.md",
+        "attribution": "Helsinki-NLP OPUS-MT opus-mt-en-zh (revision 408d9bc410a388e1d9aef112a2daba955b945255); Tiedemann & Thottingal, EAMT 2020; CC-BY-4.0",
+        "src_prefix_token": ">>cmn_Hans<<",
+        "tier": "mvp",
+        "architecture": "marian-base",
+        "weight_file": "pytorch_model.bin",
+        "weight_bytes": 312087009,
+        "notes": "直连 en→zh，多目标中文。模型卡要求源文本句首加 >>id<<。本修订 vocab.json 中 >>cmn_Hans<< 的 id 为 5（保留号段）；同时存在 >>cmn<<（361）与 >>cmn_Hant<<（21）。简体默认用 >>cmn_Hans<<，与原文之间加一个空格，字段本身不含空格。模型卡列出的 gan/lzh/cjy 在该词表中没有对应 >>id<<。YAML 为 apache-2.0，正文未再写许可证，仓库内无 LICENSE 文件；权重发布说明见 upstream_license。Tatoeba-test.eng.zho BLEU 31.4、chrF 0.268（模型卡）。Marian base，d_model 512，6+6 层，8 头，FFN 2048。",
+        "quantization": "int8"
+      }
+    }
+  ],
+  "ocr": {
+    "recommended": {
+      "det": "PP-OCRv6_det_small",
+      "rec": "PP-OCRv6_rec_small",
+      "cls": "ch_ppocr_mobile_v2.0_cls_mobile"
+    },
+    "use_cls": false,
+    "rapidocr_requirement": "rapidocr>=3.9.2,<3.10",
+    "models": [
+      {
+        "id": "PP-OCRv6_det_small",
+        "task": "det",
+        "file": "PP-OCRv6_det_small.onnx",
+        "bytes": 9929594,
+        "sha256": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+        "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/det/PP-OCRv6_det_small.onnx",
+        "license": "Apache-2.0",
+        "tier": "recommended",
+        "ocr_version": "PP-OCRv6"
+      },
+      {
+        "id": "PP-OCRv6_rec_small",
+        "task": "rec",
+        "file": "PP-OCRv6_rec_small.onnx",
+        "bytes": 21234383,
+        "sha256": "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+        "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/rec/PP-OCRv6_rec_small.onnx",
+        "license": "Apache-2.0",
+        "tier": "recommended",
+        "ocr_version": "PP-OCRv6"
+      },
+      {
+        "id": "ch_ppocr_mobile_v2.0_cls_mobile",
+        "task": "cls",
+        "file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+        "bytes": 585532,
+        "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+        "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+        "license": "Apache-2.0",
+        "tier": "recommended",
+        "ocr_version": "PP-OCRv4"
+      }
+    ]
+  }
+}

@@ -125,7 +125,8 @@ public sealed class TranslateFlowCoordinatorTests : IDisposable
         _flow.OnTextCaptured("Hello", ClipboardTrigger.Monitor);
         _translator.Fail(0, new EngineException(EngineErrorKind.UnsupportedPair, "x") { MissingModels = ["opus-mt-en-ja"] });
 
-        Assert.Equal("未安装语向模型：opus-mt-en-ja", _popup.ErrorMessage);
+        Assert.StartsWith("未安装语向模型：opus-mt-en-ja", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(PopupText.PrepareModelsHint, _popup.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]

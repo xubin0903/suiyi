@@ -34,6 +34,9 @@ public static class PopupText
     /// <summary>安装 OCR 依赖的命令（在仓库根目录、已激活 .venv 时执行），与服务端提示一致。</summary>
     public const string OcrInstallCommand = "pip install -e \"engine[ocr]\"";
 
+    /// <summary>托盘「准备模型…」入口说明（#135）。</summary>
+    public const string PrepareModelsHint = "请在托盘菜单点「准备模型…」下载默认中英与 OCR，完成后点「重试」";
+
     /// <summary>全部段落都没有译文时的提示。</summary>
     public const string AllUntranslatedHint = "未能翻译，以上为识别出的原文";
 

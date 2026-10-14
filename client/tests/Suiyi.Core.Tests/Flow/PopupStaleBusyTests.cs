@@ -322,7 +322,7 @@ public sealed class PopupStaleBusyTests : IDisposable
         Assert.False(_popup.IsVisible);
         Assert.True(_popup.ShowLast());
         Assert.Equal(PopupErrorKind.OcrUnavailable, _popup.Error!.Kind);
-        Assert.Contains("download_ocr_models.py", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(PopupText.PrepareModelsHint, _popup.ErrorMessage, StringComparison.Ordinal);
         Assert.True(_popup.CanRetry);
     }
 

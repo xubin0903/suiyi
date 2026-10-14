@@ -9,6 +9,7 @@ public class StubModelProvisionerTests
     {
         var provisioner = new StubModelProvisioner();
         Assert.Empty(provisioner.ListMissingTranslationModels(Path.GetTempPath()));
+        Assert.Empty(provisioner.ListMissingOcrModels(Path.GetTempPath()));
     }
 
     [Fact]
@@ -20,5 +21,13 @@ public class StubModelProvisionerTests
         Assert.False(result.Succeeded);
         Assert.Contains("按需下载尚未实现", result.Message, StringComparison.Ordinal);
         Assert.Equal(ModelProvisionResult.NotImplemented, result);
+    }
+
+    [Fact]
+    public async Task EnsureOcrAndDefaults_ReturnNotImplemented()
+    {
+        var provisioner = new StubModelProvisioner();
+        Assert.Equal(ModelProvisionResult.NotImplemented, await provisioner.EnsureOcrAsync());
+        Assert.Equal(ModelProvisionResult.NotImplemented, await provisioner.EnsureDefaultsAsync());
     }
 }

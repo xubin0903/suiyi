@@ -168,7 +168,7 @@ public sealed class RegionTranslateFlowTests : IDisposable
         _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable", MissingModels = ["PP-OCRv6_det_small"] });
 
         Assert.StartsWith("OCR 模型未安装：PP-OCRv6_det_small\n", _popup.ErrorMessage, StringComparison.Ordinal);
-        Assert.Contains(@"python scripts\download_ocr_models.py download", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(PopupText.PrepareModelsHint, _popup.ErrorMessage, StringComparison.Ordinal);
         Assert.True(_popup.CanRetry);
     }
 
@@ -179,7 +179,7 @@ public sealed class RegionTranslateFlowTests : IDisposable
         await SelectAsync();
         _ocr.Fail(0, new EngineException(EngineErrorKind.OcrUnavailable, "x") { ErrorCode = "ocr_unavailable" });
 
-        Assert.StartsWith("OCR 模型未安装：PP-OCRv6_rec_small\n请在随译仓库根目录运行", _popup.ErrorMessage, StringComparison.Ordinal);
+        Assert.StartsWith("OCR 模型未安装：PP-OCRv6_rec_small\n" + PopupText.PrepareModelsHint, _popup.ErrorMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("服务端说明", _popup.ErrorMessage, StringComparison.Ordinal);
     }
 
