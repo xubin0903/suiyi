@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import socket
 import sys
@@ -113,6 +112,10 @@ class OcrManifest:
 
 
 def repo_root_from_here() -> Path:
+    from suiyi_engine.runtime_layout import is_frozen, repo_root
+
+    if is_frozen():
+        return repo_root()
     for parent in Path(__file__).resolve().parents:
         if (parent / "engine" / "pyproject.toml").is_file() and (parent / "scripts").is_dir():
             return parent
@@ -120,16 +123,17 @@ def repo_root_from_here() -> Path:
 
 
 def default_manifest_path() -> Path:
-    return repo_root_from_here() / "engine" / "ocr_model_manifest.json"
+    from suiyi_engine.runtime_layout import default_ocr_manifest_path
+
+    return default_ocr_manifest_path()
 
 
 def resolve_models_dir(explicit: Path | None) -> Path:
+    from suiyi_engine.runtime_layout import default_models_dir
+
     if explicit is not None:
         return explicit.expanduser().resolve()
-    env = os.environ.get("SUIYI_MODELS_DIR", "").strip()
-    if env:
-        return Path(env).expanduser().resolve()
-    return (repo_root_from_here() / "models").resolve()
+    return default_models_dir().expanduser().resolve()
 
 
 def ocr_dir(models_dir: Path) -> Path:

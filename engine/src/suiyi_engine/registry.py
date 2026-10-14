@@ -35,31 +35,27 @@ _LANG_CODES = frozenset("abcdefghijklmnopqrstuvwxyz")
 
 
 def repo_root() -> Path:
-    """源码布局下的仓库根目录。
+    """源码布局下的仓库根目录；PyInstaller 冻结时为便携根（见 ``runtime_layout``）。"""
 
-    ``engine/src/suiyi_engine/registry.py`` 向上四级是仓库根。
-    安装成 wheel 且不在该布局里时，请设置 ``SUIYI_MODELS_DIR``。
-    """
+    from suiyi_engine.runtime_layout import repo_root as _repo_root
 
-    return Path(__file__).resolve().parents[3]
+    return _repo_root()
 
 
 def default_manifest_path() -> Path:
-    """``engine/model_manifest.json``。"""
+    """``engine/model_manifest.json``（冻结时在 onedir 内）。"""
 
-    path = Path(__file__).resolve().parents[2] / "model_manifest.json"
-    if not path.is_file():
-        raise FileNotFoundError(f"找不到模型清单：{path}")
-    return path
+    from suiyi_engine.runtime_layout import default_model_manifest_path
+
+    return default_model_manifest_path()
 
 
 def default_models_dir() -> Path:
-    """``SUIYI_MODELS_DIR``，否则仓库根目录下的 ``models/``。"""
+    """``SUIYI_MODELS_DIR``，否则仓库 / 便携根下的 ``models/``。"""
 
-    raw = os.environ.get("SUIYI_MODELS_DIR", "").strip()
-    if raw:
-        return Path(raw)
-    return repo_root() / "models"
+    from suiyi_engine.runtime_layout import default_models_dir as _default_models_dir
+
+    return _default_models_dir()
 
 
 def normalize_lang(code: str) -> str:

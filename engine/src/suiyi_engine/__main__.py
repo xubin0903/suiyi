@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from suiyi_engine import __version__
 
@@ -12,7 +13,10 @@ def main(argv: list[str] | None = None) -> int:
     """解析参数并执行子命令。``--version`` 只打印版本。"""
 
     _configure_stdio()
-    parser = argparse.ArgumentParser(prog="suiyi_engine")
+    from suiyi_engine.runtime_layout import is_frozen
+
+    prog = "suiyi-engine" if is_frozen() else "suiyi_engine"
+    parser = argparse.ArgumentParser(prog=prog)
     parser.add_argument("--version", action="store_true", help="打印版本后退出")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -141,6 +145,11 @@ def main(argv: list[str] | None = None) -> int:
     worker.add_argument("--models-dir", default=None)
     worker.add_argument("--parent-pid", type=int, default=None)
 
+    # 内部子命令：语种检测精简缓存导出（#92 / #130 冻结 exe）。
+    langid = subparsers.add_parser("langid-export")
+    langid.add_argument("path")
+    langid.add_argument("langs", nargs="+")
+
     args = parser.parse_args(argv)
     if args.version:
         print(__version__)
@@ -155,6 +164,11 @@ def main(argv: list[str] | None = None) -> int:
         from suiyi_engine.ocr_worker import worker_main
 
         return worker_main(args.models_dir, args.parent_pid)
+    if args.command == "langid-export":
+        from suiyi_engine.langid_slim import export_cache
+
+        export_cache(Path(args.path), args.langs)
+        return 0
     parser.print_help()
     return 0
 

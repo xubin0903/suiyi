@@ -201,6 +201,39 @@ jobs:
           path: ${{ runner.temp }}/domain-eval
           if-no-files-found: ignore
 
+      # #130：Windows 上 PyInstaller onedir 打包 suiyi-engine.exe（无模型权重）。
+      - name: PyInstaller 打包引擎（仅 Windows，#130）
+        if: ${{ runner.os == 'Windows' }}
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python -m pip install --quiet "pyinstaller>=6.3,<7" "onnxruntime>=1.20" "opencv-python-headless>=4.8"
+          python -m pip install --quiet --no-deps "rapidocr>=3.9.2,<3.10"
+          python -m pip install --quiet Pillow pyclipper shapely numpy PyYAML
+          OUT="$RUNNER_TEMP/suiyi-engine-win-x64"
+          mkdir -p "$OUT"
+          python -m PyInstaller --noconfirm --clean             --distpath "$OUT/dist" --workpath "$OUT/build"             engine/packaging/suiyi-engine.spec
+          EXE="$OUT/dist/suiyi-engine/suiyi-engine.exe"
+          test -f "$EXE"
+          "$EXE" --version
+          "$EXE" serve --help >/dev/null
+          # 禁止产物目录名里出现 torch / transformers 等
+          if find "$OUT/dist/suiyi-engine" -type d \( -iname 'torch*' -o -iname 'transformers*' -o -iname 'huggingface_hub*' \) | grep -q .; then
+            echo "产物含禁止依赖目录" >&2
+            find "$OUT/dist/suiyi-engine" -type d \( -iname 'torch*' -o -iname 'transformers*' -o -iname 'huggingface_hub*' \) >&2
+            exit 1
+          fi
+          echo "ENGINE_DIST=$OUT/dist/suiyi-engine" >> "$GITHUB_ENV"
+          echo "引擎 onedir 文件数: $(find "$OUT/dist/suiyi-engine" -type f | wc -l)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传引擎 Windows 制品（#130）
+        if: ${{ runner.os == 'Windows' && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: suiyi-engine-win-x64
+          path: ${{ env.ENGINE_DIST }}
+          if-no-files-found: warn
+
   # 稳定的汇总检查，供将来分支保护使用。
   # engine 矩阵被跳过时本 job 仍成功；矩阵失败或被取消时本 job 失败。
   engine-check:

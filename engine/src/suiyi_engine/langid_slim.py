@@ -131,6 +131,14 @@ def _align(value: int) -> int:
     return (value + _ALIGN - 1) // _ALIGN * _ALIGN
 
 
+def _export_command(path: Path, langs: Sequence[str]) -> list[str]:
+    """源码用 ``python -m``；冻结 exe 用内部子命令 ``langid-export``（#130）。"""
+
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "langid-export", str(path), *langs]
+    return [sys.executable, "-m", "suiyi_engine.langid_slim", str(path), *langs]
+
+
 def ensure_cache(cache_dir: Path, langs: Sequence[str], *, timeout_s: float = 120.0) -> Path:
     """缓存不存在时在子进程里导出，返回缓存路径。失败抛 ``OSError`` / ``RuntimeError``。"""
 
@@ -138,7 +146,7 @@ def ensure_cache(cache_dir: Path, langs: Sequence[str], *, timeout_s: float = 12
     path = cache_path(cache_dir, key)
     if path.is_file():
         return path
-    command = [sys.executable, "-m", "suiyi_engine.langid_slim", str(path), *langs]
+    command = _export_command(path, langs)
     done = subprocess.run(command, capture_output=True, text=True, timeout=timeout_s, check=False)
     if done.returncode != 0 or not path.is_file():
         tail = (done.stderr or "").strip().splitlines()[-1:] or ["无输出"]
