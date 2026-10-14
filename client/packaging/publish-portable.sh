@@ -23,4 +23,4 @@ cp "$ROOT/client/packaging/models/README.txt" "$OUT/models/README.txt"
 cp "$ROOT/client/packaging/settings.portable.example.json" "$OUT/settings.portable.example.json"
 
 echo "便携骨架已输出到: $OUT"
-echo "下一步：将 suiyi-engine.exe 放入 $OUT/engine/（见 docs/client/M4-便携包.md）"
+echo "下一步（可选）：用 bundle-engine.sh 拼入引擎 onedir，或由 CI assemble 自动完成（见 docs/client/M4-便携包.md）"

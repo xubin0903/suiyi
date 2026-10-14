@@ -31,4 +31,4 @@ Copy-Item (Join-Path $Root "client\packaging\models\README.txt") (Join-Path $Out
 Copy-Item (Join-Path $Root "client\packaging\settings.portable.example.json") (Join-Path $Out "settings.portable.example.json") -Force
 
 Write-Host "便携骨架已输出到: $Out"
-Write-Host "下一步：将 suiyi-engine.exe 放入 $Out\engine\（见 docs/client/M4-便携包.md）"
+Write-Host "下一步（可选）：用 bundle-engine.ps1 拼入引擎 onedir，或由 CI assemble 自动完成（见 docs/client/M4-便携包.md）"

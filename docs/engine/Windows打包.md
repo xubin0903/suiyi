@@ -1,6 +1,6 @@
 # Windows 引擎打包（PyInstaller）
 
-面向 M4 便携包：产出 `suiyi-engine.exe`，由客户端放在解压根的 `engine\` 下启动。关联 #130、#127。
+面向 M4 便携包：产出 `suiyi-engine.exe`，由客户端放在解压根的 `engine\` 下启动。关联 #130 / #131、#127、#132。
 
 ## 产物形态
 
@@ -94,7 +94,7 @@ Invoke-RestMethod http://127.0.0.1:18780/health
 - 名称：`suiyi-engine-win-x64`
 - 内容：onedir 目录（含 `suiyi-engine.exe` 与 `_internal`），**无模型权重**
 
-下载后按上文拷贝到便携骨架的 `engine\` 即可与 `suiyi-portable-win-x64` 拼成可试跑包。
+同次 workflow 的 **拼便携包** job（#132）会把该 onedir 自动拷进最终制品 `suiyi-portable-win-x64` 的 `engine\`，一般无需再手动拼。若只要引擎、单独调试，仍可只下 `suiyi-engine-win-x64`。
 
 ## 相关文件
 
