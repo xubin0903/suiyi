@@ -389,10 +389,16 @@ jobs:
           test -d "$OUT/engine/_internal"
           "$OUT/engine/suiyi-engine.exe" --version
           "$OUT/engine/suiyi-engine.exe" serve --help >/dev/null
-          # 仍不含翻译/OCR 模型权重
-          if find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) | grep -q .; then
-            echo "便携包不应包含模型权重文件" >&2
-            find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) >&2
+          # 仍不打「按需下载」的翻译/OCR 权重：models/ 与便携根须空；
+          # engine/_internal 内 wheel 自带的 onnx（与 #131 引擎制品一致）允许。
+          if find "$OUT/models" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) 2>/dev/null | grep -q .; then
+            echo "models/ 不应包含模型权重文件" >&2
+            find "$OUT/models" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) >&2
+            exit 1
+          fi
+          if find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) ! -path '*/engine/_internal/*' | grep -q .; then
+            echo "便携包在 engine/_internal 之外不应包含模型权重文件" >&2
+            find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) ! -path '*/engine/_internal/*' >&2
             exit 1
           fi
           echo "便携包（含引擎）文件数: $(find "$OUT" -type f | wc -l)" >> "$GITHUB_STEP_SUMMARY"
