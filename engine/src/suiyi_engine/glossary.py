@@ -173,6 +173,47 @@ def present_form(text: str, term: Term, lang: str) -> str | None:
     return None
 
 
+def rewrite_term_forms(text: str, term: Term, lang: str, canonical: str) -> str:
+    """把译文里该术语的任一表内写法统一成 ``canonical``（长的优先、互不重叠）。
+
+    匹配不区分大小写（与 :func:`term_present` 一致）。已是规范写法的命中保持原样。
+    英文句首的 ``fixed`` 术语按 :func:`restore` 同样规则首字母大写。
+    """
+
+    forms = term.forms.get(lang, ())
+    if not forms or not canonical:
+        return text
+    hits: list[tuple[int, int]] = []
+    for form in forms:
+        hits.extend(_find_all(text, form, lang, case_sensitive=False))
+    if not hits:
+        return text
+    hits.sort(key=lambda item: (-(item[1] - item[0]), item[0]))
+    chosen: list[tuple[int, int]] = []
+    for start, end in hits:
+        if any(start < other_end and other_start < end for other_start, other_end in chosen):
+            continue
+        chosen.append((start, end))
+    chosen.sort(key=lambda item: item[0])
+    pieces: list[str] = []
+    cursor = 0
+    changed = False
+    for start, end in chosen:
+        surface = text[start:end]
+        pieces.append(text[cursor:start])
+        value = canonical
+        if surface == canonical:
+            pieces.append(surface)
+        else:
+            if lang == "en" and term.kind == FIXED and _sentence_start(text, start):
+                value = value[:1].upper() + value[1:]
+            pieces.append(value)
+            changed = True
+        cursor = end
+    pieces.append(text[cursor:])
+    return "".join(pieces) if changed else text
+
+
 def _find_all(text: str, form: str, lang: str, *, case_sensitive: bool) -> list[tuple[int, int]]:
     if lang in _SPACE_LANGS or _is_latin(form):
         # 中日文里夹的拉丁字母术语（Kubernetes、Go）也按词边界匹配，免得 Go 命中 Google
