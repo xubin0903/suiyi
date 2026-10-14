@@ -56,6 +56,11 @@ bench = [
   "psutil>=5.9",
 ]
 
+# 只用于 Windows PyInstaller 打包（#130）。不进运行时 / CI 默认依赖。
+package = [
+  "pyinstaller>=6.3,<7",
+]
+
 [tool.hatch.version]
 path = "src/suiyi_engine/__init__.py"
 
