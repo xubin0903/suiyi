@@ -2,7 +2,7 @@
 
 C# **.NET 8** WPF 客户端。一期只做 **Windows**：托盘常驻、全局热键、剪贴板翻译，以及快捷键裁剪后的 OCR 翻译（M3）。翻译本身调用 `engine/` 的本机 HTTP 服务（见 [HTTP API](../docs/engine/HTTP-API.md)），不在客户端内嵌模型。
 
-在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)；升级到 M3 框选翻译并验收见 [M3 实机测试](../docs/client/M3-实机测试.md)。
+在 Windows 上从源码跑起来并逐项验收，见 [M2 实机测试](../docs/client/M2-实机测试.md)；升级到 M3 框选翻译并验收见 [M3 实机测试](../docs/client/M3-实机测试.md)。Windows 便携包骨架（目录约定、引擎 exe、publish）见 [M4 便携包](../docs/client/M4-便携包.md)。
 
 ## 目录
 
@@ -272,7 +272,7 @@ TranslateRegionAsync(trigger)
 | `popup.maxWidth` | `480` | 240–1920（设备无关像素） |
 | `engine.port` | `18780` | 1–65535 |
 | `engine.pythonPath` | `null` | 不填则按进程管理（#32）的查找顺序 |
-| `engine.command` / `engine.args` | `null` | 高级：直接指定服务可执行文件与参数数组（为 M4 打包 exe 预留） |
+| `engine.command` / `engine.args` | `null` | 高级：直接指定服务可执行文件与参数数组（M4 打包 exe；相对路径相对客户端目录）。未设置时若存在 `engine\\suiyi-engine.exe` 则自动使用，见 [M4 便携包](../docs/client/M4-便携包.md) |
 | `engine.modelsDir` | `null` | 不填则不传 `--models-dir` |
 | `engine.preload` | `"zh-en,en-zh"` | `""` 表示不预加载 |
 | `engine.preloadOcr` | `true` | 启动时预热 OCR 模型（#58），`true` 时追加 `--preload-ocr`（#53）；环境变量 `SUIYI_ENGINE_PRELOAD_OCR=1/0` 可覆盖。缺 OCR 依赖或模型时服务只告警、照常启动，文本翻译不受影响，`/health.ocr_error` 带上原因（见[框选翻译](#框选翻译)的错误说明）。关掉可省内存（OCR 模型加载后服务内存增加，见 #54），代价是首次框选多一次 OCR 冷加载（超时按 `TimeoutPolicy` 放宽到 30 s） |
@@ -620,10 +620,11 @@ SUIYI_ENGINE_PORT=18791 dotnet test client/Suiyi.sln -c Release --filter FullyQu
 
 **查找顺序**（`EngineCommandResolver`，命中即用）：
 
-1. 设置 `engine.command` + `engine.args`（为 M4 打包 exe 预留）：`<command> <args…> serve --port … --preload …`
-2. 设置 `engine.pythonPath`
-3. 从客户端 exe 所在目录向上找仓库根（含 `engine/pyproject.toml`），用 `<仓库根>\.venv\Scripts\python.exe`
-4. `py -3.11`（Windows Python Launcher），再退到 PATH 上的 `python`
+1. 设置 `engine.command` + `engine.args`（M4 打包 exe；相对路径相对客户端目录）：`<command> <args…> serve --port … --preload …`
+2. 客户端目录下存在 `engine\suiyi-engine.exe` 时自动使用（便携包，无需改设置）
+3. 设置 `engine.pythonPath`
+4. 从客户端 exe 所在目录向上找仓库根（含 `engine/pyproject.toml`），用 `<仓库根>\.venv\Scripts\python.exe`
+5. `py -3.11`（Windows Python Launcher），再退到 PATH 上的 `python`
 
 Python 参数：`-m suiyi_engine serve --port <engine.port，默认 18780> --preload <engine.preload，默认 zh-en,en-zh> [--preload-ocr，engine.preloadOcr 为 true 时，默认带] [--models-dir <engine.modelsDir>]`；工作目录为仓库根（找不到时为 exe 所在目录）。进程以 `CreateNoWindow` 启动，不弹控制台，并加入 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object（`Suiyi.App/Interop/JobObject.cs`），客户端被任务管理器强杀时服务随之退出。
 
@@ -702,4 +703,4 @@ dotnet run --project client/src/Suiyi.App            # 常驻托盘，右键菜�
 
 ## CI
 
-`.github/workflows/ci.yml` 的 `client（windows-latest）` job 在 `client/**` 或工作流有变更时运行：`dotnet restore` → `dotnet format --verify-no-changes` → `dotnet build -c Release` → `dotnet test -c Release`。汇总检查「client 检查」与「engine 检查」对称：路径有变更时 client job 必须成功，没有变更时必须被跳过。
+`.github/workflows/ci.yml` 的 `client（windows-latest）` job 在 `client/**` 或工作流有变更时运行：`dotnet restore` → `dotnet format --verify-no-changes` → `dotnet build -c Release` → `dotnet test -c Release` → 发布便携骨架 zip（artifact `suiyi-portable-win-x64`，无引擎 exe / 无模型权重，见 [M4 便携包](../docs/client/M4-便携包.md)）。汇总检查「client 检查」与「engine 检查」对称：路径有变更时 client job 必须成功，没有变更时必须被跳过。

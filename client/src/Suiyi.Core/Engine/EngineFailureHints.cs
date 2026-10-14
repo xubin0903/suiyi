@@ -63,6 +63,7 @@ public static partial class EngineFailureHints
         return command.Source switch
         {
             EngineCommandSource.ConfiguredCommand => $"无法启动翻译服务：{command.FileName}，请检查设置 engine.command",
+            EngineCommandSource.BundledExecutable => $"无法启动便携包内的翻译服务：{command.FileName}，请确认 engine/suiyi-engine.exe 完整（见 docs/client/M4-便携包.md）",
             EngineCommandSource.ConfiguredPython => $"无法启动 Python：{command.FileName}，请检查设置 engine.pythonPath",
             _ => "未找到 Python：请在仓库根目录创建 .venv（pip install -e engine），或安装 Python 3.11，或在设置中指定 engine.pythonPath",
         };

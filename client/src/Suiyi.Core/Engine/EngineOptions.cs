@@ -12,8 +12,10 @@ public sealed record EngineOptions
     public int Port { get; init; } = EngineClient.DefaultPort;
 
     /// <summary>
-    /// 自定义启动命令（<c>engine.command</c>），为 M4 的打包 exe 预留。设置后优先级最高，
-    /// 实际参数为 <see cref="Args"/> 后接 <c>serve --port … --preload … [--models-dir …]</c>。
+    /// 自定义启动命令（<c>engine.command</c>），为 M4 的打包 exe 预留。设置后优先级最高；
+    /// 相对路径相对客户端可执行文件目录解析。实际参数为 <see cref="Args"/> 后接
+    /// <c>serve --port … --preload … [--models-dir …]</c>。未设置时若存在
+    /// <c>engine/suiyi-engine.exe</c> 则自动使用（见 <see cref="EngineCommandResolver"/>）。
     /// </summary>
     public string? Command { get; init; }
 

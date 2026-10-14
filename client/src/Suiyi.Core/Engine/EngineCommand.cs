@@ -6,6 +6,9 @@ public enum EngineCommandSource
     /// <summary>设置里的 <c>engine.command</c> + <c>engine.args</c>。</summary>
     ConfiguredCommand,
 
+    /// <summary>便携包内相对客户端目录的 <c>engine/suiyi-engine.exe</c>（M4，无配置时自动发现）。</summary>
+    BundledExecutable,
+
     /// <summary>设置里的 <c>engine.pythonPath</c>。</summary>
     ConfiguredPython,
 

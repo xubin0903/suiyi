@@ -31,17 +31,22 @@ public sealed record EngineCommandEnvironment
 /// <summary>
 /// 解析启动翻译服务的命令（纯函数）。优先级：
 /// <list type="number">
-/// <item><c>engine.command</c> + <c>engine.args</c>（M4 打包 exe）</item>
+/// <item><c>engine.command</c> + <c>engine.args</c>（M4 打包 exe；相对路径相对客户端目录）</item>
+/// <item>客户端目录下的 <c>engine/suiyi-engine.exe</c>（便携包自动发现）</item>
 /// <item><c>engine.pythonPath</c></item>
 /// <item>从 <see cref="EngineCommandEnvironment.BaseDirectory"/> 向上找含 <c>engine/pyproject.toml</c> 的仓库根，用 <c>&lt;仓库根&gt;\.venv\Scripts\python.exe</c></item>
 /// <item>Windows 上 PATH 里有 <c>py.exe</c> 时用 <c>py -3.11</c>，否则 PATH 上的 <c>python</c></item>
 /// </list>
 /// Python 的参数为 <c>-m suiyi_engine serve --port &lt;port&gt; --preload &lt;preload&gt; [--models-dir &lt;dir&gt;]</c>。
+/// 打包 exe 的参数为 <c>&lt;args…&gt; serve --port …</c>（同一套 serve 参数）。
 /// </summary>
 public static class EngineCommandResolver
 {
     /// <summary>Windows Python Launcher 选择的版本参数。</summary>
     public const string LauncherVersionArgument = "-3.11";
+
+    /// <summary>便携包内引擎可执行文件相对客户端目录的路径（正斜杠；与 <c>engine</c>、<c>suiyi-engine.exe</c> 拼接时按平台分隔符处理）。</summary>
+    public const string BundledEngineRelativePath = "engine/suiyi-engine.exe";
 
     /// <summary>解析命令。</summary>
     /// <param name="options">服务配置。</param>
@@ -53,14 +58,18 @@ public static class EngineCommandResolver
 
         var repoRoot = FindRepositoryRoot(environment.BaseDirectory, environment.FileExists);
         var workingDirectory = repoRoot ?? environment.BaseDirectory;
-        var serve = ServeArguments(options);
+        var resolvedModelsDir = ResolveOptionalPath(options.ModelsDir, environment.BaseDirectory);
+        var serveOptions = ReferenceEquals(resolvedModelsDir, options.ModelsDir) || resolvedModelsDir == options.ModelsDir
+            ? options
+            : options with { ModelsDir = resolvedModelsDir };
+        var serve = ServeArguments(serveOptions);
         var environmentVariables = ServeEnvironment(options);
 
         if (!string.IsNullOrWhiteSpace(options.Command))
         {
             return new EngineCommand
             {
-                FileName = options.Command.Trim(),
+                FileName = ResolvePathAgainstBase(options.Command.Trim(), environment.BaseDirectory),
                 Arguments = [.. options.Args, .. serve],
                 WorkingDirectory = workingDirectory,
                 Source = EngineCommandSource.ConfiguredCommand,
@@ -68,10 +77,23 @@ public static class EngineCommandResolver
             };
         }
 
+        var bundled = Path.GetFullPath(Path.Combine(environment.BaseDirectory, "engine", "suiyi-engine.exe"));
+        if (environment.FileExists(bundled))
+        {
+            return new EngineCommand
+            {
+                FileName = bundled,
+                Arguments = serve,
+                WorkingDirectory = workingDirectory,
+                Source = EngineCommandSource.BundledExecutable,
+                Environment = environmentVariables,
+            };
+        }
+
         string[] module = ["-m", "suiyi_engine", .. serve];
         if (!string.IsNullOrWhiteSpace(options.PythonPath))
         {
-            return Python(options.PythonPath.Trim(), module, EngineCommandSource.ConfiguredPython);
+            return Python(ResolvePathAgainstBase(options.PythonPath.Trim(), environment.BaseDirectory), module, EngineCommandSource.ConfiguredPython);
         }
 
         if (repoRoot is not null)
@@ -178,6 +200,30 @@ public static class EngineCommandResolver
         return variables;
     }
 
+    /// <summary>
+    /// 把路径解析为绝对路径：已是绝对路径（含 Windows 盘符形式，便于 Linux 上单测）则原样或规范化；
+    /// 相对路径则相对 <paramref name="baseDirectory"/>。
+    /// </summary>
+    /// <param name="path">配置里的路径。</param>
+    /// <param name="baseDirectory">客户端可执行文件目录。</param>
+    public static string ResolvePathAgainstBase(string path, string baseDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
+        var trimmed = path.Trim();
+        if (IsAbsolutePath(trimmed))
+        {
+            // 当前 OS 认作绝对时规范化；跨平台单测里的 Windows 盘符路径保持原样。
+            return Path.IsPathRooted(trimmed) ? Path.GetFullPath(trimmed) : trimmed;
+        }
+
+        return Path.GetFullPath(Path.Combine(baseDirectory, trimmed));
+    }
+
+    /// <summary>可空版本的 <see cref="ResolvePathAgainstBase"/>；空白则返回 <see langword="null"/>。</summary>
+    public static string? ResolveOptionalPath(string? path, string baseDirectory) =>
+        string.IsNullOrWhiteSpace(path) ? null : ResolvePathAgainstBase(path, baseDirectory);
+
     /// <summary>从 <paramref name="startDirectory"/> 向上查找含 <c>engine/pyproject.toml</c> 的目录。</summary>
     /// <param name="startDirectory">起始目录。</param>
     /// <param name="fileExists">判断文件是否存在。</param>
@@ -195,6 +241,27 @@ public static class EngineCommandResolver
         }
 
         return null;
+    }
+
+    /// <summary>便携包内捆绑引擎的绝对路径（不检查是否存在）。</summary>
+    public static string BundledEnginePath(string baseDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
+        return Path.GetFullPath(Path.Combine(baseDirectory, "engine", "suiyi-engine.exe"));
+    }
+
+    private static bool IsAbsolutePath(string path)
+    {
+        if (Path.IsPathRooted(path))
+        {
+            return true;
+        }
+
+        // Windows 盘符（C:\ 或 C:/），在 Linux 上 Path.IsPathRooted 为 false。
+        return path.Length >= 3
+            && char.IsAsciiLetter(path[0])
+            && path[1] == ':'
+            && (path[2] == '\\' || path[2] == '/');
     }
 
     private static string? FindOnPath(string fileName, EngineCommandEnvironment environment)
