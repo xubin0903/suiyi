@@ -17,6 +17,7 @@ public sealed class TrayControllerTests
         _tray.PauseToggled += (_, e) => _events.Add($"pause:{e.Paused}:{_tray.State.Paused}");
         _tray.TargetChanged += (_, e) => _events.Add($"target:{e.Language}:{_tray.State.Target}");
         _tray.RestartEngineRequested += (_, _) => _events.Add("restart");
+        _tray.PrepareModelsRequested += (_, _) => _events.Add("prepare-models");
         _tray.OpenSettingsRequested += (_, _) => _events.Add("settings");
         _tray.OpenLogsRequested += (_, _) => _events.Add("logs");
         _tray.AboutRequested += (_, _) => _events.Add("about");
@@ -77,6 +78,7 @@ public sealed class TrayControllerTests
     [InlineData(TrayCommand.TranslateClipboard, "translate")]
     [InlineData(TrayCommand.TranslateRegion, "region")]
     [InlineData(TrayCommand.RestartEngine, "restart")]
+    [InlineData(TrayCommand.PrepareModels, "prepare-models")]
     [InlineData(TrayCommand.OpenSettings, "settings")]
     [InlineData(TrayCommand.OpenLogs, "logs")]
     [InlineData(TrayCommand.About, "about")]

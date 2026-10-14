@@ -11,4 +11,8 @@
     <InternalsVisibleTo Include="Suiyi.Core.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Packaging\model_provision_catalog.json" LogicalName="Suiyi.Core.Packaging.model_provision_catalog.json" />
+  </ItemGroup>
+
 </Project>

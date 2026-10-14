@@ -16,6 +16,7 @@ using Suiyi.Core.Glossary;
 using Suiyi.Core.Hotkeys;
 using Suiyi.Core.Lifecycle;
 using Suiyi.Core.Logging;
+using Suiyi.Core.Packaging;
 using Suiyi.Core.Popup;
 using Suiyi.Core.Settings;
 using Suiyi.Core.Tray;
@@ -68,6 +69,8 @@ public partial class App : Application
     private CancellationTokenSource? _regionCaptureCts;
     private bool _regionDemo;
     private string? _notifiedGlossaryError;
+    private CatalogModelProvisioner? _modelProvisioner;
+    private int _prepareModelsBusy;
 
     /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)
@@ -253,6 +256,8 @@ public partial class App : Application
             _ = _engine?.RestartAsync();
         };
 
+        tray.PrepareModelsRequested += (_, _) => _ = PrepareModelsAsync();
+
         WireGlossary(tray);
 
         tray.OpenSettingsRequested += (_, _) => OpenSettings();
@@ -420,6 +425,53 @@ public partial class App : Application
             }
         });
         _engine.Start();
+    }
+
+    private async Task PrepareModelsAsync()
+    {
+        if (Interlocked.CompareExchange(ref _prepareModelsBusy, 1, 0) != 0)
+        {
+            _tray?.ShowNotification(AppTitle, "正在准备模型，请稍候…");
+            return;
+        }
+
+        try
+        {
+            var baseDir = AppContext.BaseDirectory;
+            var repoRoot = EngineCommandResolver.FindRepositoryRoot(baseDir, File.Exists);
+            var options = EngineOptionsOverrides.Apply(
+                _settings!.Current.ToEngineOptions(SettingsPaths.ResolveDirectory()),
+                Environment.GetEnvironmentVariable);
+            var modelsDir = CatalogModelProvisioner.ResolveModelsDirectory(options.ModelsDir, baseDir, repoRoot);
+            _modelProvisioner?.Dispose();
+            _modelProvisioner = new CatalogModelProvisioner(modelsDir, repositoryRoot: repoRoot);
+            _logger?.Info($"托盘：准备模型 → {modelsDir}");
+            _tray?.ShowNotification(AppTitle, "开始准备默认中英翻译与 OCR 模型…");
+
+            var progress = new Progress<ModelProvisionProgress>(p =>
+            {
+                if (p.Phase is "download" or "convert" or "done")
+                {
+                    _logger?.Info($"准备模型：{p.Message}");
+                }
+            });
+            var result = await _modelProvisioner.EnsureDefaultsAsync(progress).ConfigureAwait(true);
+            _tray?.ShowNotification(AppTitle, result.Succeeded ? result.Message : "准备失败：" + result.Message);
+            _logger?.Info(result.Succeeded ? $"准备模型完成：{result.Message}" : $"准备模型失败：{result.Message}");
+            if (result.Succeeded)
+            {
+                _ = _engine?.RestartAsync();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.Error("准备模型异常", ex);
+            _tray?.ShowNotification(AppTitle, "准备模型失败：" + ex.Message);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _prepareModelsBusy, 0);
+        }
     }
 
     private void WireGlossary(TrayController tray)

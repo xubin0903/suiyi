@@ -31,6 +31,9 @@ public sealed class TrayController : ITrayService
     public event EventHandler? RestartEngineRequested;
 
     /// <inheritdoc />
+    public event EventHandler? PrepareModelsRequested;
+
+    /// <inheritdoc />
     public event EventHandler<TrayGlossaryToggledEventArgs>? GlossaryToggled;
 
     /// <inheritdoc />
@@ -148,6 +151,9 @@ public sealed class TrayController : ITrayService
                 break;
             case TrayCommand.RestartEngine:
                 RestartEngineRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case TrayCommand.PrepareModels:
+                PrepareModelsRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case TrayCommand.ToggleGlossary:
                 var glossary = !_state.GlossaryEnabled;

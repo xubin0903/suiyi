@@ -21,6 +21,9 @@ public enum TrayCommand
     /// <summary>重启翻译服务。</summary>
     RestartEngine,
 
+    /// <summary>按需准备默认翻译 / OCR 模型（#135）。</summary>
+    PrepareModels,
+
     /// <summary>切换专业术语保护（#84）。</summary>
     ToggleGlossary,
 
@@ -100,6 +103,7 @@ public static class TrayMenuBuilder
             new TrayMenuItem { Text = "专业术语", Children = GlossaryItems(state) },
             TrayMenuItem.Separator,
             new TrayMenuItem { Text = "重启翻译服务", Command = TrayCommand.RestartEngine },
+            new TrayMenuItem { Text = "准备模型…", Command = TrayCommand.PrepareModels },
             new TrayMenuItem { Text = "打开设置文件", Command = TrayCommand.OpenSettings },
             new TrayMenuItem { Text = "打开日志目录", Command = TrayCommand.OpenLogs },
             TrayMenuItem.Separator,

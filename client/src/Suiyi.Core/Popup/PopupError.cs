@@ -95,12 +95,13 @@ public sealed record PopupError(PopupErrorKind Kind)
     /// </summary>
     public string? Hint => Kind switch
     {
+        PopupErrorKind.MissingModels => PopupText.PrepareModelsHint,
         PopupErrorKind.OcrUnavailable => OcrReason switch
         {
             OcrUnavailableReasons.DependencyMissing => $"请在随译仓库根目录运行 {PopupText.OcrInstallCommand}，然后在托盘点「重启翻译服务」",
             OcrUnavailableReasons.ManifestUnavailable => "请更新随译源码（git pull）后重启随译，详情见日志",
-            OcrUnavailableReasons.ModelsInvalid => $"请在随译仓库根目录运行 {PopupText.OcrDownloadCommand} 重新下载，完成后点「重试」",
-            _ => $"请在随译仓库根目录运行 {PopupText.OcrDownloadCommand} 下载，完成后点「重试」",
+            OcrUnavailableReasons.ModelsInvalid => PopupText.PrepareModelsHint,
+            _ => PopupText.PrepareModelsHint,
         },
         _ => null,
     };
