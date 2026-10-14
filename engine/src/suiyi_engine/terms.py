@@ -8,6 +8,8 @@
 - 术语表永远不影响翻译：格式错误只跳过对应的行或整个用户表，原因见 :meth:`GlossaryStore.status`。
 - 翻译时先正常翻一遍；原文里的术语在译文里没按约定写法出现时，只把这些术语换成占位符再翻一遍，
   写回规范写法。占位符丢失或重复时这一句用第一遍的译文，并记一条日志（只含术语 id 和原因）。
+- 多句一次翻译时建立本篇术语会话（#134 / Context Layer P0）：全文统一找术语、共用规范写法；
+  译后把各句里同一专名的表内变体统一成规范写法（不做跨请求记忆，那是 P1）。
 """
 
 from __future__ import annotations
@@ -36,20 +38,24 @@ from suiyi_engine.glossary import (
     parse_terms,
     placeholder,
     restore,
+    rewrite_term_forms,
     target_form,
     term_present,
 )
 from suiyi_engine.verbatim import Span
 
 __all__ = [
+    "DocumentTermSession",
     "GlossaryStore",
     "MAX_USER_BYTES",
     "MAX_USER_ENTRIES",
     "SUPPORTED_DIRECTIONS",
+    "build_document_term_session",
     "default_user_glossary_path",
     "load_builtin",
     "parse_bool",
     "parse_user_glossary",
+    "term_consistency_rate",
     "TermStats",
     "translate_with_terms",
 ]
@@ -331,6 +337,109 @@ class GlossaryStore:
         return _UserState(error=message)
 
 
+# ---------------------------------------------------------------- 本篇术语会话（#134）
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentTermSession:
+    """一次多句翻译请求内的文档级术语会话（Context Layer P0）。
+
+    ``targets``：本篇见过的术语 id →（条目, 目标语规范写法）。各句保护 / 译后统一都读这份表。
+    不做跨请求记忆（P1），也不做滑动窗口（P2）。
+    """
+
+    src: str
+    tgt: str
+    targets: Mapping[str, tuple[Term, str]]
+
+    def canonical(self, term_id: str) -> str | None:
+        item = self.targets.get(term_id)
+        return None if item is None else item[1]
+
+    def term(self, term_id: str) -> Term | None:
+        item = self.targets.get(term_id)
+        return None if item is None else item[0]
+
+
+def build_document_term_session(
+    sentences: Sequence[str],
+    src: str,
+    tgt: str,
+    terms: Sequence[Term],
+) -> DocumentTermSession:
+    """对全文（分句列表）统一找术语，生成本篇规范写法表。
+
+    同一术语多次出现时以第一次命中为准（``target_form`` 对 ``fixed`` 已是表内规范写法；
+    ``keep`` 无目标语写法时用该次原文表面形式）。坏表 / 空表返回空会话，不抛错。
+    """
+
+    targets: dict[str, tuple[Term, str]] = {}
+    if not terms or (src, tgt) not in SUPPORTED_DIRECTIONS:
+        return DocumentTermSession(src, tgt, targets)
+    for source in sentences:
+        if not source.strip() or has_placeholder_like(source):
+            continue
+        for match in find_terms(source, src, terms, every=True):
+            if match.term.id in targets:
+                continue
+            target = target_form(match.term, match.surface, tgt)
+            if target:
+                targets[match.term.id] = (match.term, target)
+    return DocumentTermSession(src, tgt, targets)
+
+
+def term_consistency_rate(
+    outputs: Sequence[str],
+    term: Term,
+    tgt: str,
+    *,
+    canonical: str | None = None,
+) -> float:
+    """多句译文里该专名的一致率：含任一表内写法的句子中，使用规范写法的比例。
+
+    没有任何句子出现该术语时返回 ``1.0``（无漂移可谈）。用于「句级孤立 vs 本篇会话」小评测。
+    """
+
+    wanted = canonical or term.canonical(tgt)
+    if not wanted:
+        return 1.0
+    total = 0
+    matched = 0
+    for text in outputs:
+        if not term_present(text, term, tgt):
+            continue
+        total += 1
+        # 规范写法按区分大小写计（与写回一致）；变体只要出现过规范写法的精确子串也算
+        if wanted in text or (
+            tgt == "en" and wanted[:1].upper() + wanted[1:] in text and wanted[:1].islower()
+        ):
+            matched += 1
+    return 1.0 if total == 0 else matched / total
+
+
+def _enforce_document_consistency(
+    outputs: list[str],
+    session: DocumentTermSession,
+    record: TermStats,
+) -> list[str]:
+    """译后把本篇见过的术语在各句里统一成会话里的规范写法。"""
+
+    if not session.targets:
+        return outputs
+    result = list(outputs)
+    for index, text in enumerate(result):
+        updated = text
+        for _term_id, (term, canonical) in session.targets.items():
+            if not term_present(updated, term, session.tgt):
+                continue
+            rewritten = rewrite_term_forms(updated, term, session.tgt, canonical)
+            if rewritten != updated:
+                record.consistency_fixes += 1
+                updated = rewritten
+        result[index] = updated
+    return result
+
+
 # ---------------------------------------------------------------- 翻译流程
 
 # 保护方式（#83 全量 388 条中 en↔zh 部分实测，见 docs/engine/术语保护.md）：原句和「术语换成占位符」
@@ -354,6 +463,8 @@ class TermStats:
     """占位符还原失败后，只保护首遍丢了的术语再翻一遍、救回来的句数（#89）。"""
     repeat_trims: int = 0
     """占位符版末尾多出重复分句、原文只有一个分句，截掉重复分句后采用的句数（#89）。"""
+    consistency_fixes: int = 0
+    """本篇会话把表内变体统一成规范写法的次数（#134；按「句 × 术语」计）。"""
     # 不翻译片段（#101）
     verbatim_sentences: int = 0
     verbatim_copied: int = 0
@@ -381,6 +492,7 @@ def translate_with_terms(
 ) -> list[str]:
     """按术语表翻译一批句子（方式见上面的注释），并保证不翻译片段逐字出现在译文里（#101）。
 
+    多句时先建本篇术语会话（#134），译后把同一专名的表内变体统一成规范写法。
     占位符丢失或重复时这一句用不保护的译文，并记一条日志（术语 id 与原因，不含原文）。
 
     ``spans[i]`` 是第 ``i`` 句里要逐字保留的片段（:func:`suiyi_engine.verbatim.find_spans`）：
@@ -396,6 +508,7 @@ def translate_with_terms(
     record = stats if stats is not None else TermStats()
     record.sentences += len(sentences)
     span_lists = [list(item) for item in spans] if spans is not None else [[] for _ in sentences]
+    session = build_document_term_session(sentences, src, tgt, terms)
     outputs: dict[int, str] = {}
     pending: list[int] = []
     for index, source in enumerate(sentences):
@@ -409,9 +522,12 @@ def translate_with_terms(
     if pending:
         batch = [sentences[index] for index in pending]
         batch_spans = [span_lists[index] for index in pending]
-        translated = _translate_core(batch, batch_spans, src, tgt, terms, translate_batch, record)
+        translated = _translate_core(
+            batch, batch_spans, src, tgt, terms, translate_batch, record, session
+        )
         outputs.update(zip(pending, translated, strict=True))
-    return [outputs[index] for index in range(len(sentences))]
+    result = [outputs[index] for index in range(len(sentences))]
+    return _enforce_document_consistency(result, session, record)
 
 
 def _translate_core(
@@ -422,6 +538,7 @@ def _translate_core(
     terms: Sequence[Term],
     translate_batch: Callable[[list[str]], list[str]],
     record: TermStats,
+    session: DocumentTermSession | None = None,
 ) -> list[str]:
     protected: dict[int, Protected] = {}
     for index, source in enumerate(sentences):
@@ -442,7 +559,7 @@ def _translate_core(
     if not protected:
         outputs = translate_batch(sentences)
     else:
-        outputs = _speculative(sentences, protected, src, tgt, translate_batch, record)
+        outputs = _speculative(sentences, protected, src, tgt, translate_batch, record, session)
     if len(outputs) != len(sentences) or not any(span_lists):
         return outputs
     return _ensure_verbatim(
@@ -633,6 +750,7 @@ def _speculative(
     tgt: str,
     translate_batch: Callable[[list[str]], list[str]],
     record: TermStats,
+    session: DocumentTermSession | None = None,
 ) -> list[str]:
     order = sorted(protected)
     raw = translate_batch(list(sentences) + [protected[index].text for index in order])
@@ -642,7 +760,7 @@ def _speculative(
     retry: dict[int, tuple[Protected, str]] = {}
     for index, candidate in zip(order, raw[len(sentences) :], strict=True):
         item = protected[index]
-        fixed = _fix_first_pass(outputs[index], item, tgt)
+        fixed = _fix_first_pass(outputs[index], item, tgt, session)
         if fixed is not None:
             if fixed != outputs[index]:
                 record.variant_fixes += 1
@@ -818,13 +936,27 @@ def _trim_repeat_clause(
     return head
 
 
-def _fix_first_pass(output: str, item: Protected, tgt: str) -> str | None:
+def _fix_first_pass(
+    output: str,
+    item: Protected,
+    tgt: str,
+    session: DocumentTermSession | None = None,
+) -> str | None:
     """不保护的译文里术语都已按约定写法出现（只差空格 / 连字符的就地改成规范写法）时返回它，
-    否则返回 ``None``。"""
+    否则返回 ``None``。
+
+    表内变体的跨句统一交给 :func:`_enforce_document_consistency`（#134），这里只判断「是否可
+    以跳过占位符版」。
+    """
 
     text = output
     for slot in item.slots:
         term = slot.term
+        canonical = slot.target
+        if session is not None:
+            session_target = session.canonical(term.id)
+            if session_target is not None:
+                canonical = session_target
         if term.domain == VERBATIM:
             if slot.source not in output:
                 return None
@@ -835,7 +967,7 @@ def _fix_first_pass(output: str, item: Protected, tgt: str) -> str | None:
             return None
         if term_present(text, term, tgt):
             continue
-        replaced = _replace_spacing_variant(text, slot.target, tgt)
+        replaced = _replace_spacing_variant(text, canonical, tgt)
         if replaced is None:
             return None
         text = replaced

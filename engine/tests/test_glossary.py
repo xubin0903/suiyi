@@ -12,6 +12,7 @@ from suiyi_engine.glossary import (
     present_form,
     protect,
     restore,
+    rewrite_term_forms,
     term_present,
 )
 
@@ -157,3 +158,18 @@ def test_third_person_verb_is_not_a_plural_term(text: str) -> None:
 )
 def test_plural_nouns_and_base_forms_still_match(text: str, surface: str) -> None:
     assert [match.surface for match in find_terms(text, "en", VERB_TERMS, every=True)] == [surface]
+
+
+def test_rewrite_term_forms_unifies_variants_to_canonical() -> None:
+    race = BY_ID["race"]
+    assert rewrite_term_forms("出现了竞争条件。", race, "zh", "竞态条件") == "出现了竞态条件。"
+    assert rewrite_term_forms("竞态条件很难。", race, "zh", "竞态条件") == "竞态条件很难。"
+    # 英文大小写变体 → 规范写法；句首再首字母大写
+    assert (
+        rewrite_term_forms("Race condition is hard.", race, "en", "race condition")
+        == "Race condition is hard."
+    )
+    assert (
+        rewrite_term_forms("Saw a Race Condition today.", race, "en", "race condition")
+        == "Saw a race condition today."
+    )

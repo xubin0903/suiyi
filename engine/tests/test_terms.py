@@ -20,10 +20,12 @@ from suiyi_engine.terms import (
     MAX_USER_BYTES,
     GlossaryStore,
     TermStats,
+    build_document_term_session,
     default_user_glossary_path,
     load_builtin,
     parse_bool,
     parse_user_glossary,
+    term_consistency_rate,
     translate_with_terms,
 )
 from suiyi_engine.translator import Translator, restore_final_punct
@@ -808,3 +810,131 @@ def test_plain_latin_term_is_not_padded() -> None:
     assert (
         restore(f"现在调用{item.slots[0].placeholder}接口。", item, "zh")[0] == "现在调用API接口。"
     )
+
+
+# ---------------------------------------------------------------- 本篇术语会话（#134）
+
+
+def test_build_document_term_session_scans_all_sentences() -> None:
+    race = Term(
+        "race",
+        FIXED,
+        "test",
+        {"en": ("race condition",), "zh": ("竞态条件", "竞争条件")},
+    )
+    k8s = Term("k8s", KEEP, "test", {"en": ("Kubernetes",), "zh": ("Kubernetes",)})
+    unused = _term("cache", "cache", "缓存")
+    session = build_document_term_session(
+        [
+            "A race condition crashed the pod.",
+            "Kubernetes restarted it.",
+            "No terms here.",
+        ],
+        "en",
+        "zh",
+        [race, k8s, unused],
+    )
+    assert set(session.targets) == {"race", "k8s"}
+    assert session.canonical("race") == "竞态条件"
+    assert session.canonical("k8s") == "Kubernetes"
+    assert session.canonical("cache") is None
+
+
+def test_document_session_unifies_cross_sentence_variants() -> None:
+    """多句一次翻译：首遍各句表内变体不同 → 本篇会话统一成规范写法。"""
+
+    race = Term(
+        "race",
+        FIXED,
+        "test",
+        {"en": ("race condition",), "zh": ("竞态条件", "竞争条件")},
+    )
+    sentences = [
+        "A race condition crashed the service.",
+        "We fixed the race condition overnight.",
+    ]
+    model = FakeModel(
+        {
+            sentences[0]: "一个竞争条件让服务崩溃了。",
+            sentences[1]: "我们连夜修复了竞态条件。",
+            "A ZXQ crashed the service.": "一个 ZXQ 让服务崩溃了。",
+            "We fixed the ZXQ overnight.": "我们连夜修复了 ZXQ。",
+        }
+    )
+    stats = TermStats()
+    out = translate_with_terms(sentences, "en", "zh", [race], model, stats)
+    assert out == ["一个竞态条件让服务崩溃了。", "我们连夜修复了竞态条件。"]
+    assert term_consistency_rate(out, race, "zh") == 1.0
+    assert stats.consistency_fixes == 1
+
+
+def test_sentence_isolated_baseline_drifts_document_session_does_not() -> None:
+    """小评测：句级孤立（各句单独翻、无统一）一致率低于本篇会话。"""
+
+    staging = Term(
+        "staging",
+        FIXED,
+        "test",
+        {
+            "en": ("staging environment",),
+            "zh": ("预发布环境", "staging 环境"),
+        },
+    )
+    sentences = [
+        "Deploy to the staging environment first.",
+        "Then smoke-test the staging environment.",
+        "Finally open the staging environment to users.",
+    ]
+    # 三句首遍分别落到两种表内写法，模拟跨句漂移
+    first_pass = [
+        "首先部署到 staging 环境。",
+        "然后对预发布环境做冒烟测试。",
+        "最后向用户开放 staging 环境。",
+    ]
+    table = {
+        sentences[0]: first_pass[0],
+        sentences[1]: first_pass[1],
+        sentences[2]: first_pass[2],
+        "Deploy to the ZXQ first.": "首先部署到 ZXQ。",
+        "Then smoke-test the ZXQ.": "然后对 ZXQ 做冒烟测试。",
+        "Finally open the ZXQ to users.": "最后向用户开放 ZXQ。",
+    }
+
+    # 句级孤立：每句单独 translate_with_terms——但新实现每句也会 enforce。
+    # 基线取「裸首遍」一致率；本篇会话取一次多句翻译后的一致率。
+    isolated_rate = term_consistency_rate(first_pass, staging, "zh")
+    stats = TermStats()
+    session_out = translate_with_terms(sentences, "en", "zh", [staging], FakeModel(table), stats)
+    session_rate = term_consistency_rate(session_out, staging, "zh")
+    assert isolated_rate < session_rate
+    assert session_rate == 1.0
+    assert all("预发布环境" in text for text in session_out)
+    assert stats.consistency_fixes >= 1
+
+
+def test_document_session_compatible_with_empty_and_bad_inputs() -> None:
+    session = build_document_term_session(["hello"], "en", "zh", [])
+    assert session.targets == {}
+    # 不支持的方向：空会话
+    deadlock = _term("d", "deadlock", "死锁")
+    assert build_document_term_session(["死锁"], "zh", "ja", [deadlock]).targets == {}
+    # 占位符样原文跳过，不炸
+    cache = _term("c", "cache", "缓存")
+    session2 = build_document_term_session(["Set ZXQ1 please."], "en", "zh", [cache])
+    assert session2.targets == {}
+    # 空句列表
+    out = translate_with_terms([], "en", "zh", [cache], FakeModel({}))
+    assert out == []
+
+
+def test_document_session_keeps_user_and_builtin_canonical() -> None:
+    """用户表规范写法优先进入会话（与 GlossaryStore 合并后的 terms 一致）。"""
+
+    user = Term(
+        "user:1",
+        FIXED,
+        "user",
+        {"en": ("pull request",), "zh": ("合并请求",)},
+    )
+    session = build_document_term_session(["Open a pull request after review."], "en", "zh", [user])
+    assert session.canonical("user:1") == "合并请求"
