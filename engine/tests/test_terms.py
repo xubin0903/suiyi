@@ -618,7 +618,8 @@ def test_serve_reads_glossary_env_vars(
     assert status["glossary_enabled"] is False
     assert status["glossary_user_path"] == str(env_file)
     assert status["glossary_user_entries"] == 2
-    assert f"术语保护关闭：内置 610 条，用户 2 条（{env_file}）" in capsys.readouterr().out
+    builtin_n = 2 * len(load_builtin())
+    assert f"术语保护关闭：内置 {builtin_n} 条，用户 2 条（{env_file}）" in capsys.readouterr().out
     monkeypatch.setenv("SUIYI_GLOSSARY", "1")
     assert serve()["glossary_enabled"] is True
     assert serve("--no-glossary")["glossary_enabled"] is False

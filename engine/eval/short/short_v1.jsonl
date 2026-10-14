@@ -294,7 +294,7 @@
 {"id": "short-holdout-037", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Don't touch it.", "reference": "别碰它。"}
 {"id": "short-holdout-038", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Give me a hand.", "reference": "帮我一把。"}
 {"id": "short-holdout-039", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Wake up!", "reference": "醒醒！"}
-{"id": "short-holdout-040", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Good night, everyone.", "reference": "大家晚安。"}
+{"id": "short-holdout-040", "src_lang": "en", "tgt_lang": "zh", "category": "tabled", "source": "Good night, everyone.", "reference": "大家晚安。", "note": "已入常用短句表，计分时排除（Refs #89 遗留跟进）"}
 {"id": "short-holdout-041", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Well said.", "reference": "说得好。"}
 {"id": "short-holdout-042", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Not bad at all.", "reference": "一点也不差。"}
 {"id": "short-holdout-043", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "How lovely!", "reference": "真可爱！"}
@@ -337,3 +337,4 @@
 {"id": "short-holdout-080", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Hold your horses.", "reference": "别急。", "note": "表外补入；入表前已确认不在短句表与调参集"}
 {"id": "short-holdout-081", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Fat chance.", "reference": "没门。", "note": "表外补入；入表前已确认不在短句表与调参集"}
 {"id": "short-holdout-082", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Cut it out.", "reference": "别闹了。", "note": "表外补入；入表前已确认不在短句表与调参集"}
+{"id": "short-holdout-083", "src_lang": "en", "tgt_lang": "zh", "category": "holdout", "source": "Sleep tight.", "reference": "好好睡。", "note": "表外补入；Good night, everyone. 入表后维持留出规模（Refs #89 遗留跟进）"}

@@ -32,6 +32,8 @@ SHORT_SET = ROOT / "engine" / "eval" / "short" / "short_v1.jsonl"
         ("How are you", "你好吗"),
         ("Good evening...", "晚上好"),
         ("Hello ,  everyone.", "大家好。"),
+        ("Good night, everyone.", "大家晚安。"),
+        ("Good night everyone!", "大家晚安！"),
         ("I'm good,thanks.", "我很好，谢谢。"),
     ],
 )
@@ -180,7 +182,8 @@ def test_holdout_excludes_tabled_and_misses_table() -> None:
     holdout = [row for row in rows if row["category"] == "holdout"]
     tabled = [row for row in rows if row["category"] == "tabled"]
     assert len(holdout) >= 79
-    assert {row["source"] for row in tabled} >= {"Nice try.", "Big deal.", "Sit tight."}
+    expected = {"Nice try.", "Big deal.", "Sit tight.", "Good night, everyone."}
+    assert {row["source"] for row in tabled} >= expected
     for row in tabled:
         assert lookup_short_phrase(row["source"], "en", "zh") is not None, row["id"]
     for row in holdout:
@@ -191,3 +194,5 @@ def test_new_table_entries_for_issue_89_followup() -> None:
     assert lookup_short_phrase("Nice try.", "en", "zh") == "想得美。"
     assert lookup_short_phrase("Big deal.", "en", "zh") == "有什么大不了的。"
     assert lookup_short_phrase("Sit tight.", "en", "zh") == "别动，等着。"
+    assert lookup_short_phrase("Good night, everyone.", "en", "zh") == "大家晚安。"
+    assert lookup_short_phrase("Good night everyone.", "en", "zh") == "大家晚安。"
