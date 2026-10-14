@@ -1,9 +1,10 @@
-将打包后的翻译引擎 onedir 内容放在本目录，使下列文件存在：
+本目录应含引擎 PyInstaller onedir 内容：
 
   suiyi-engine.exe
-  _internal\          （PyInstaller onedir 依赖目录）
+  _internal\          （依赖目录）
 
-构建与拷贝步骤见 docs/engine/Windows打包.md（#130）。
+CI 的「拼便携包」job（#132）会自动把同次构建的引擎拷入本目录。
+本机构建与拷贝步骤见 docs/engine/Windows打包.md。
 CLI 与 python -m suiyi_engine 相同：suiyi-engine.exe serve --port …
 
 未放置时，客户端在开发树里会回退到 Python（.venv / py -3.11）；

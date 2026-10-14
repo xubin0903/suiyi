@@ -10,9 +10,9 @@
 #
 # 两项稳定汇总检查：
 # - 「engine 检查」：engine/** 或工作流有变更时，engine 矩阵必须 success；否则必须 skipped。
-# - 「client 检查」：client/** 或工作流有变更时，client job 必须 success；否则必须 skipped。
+# - 「client 检查」：client/** 或工作流有变更时，client job 与「拼便携包」必须 success；否则二者必须 skipped。
 # 分支保护应只要求「CI / engine 检查」与「CI / client 检查」，
-# 不要要求矩阵里的 ubuntu/windows job 或 client（windows-latest）job。
+# 不要要求矩阵里的 ubuntu/windows job、client（windows-latest）或拼便携包 job。
 
 name: CI
 
@@ -304,10 +304,10 @@ jobs:
       - name: dotnet test
         run: dotnet test client/Suiyi.sln -c Release --no-build
 
-      # M4 #127：产出可说明的便携目录骨架（无引擎 exe、无模型权重），上传 zip。
+      # M4 #127：产出便携目录骨架（尚无引擎 exe）；最终拼包见 assemble-portable（#132）。
       - name: 发布便携骨架（win-x64，框架依赖）
         run: |
-          OUT="$RUNNER_TEMP/suiyi-portable"
+          OUT="$RUNNER_TEMP/suiyi-portable-client"
           bash client/packaging/publish-portable.sh "$OUT"
           test -f "$OUT/Suiyi.exe"
           test -f "$OUT/engine/README.txt"
@@ -322,7 +322,83 @@ jobs:
           echo "便携骨架文件数: $(find "$OUT" -type f | wc -l)" >> "$GITHUB_STEP_SUMMARY"
           echo "输出目录: $OUT" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: 上传便携骨架制品
+      - name: 上传便携骨架制品（供拼包）
+        uses: actions/upload-artifact@v4
+        with:
+          name: suiyi-portable-client-win-x64
+          path: ${{ runner.temp }}/suiyi-portable-client/
+          if-no-files-found: error
+
+  # M4 #132：把同次 workflow 的引擎 onedir 拼进便携 zip。
+  # client 成功且 engine 成功或跳过时运行；engine 跳过时在本 job 补打 Windows 引擎。
+  assemble-portable:
+    name: 拼便携包（win-x64）
+    needs: [changes, client, engine]
+    if: ${{ always() && needs.client.result == 'success' && (needs.engine.result == 'success' || needs.engine.result == 'skipped') }}
+    runs-on: windows-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 下载便携骨架
+        uses: actions/download-artifact@v4
+        with:
+          name: suiyi-portable-client-win-x64
+          path: ${{ runner.temp }}/suiyi-portable
+
+      - name: 下载引擎 onedir（同次 workflow）
+        if: ${{ needs.engine.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: suiyi-engine-win-x64
+          path: ${{ runner.temp }}/suiyi-engine-onedir
+
+      - name: 安装 Python（engine 跳过时补打）
+        if: ${{ needs.engine.result == 'skipped' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: engine/pyproject.toml
+
+      - name: PyInstaller 打包引擎（engine 跳过时）
+        if: ${{ needs.engine.result == 'skipped' }}
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python -m pip install --quiet -e "./engine[dev]"
+          python -m pip install --quiet "pyinstaller>=6.3,<7" "onnxruntime>=1.20" "opencv-python-headless>=4.8"
+          python -m pip install --quiet --no-deps "rapidocr>=3.9.2,<3.10"
+          python -m pip install --quiet Pillow pyclipper shapely numpy PyYAML
+          OUT="$RUNNER_TEMP/suiyi-engine-win-x64"
+          mkdir -p "$OUT"
+          python -m PyInstaller --noconfirm --clean \
+            --distpath "$OUT/dist" --workpath "$OUT/build" \
+            engine/packaging/suiyi-engine.spec
+          mkdir -p "$RUNNER_TEMP/suiyi-engine-onedir"
+          cp -a "$OUT/dist/suiyi-engine/." "$RUNNER_TEMP/suiyi-engine-onedir/"
+
+      - name: 拼入引擎并验收
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          OUT="$RUNNER_TEMP/suiyi-portable"
+          ENG="$RUNNER_TEMP/suiyi-engine-onedir"
+          bash client/packaging/bundle-engine.sh "$OUT" "$ENG"
+          test -f "$OUT/engine/suiyi-engine.exe"
+          test -d "$OUT/engine/_internal"
+          "$OUT/engine/suiyi-engine.exe" --version
+          "$OUT/engine/suiyi-engine.exe" serve --help >/dev/null
+          # 仍不含翻译/OCR 模型权重
+          if find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) | grep -q .; then
+            echo "便携包不应包含模型权重文件" >&2
+            find "$OUT" -type f \( -name '*.bin' -o -name '*.onnx' -o -name '*.gguf' \) >&2
+            exit 1
+          fi
+          echo "便携包（含引擎）文件数: $(find "$OUT" -type f | wc -l)" >> "$GITHUB_STEP_SUMMARY"
+          echo "引擎: engine/suiyi-engine.exe + _internal 已就位" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传便携包制品
         uses: actions/upload-artifact@v4
         with:
           name: suiyi-portable-win-x64
@@ -330,27 +406,37 @@ jobs:
           if-no-files-found: error
 
   # 稳定的汇总检查，与「engine 检查」对称。
-  # client job 被跳过时本 job 仍成功；client job 失败或被取消时本 job 失败。
+  # client / 拼包被跳过时本 job 仍成功；任一失败或被取消时本 job 失败。
   client-check:
     name: client 检查
-    needs: [changes, client]
+    needs: [changes, client, assemble-portable]
     if: ${{ always() && needs.changes.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: 汇总 client 结果
         run: |
           filter="${{ needs.changes.outputs.client }}"
-          result="${{ needs.client.result }}"
+          client_result="${{ needs.client.result }}"
+          assemble_result="${{ needs.assemble-portable.result }}"
           echo "client 路径是否变更: ${filter}"
-          echo "client job 结果: ${result}"
+          echo "client job 结果: ${client_result}"
+          echo "拼便携包 job 结果: ${assemble_result}"
           if [ "$filter" = "true" ]; then
-            if [ "$result" != "success" ]; then
+            if [ "$client_result" != "success" ]; then
               echo "client 或工作流有变更，但 client job 不是 success。"
               exit 1
             fi
+            if [ "$assemble_result" != "success" ]; then
+              echo "client 已跑，但拼便携包 job 不是 success。"
+              exit 1
+            fi
           elif [ "$filter" = "false" ]; then
-            if [ "$result" != "skipped" ]; then
-              echo "本次变更不应跑 client，实际结果是 ${result}。"
+            if [ "$client_result" != "skipped" ]; then
+              echo "本次变更不应跑 client，实际结果是 ${client_result}。"
+              exit 1
+            fi
+            if [ "$assemble_result" != "skipped" ]; then
+              echo "本次变更不应拼便携包，实际结果是 ${assemble_result}。"
               exit 1
             fi
           else
